@@ -14,7 +14,6 @@ from .core.interfaces import (
     BaseVLMAnalyzer,
     GPUScheduler,
     CircuitBreaker,
-    SessionWatchdog
 )
 from .db.migration_runner import MigrationRunner
 from .db.repositories import (
@@ -22,6 +21,7 @@ from .db.repositories import (
     MessageRepository,
     SystemStateRepository
 )
+from .services.session_watchdog import SessionWatchdog
 
 # Initialize the package with basic configuration
 import logging

@@ -71,6 +71,20 @@ class ConversationOrchestrator:
         self._emit = emitter
         self._max_tools = configuration.ai_runtime.max_tool_calls_per_turn
 
+    def apply_configuration(
+        self,
+        configuration: ConfigSchema,
+        *,
+        command_matcher: Optional[CommandMatcher] = None,
+        persona_loader: Optional[PersonaLoader] = None,
+    ) -> None:
+        self._cfg = configuration
+        if command_matcher is not None:
+            self._matcher = command_matcher
+        if persona_loader is not None:
+            self._personas = persona_loader
+        self._max_tools = configuration.ai_runtime.max_tool_calls_per_turn
+
     async def emit_visual_state(self, state_name: OrchestratorState) -> None:
         if self._emit:
             await self._emit("visual_state", {"state": state_name.value})

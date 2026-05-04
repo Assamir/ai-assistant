@@ -36,7 +36,8 @@ async def test_api_health_httpx(httpx_async: AsyncClient):
 
 
     body = res.json()
-    assert body.get("status") == "ok"
+    assert body.get("status") in ("healthy", "degraded")
+    assert "components" in body
 
 
 

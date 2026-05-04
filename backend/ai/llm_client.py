@@ -45,11 +45,21 @@ class LMStudioClient(BaseLLMClient):
         self._cfg = llm_config
         self._breaker = circuit_breaker
         self._owns_client = http_client is None
+        self._http_timeout = timeout
         base = _chat_completions_base(llm_config.api_base_url)
         self._client = http_client or httpx.AsyncClient(
             base_url=base,
             timeout=timeout,
         )
+
+    async def apply_llm_config(self, llm_config: LLMConfig) -> None:
+        """Hot-reload / runtime: nowe ustawienia LLM; odtwarza klienta HTTP gdy jesteśmy jego właścicielem."""
+        self._cfg = llm_config
+        if not self._owns_client:
+            return
+        base = _chat_completions_base(llm_config.api_base_url)
+        await self._client.aclose()
+        self._client = httpx.AsyncClient(base_url=base, timeout=self._http_timeout)
 
     async def aclose(self) -> None:
         if self._owns_client:

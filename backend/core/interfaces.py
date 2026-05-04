@@ -185,24 +185,12 @@ class CircuitBreaker:
         return (time.monotonic() - self.last_failure_time) >= self.timeout_seconds
 
 
-class SessionWatchdog:
-    """Monitors session health and handles crash recovery and graceful shutdown"""
-
-    def __init__(self, config):
-        self.config = config
-        self.is_running = False
-
-    async def start(self):
-        """Start the watchdog monitoring loop"""
-        self.is_running = True
-        while self.is_running:
-            await self._check_session_health()
-            await asyncio.sleep(5)
-
-    async def stop(self):
-        """Stop the watchdog"""
-        self.is_running = False
-
-    async def _check_session_health(self):
-        """Check session health and handle recovery if needed"""
-        pass
+__all__ = [
+    "BaseLLMClient",
+    "BaseSTTEngine",
+    "BaseTTSEngine",
+    "BaseVLMAnalyzer",
+    "CircuitBreaker",
+    "CircuitBreakerOpen",
+    "GPUScheduler",
+]

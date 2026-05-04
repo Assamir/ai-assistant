@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 
 
 from backend.api.app_context import AppContext
+from backend.services.health import build_health_snapshot
 
 
 
@@ -64,41 +65,27 @@ Deps = Annotated[AppContext, Depends(ctx_dep)]
 
 async def api_status(dep: Deps):
 
-    breaker = getattr(dep.llm_client, "_breaker", None)
-
-    cb_state = getattr(breaker, "state", "unknown") if breaker else None
-
-
+    snap = build_health_snapshot(dep)
 
     return JSONResponse(
 
         {
 
-            "app": {"name": "assystent-backend", "version": "0.3.0-dev"},
+            "app": {"name": "assystent-backend", "version": "0.4.0-dev"},
 
-
+            "health": snap,
 
             "llm": {
 
-
-
                 "api_base_url": dep.config.llm.api_base_url,
 
-
-
-                "circuit_breaker": cb_state,
+                "circuit_breaker": snap["components"]["llm"]["circuit_breaker"],
 
             },
 
-
-
             "orchestrator": {"phase": dep.orchestrator.phase.value},
 
-
-
             "persona": {"active": dep.orchestrator.state.get("active_persona", "default")},
-
-
 
             "observer": {
 
@@ -122,11 +109,13 @@ async def api_health(dep: Deps):
 
 
 
-    breaker = getattr(dep.llm_client, "_breaker", None)
+    snap = build_health_snapshot(dep)
 
-
-
-    return {"status": "ok", "llm_breaker": getattr(breaker, "state", None)}
+    return {
+        "status": snap["overall"],
+        "llm_breaker": snap["components"]["llm"]["circuit_breaker"],
+        "components": snap["components"],
+    }
 
 
 

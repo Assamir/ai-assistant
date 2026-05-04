@@ -35,6 +35,10 @@ class GameObserver:
         self._current_game: Optional[str] = None
         self._running = False
 
+    def update_observer_config(self, config: ObserverConfig) -> None:
+        """Hot-reload: nowy ObserverConfig (np. interwał)."""
+        self._cfg = config
+
     # ── publiczne właściwości ────────────────────────────────────────────────
 
     @property
