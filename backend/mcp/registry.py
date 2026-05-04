@@ -147,9 +147,21 @@ def tool_calculator(expression: str) -> Dict[str, Any]:
 
 
 def build_default_tool_registry() -> ToolRegistry:
+    from backend.mcp.tools_extra import (
+        _TOOL_DICE_ROLL,
+        _TOOL_FORMAT_DURATION,
+        _TOOL_RANDOM_CHOICE,
+        tool_dice_roll,
+        tool_format_duration,
+        tool_random_choice,
+    )
+
     reg = ToolRegistry()
     reg.register("get_current_time", _TOOL_GET_TIME, tool_get_current_time)
     reg.register("calculator", _TOOL_CALC, tool_calculator)
+    reg.register("random_choice", _TOOL_RANDOM_CHOICE, tool_random_choice)
+    reg.register("dice_roll", _TOOL_DICE_ROLL, tool_dice_roll)
+    reg.register("format_duration", _TOOL_FORMAT_DURATION, tool_format_duration)
     return reg
 
 
