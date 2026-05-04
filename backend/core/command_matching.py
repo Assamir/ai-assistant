@@ -80,6 +80,11 @@ _OPEN_DOC_P = r".*(?:otworz\s+dokumenty|pokaz\s+dokumenty|gdzie\s+sa\s+dokumenty
 forget_p = (
     r".*(?:odswiez\s+informacje\b|zapomnij\s+cache\b|wyczysc\s+cache\b|refresh\s+info\b|\bclear\s+cache\b).*$"
 )
+_GAME_MANUAL_P = r"(?:ustaw|wybierz)\s+gre\s+(?:na\s+)?(?P<game_id>[\w-]+)\b"
+_GAME_AUTO_P = (
+    r".*(?:wykrywaj\s+gre\s+automatycznie|automatyczna\s+detekcja\s+gry|"
+    r"clear\s+manual\s+game|resetuj\s+wybor\s+gry)\b.*$"
+)
 
 
 @dataclass(frozen=True)
@@ -139,6 +144,8 @@ def builtin_rules_ordered() -> List[BuiltinMatchRule]:
         BuiltinMatchRule("CMD-06", 70, "silent_mode_off", _anchor(_SILENT_OFF_P), 0),
         BuiltinMatchRule("CMD-03", 60, "observer_start", _anchor(obs_start_pat), 5),
         BuiltinMatchRule("CMD-04", 60, "observer_stop", _anchor(obs_stop), 0),
+        BuiltinMatchRule("CMD-17", 55, "manual_game_set", _anchor(_GAME_MANUAL_P), 0),
+        BuiltinMatchRule("CMD-18", 55, "manual_game_clear", _anchor(_GAME_AUTO_P), 0),
         BuiltinMatchRule("CMD-12", 50, "change_persona", _anchor(_PERSONA_P), 0),
         BuiltinMatchRule("CMD-11", 45, "set_interval", _anchor(_INTERVAL_P), 0),
         BuiltinMatchRule("CMD-07", 40, "backup", _anchor(_BACKUP_P), 300),
@@ -190,6 +197,8 @@ def _try_builtin_on_norm(
             params.update(_params_from_persona(m))
         if any(k in gd for k in ("char", "char2", "char3")):
             params.update(_params_from_character(m))
+        if gd.get("game_id"):
+            params["game_id"] = str(gd["game_id"]).strip().lower()
         return CommandMatch(
             cmd_id=rule.cmd_id,
             builtin_action=rule.builtin_action,

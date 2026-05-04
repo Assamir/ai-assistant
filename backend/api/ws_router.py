@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ValidationError
 
+from backend.api.app_context import ensure_ws_db_session
 from backend.core.orchestrator import OrchestratorState
 
 
@@ -94,6 +95,16 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
             ctx.conversation.append(sid, "assistant", assistant_spoken)
         emo = verdict.emotion or "neutral"
 
+        try:
+            db_id = await ensure_ws_db_session(ctx, sid)
+            from backend.db.repositories import MessageRepository
+
+            repo = MessageRepository(ctx.db_path)
+            await repo.create_message(db_id, "user", user_text.strip())
+            if assistant_spoken:
+                await repo.create_message(db_id, "assistant", assistant_spoken, emotion=str(emo))
+        except Exception:
+            pass
 
         await mgr.send_to_session(sid, "emotion", {"emotion": emo})
 
@@ -138,6 +149,8 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
                 continue
 
             if lowered == "frontend_ready":
+
+                await ensure_ws_db_session(ctx, sid)
 
                 await mgr.send_to_session(
                     sid,
@@ -184,6 +197,9 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
 
 
                 await mgr.send_to_session(sid, "audio_duck", ptt_payload)
+                coord = getattr(ctx, "voice_input_coordinator", None)
+                if coord is not None:
+                    coord.set_frontend_ptt(True)
                 ctx.orchestrator.phase = OrchestratorState.LISTENING
                 await mgr.send_to_session(sid, "visual_state", {"state": "listening"})
 
@@ -191,6 +207,9 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
 
             if lowered == "ptt_end":
 
+                coord = getattr(ctx, "voice_input_coordinator", None)
+                if coord is not None:
+                    coord.set_frontend_ptt(False)
 
                 ctx.orchestrator.phase = OrchestratorState.THINKING
                 await mgr.send_to_session(sid, "visual_state", {"state": "thinking"})

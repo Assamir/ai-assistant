@@ -29,7 +29,7 @@ class _StubLLM:
         self._q = list(results)
         self._i = 0
 
-    async def chat_completion(self, messages, *, tools=None) -> ChatCompletionResult:
+    async def chat_completion(self, messages, *, tools=None, max_tokens=None) -> ChatCompletionResult:
         if self._i < len(self._q):
             r = self._q[self._i]
             self._i += 1
@@ -151,9 +151,9 @@ async def test_tool_result_forwarded_to_second_llm_call(build_orch):
     captured: list[list] = []
 
     class _Tracking(_StubLLM):
-        async def chat_completion(self, messages, *, tools=None) -> ChatCompletionResult:
+        async def chat_completion(self, messages, *, tools=None, max_tokens=None) -> ChatCompletionResult:
             captured.append(list(messages))
-            return await super().chat_completion(messages, tools=tools)
+            return await super().chat_completion(messages, tools=tools, max_tokens=max_tokens)
 
     tc = {
         "id": "t1",

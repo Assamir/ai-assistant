@@ -35,6 +35,7 @@ class VoiceInputCoordinator:
     mode: AudioInputMode = AudioInputMode.PTT
     duck_sink: Optional[Callable[[AudioDuckSignal], None]] = None
     signals: List[AudioDuckSignal] = field(default_factory=list)
+    ptt_held: bool = False
 
     def __post_init__(self) -> None:
         if self.duck_sink is None:
@@ -45,12 +46,18 @@ class VoiceInputCoordinator:
         self.duck_sink(sig)
 
     def on_ptt_press(self) -> None:
+        self.ptt_held = True
         self._emit(AudioDuckSignal(target_volume=0.0, ramp_ms=80))
 
     def on_ptt_release(self) -> AudioDuckSignal:
+        self.ptt_held = False
         sig = AudioDuckSignal(target_volume=1.0, ramp_ms=120)
         self._emit(sig)
         return sig
+
+    def set_frontend_ptt(self, active: bool) -> None:
+        """Synchronizacja z `ptt_start` / `ptt_end` z WebSocket (bez ponownego duck)."""
+        self.ptt_held = bool(active)
 
 
 def resolve_ptt_key_name(name: str):

@@ -42,6 +42,7 @@ async def dispatch_builtin(action: str, ctx: OrchestratorContext, params: Dict[s
 
 async def sleep_handler(ctx: OrchestratorContext, params: Dict[str, str]) -> CommandExecutionResult:
     ctx.state["sleeping"] = True
+    ctx.state["observer_paused"] = True
     await ctx.emit_side_effect("observer_pause", {})
     await ctx.emit_side_effect("avatar_hide", {})
     return CommandExecutionResult(success=True, message="Dobranoc. Śpij spokojnie.", emotion="sympathetic")
@@ -49,20 +50,52 @@ async def sleep_handler(ctx: OrchestratorContext, params: Dict[str, str]) -> Com
 
 async def wake_handler(ctx: OrchestratorContext, params: Dict[str, str]) -> CommandExecutionResult:
     ctx.state["sleeping"] = False
+    ctx.state["observer_paused"] = False
     await ctx.emit_side_effect("avatar_show", {})
     return CommandExecutionResult(success=True, message="O, wróciłeś! Co robimy?", emotion="excited")
 
 
 async def observer_start_handler(ctx: OrchestratorContext, params: Dict[str, str]) -> CommandExecutionResult:
     ctx.state["observer_active"] = True
+    ctx.state["observer_paused"] = False
     await ctx.emit_side_effect("observer_start", {})
     return CommandExecutionResult(success=True, message="Zaczynam obserwować.", emotion="excited")
 
 
 async def observer_stop_handler(ctx: OrchestratorContext, params: Dict[str, str]) -> CommandExecutionResult:
     ctx.state["observer_active"] = False
+    ctx.state["manual_game_profile_lock"] = False
     await ctx.emit_side_effect("observer_stop", {})
     return CommandExecutionResult(success=True, message="Już nie patrzę na grę.", emotion="neutral")
+
+
+async def manual_game_set_handler(ctx: OrchestratorContext, params: Dict[str, str]) -> CommandExecutionResult:
+    gid = (params.get("game_id") or "").strip().lower()
+    if not gid:
+        return CommandExecutionResult(
+            success=False,
+            message="Podaj identyfikator profilu gry, np. stellaris.",
+            emotion="confused",
+        )
+    ctx.state["manual_game_profile_id"] = gid
+    ctx.state["manual_game_profile_lock"] = True
+    await ctx.emit_side_effect("manual_game_set", {"game_id": gid})
+    return CommandExecutionResult(
+        success=True,
+        message=f"Ustawiono ręczny profil gry `{gid}`. Wykrywanie z procesów wstrzymane do resetu.",
+        emotion="thinking",
+    )
+
+
+async def manual_game_clear_handler(ctx: OrchestratorContext, params: Dict[str, str]) -> CommandExecutionResult:
+    ctx.state["manual_game_profile_lock"] = False
+    ctx.state.pop("manual_game_profile_id", None)
+    await ctx.emit_side_effect("manual_game_clear", {})
+    return CommandExecutionResult(
+        success=True,
+        message="Z powrotem automatyczne wykrywanie gry z procesów.",
+        emotion="neutral",
+    )
 
 
 async def silent_mode_on_handler(ctx: OrchestratorContext, params: Dict[str, str]) -> CommandExecutionResult:
@@ -152,6 +185,8 @@ def install_default_builtin_handlers() -> None:
     register_builtin("wake", wake_handler)
     register_builtin("observer_start", observer_start_handler)
     register_builtin("observer_stop", observer_stop_handler)
+    register_builtin("manual_game_set", manual_game_set_handler)
+    register_builtin("manual_game_clear", manual_game_clear_handler)
     register_builtin("silent_mode_on", silent_mode_on_handler)
     register_builtin("silent_mode_off", silent_mode_off_handler)
     register_builtin("backup", backup_handler)

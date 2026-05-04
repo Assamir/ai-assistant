@@ -96,6 +96,8 @@ async def lifespan(app: FastAPI):
     if ctx.game_observer is not None:
         ctx.game_observer._emit = make_game_emitter(ctx)
         await ctx.game_observer.start()
+    if ctx.observer_loop is not None:
+        await ctx.observer_loop.start()
 
     try:
         yield
@@ -116,6 +118,8 @@ async def lifespan(app: FastAPI):
             hot.stop()
         if ctx.game_observer is not None:
             await ctx.game_observer.stop()
+        if ctx.observer_loop is not None:
+            await ctx.observer_loop.stop()
         try:
             await ctx.llm_client.aclose()
         except Exception as exc:  # pragma: no cover

@@ -159,7 +159,47 @@ class OCRConfig(BaseModel):
 
 class ObserverConfig(BaseModel):
     observer_type: str = "strategy"  # strategy or casual
-    check_interval_seconds: int = 5
+    check_interval_seconds: int = Field(
+        default=5,
+        ge=1,
+        le=600,
+        description="Interwał `GameObserver` — odpytywanie psutil / wykrywanie procesu gry.",
+    )
+    cycle_interval_seconds: int = Field(
+        default=20,
+        ge=5,
+        le=300,
+        description="Interwał pętli capture→VLM→LLM gdy obserwator jest aktywny (T6).",
+    )
+    vlm_timeout_seconds: float = Field(
+        default=10.0,
+        gt=0,
+        le=120.0,
+        description="Timeout na `vision_pipeline.analyze_png` (backpressure / skip cyklu).",
+    )
+    scene_dhash_max_distance: int = Field(
+        default=5,
+        ge=0,
+        le=32,
+        description="SceneDeduper: max odległość Hamminga między klatkami uznawana za 'tę samą' scenę.",
+    )
+    observer_comment_max_tokens: int = Field(default=128, ge=16, le=1024)
+    min_comment_interval_seconds: float = Field(
+        default=25.0,
+        ge=0.0,
+        le=600.0,
+        description="Po udanym komentarzu — pomiń kolejne cykle (bez capture/VLM) aż minie ten czas; 0 = wyłączone.",
+    )
+    comment_similarity_skip_threshold: float = Field(
+        default=0.88,
+        ge=0.0,
+        le=1.0,
+        description="Jeśli nowy tekst jest tak podobny do poprzedniego komentarza (SequenceMatcher), nie emituj go.",
+    )
+    persist_observer_comments: bool = Field(
+        default=True,
+        description="Zapis do SQLite (messages.source=observer) przy aktywnej sesji WS.",
+    )
     skip_conditions: List[str] = Field(
         default_factory=lambda: ["game_paused", "low_fps"]
     )

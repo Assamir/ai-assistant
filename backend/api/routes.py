@@ -91,6 +91,8 @@ async def api_status(dep: Deps):
 
                 "running": dep.game_observer.is_running if dep.game_observer else False,
 
+                "vision_loop_running": dep.observer_loop.is_running if dep.observer_loop else False,
+
                 "current_game": dep.orchestrator.state.get("current_game"),
 
             },

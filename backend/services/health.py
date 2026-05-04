@@ -34,6 +34,8 @@ def build_health_snapshot(ctx: AppContext) -> Dict[str, Any]:
         "observer": {
             "running": ctx.game_observer.is_running if ctx.game_observer else False,
             "check_interval_seconds": ctx.config.observer.check_interval_seconds,
+            "vision_loop_running": ctx.observer_loop.is_running if ctx.observer_loop else False,
+            "cycle_interval_seconds": ctx.config.observer.cycle_interval_seconds,
         },
     }
 

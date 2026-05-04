@@ -86,13 +86,14 @@ class LMStudioClient(BaseLLMClient):
         *,
         stream: bool,
         tools: Optional[List[Dict[str, Any]]],
+        max_tokens: Optional[int] = None,
     ) -> Dict[str, Any]:
         body: Dict[str, Any] = {
             "model": self._cfg.model_name,
             "messages": messages,
             "stream": stream,
             "temperature": self._cfg.temperature,
-            "max_tokens": self._cfg.max_tokens,
+            "max_tokens": int(max_tokens) if max_tokens is not None else self._cfg.max_tokens,
         }
         if tools:
             body["tools"] = tools
@@ -103,10 +104,11 @@ class LMStudioClient(BaseLLMClient):
         messages: List[Dict[str, Any]],
         *,
         tools: Optional[List[Dict[str, Any]]] = None,
+        max_tokens: Optional[int] = None,
     ) -> ChatCompletionResult:
         """Jedno żądanie JSON (bez streamu); uwzględnia circuit breaker."""
 
-        payload = self._payload(messages, stream=False, tools=tools)
+        payload = self._payload(messages, stream=False, tools=tools, max_tokens=max_tokens)
 
         async def do_post() -> Dict[str, Any]:
             r = await self._client.post(self._PATH, json=payload)
@@ -153,7 +155,7 @@ class LMStudioClient(BaseLLMClient):
         tools: Optional[List[Dict[str, Any]]] = None,
     ) -> AsyncIterator[str]:
         messages = self._messages(prompt, history)
-        payload = self._payload(messages, stream=True, tools=tools)
+        payload = self._payload(messages, stream=True, tools=tools, max_tokens=None)
 
         if self._breaker:
             self._breaker.check_allow()

@@ -9,15 +9,27 @@ import pytest
 
 from backend.config.schema import ObserverConfig
 from backend.services.game_observer import KNOWN_GAMES, GameObserver
+from backend.services.game_profile import profiles_from_known_games
 
 
 # ─── Pomocnicze ──────────────────────────────────────────────────────────────
 
 
-def _obs(processes: List[str], *, emit=None, interval: int = 60) -> GameObserver:
+def _obs(
+    processes: List[str],
+    *,
+    emit=None,
+    interval: int = 60,
+    state: Optional[dict] = None,
+) -> GameObserver:
     """Fabryka obserwatora z zamockowanym _list_processes."""
     cfg = ObserverConfig(check_interval_seconds=interval)
-    obs = GameObserver(cfg, emitter=emit)
+    obs = GameObserver(
+        cfg,
+        emitter=emit,
+        orchestrator_state=state,
+        profiles_by_id=profiles_from_known_games(),
+    )
     obs._list_processes = lambda: processes
     return obs
 
@@ -77,6 +89,7 @@ async def test_emits_game_detected_on_first_detection():
     evt, payload = events[0]
     assert evt == "game_detected"
     assert payload["game"] == "Stellaris"
+    assert payload["game_id"] == "stellaris"
     assert payload["active"] is True
 
 
@@ -191,9 +204,9 @@ async def test_loop_emits_on_game_detection():
     async def capture(name, payload):
         events.append(payload.get("game"))
 
-    obs = _obs(["stellaris.exe"], emit=capture, interval=0)
+    obs = _obs(["stellaris.exe"], emit=capture, interval=1)
     await obs.start()
-    await asyncio.sleep(0.05)  # daj pętli czas na 1+ tick
+    await asyncio.sleep(0.15)  # daj pętli czas na 1+ tick
     await obs.stop()
 
     assert "Stellaris" in events
@@ -209,3 +222,13 @@ def test_known_games_has_stellaris():
 
 def test_known_games_has_poe2():
     assert "pathofexile2.exe" in KNOWN_GAMES
+
+
+@pytest.mark.asyncio
+async def test_manual_lock_skips_process_scan():
+    """Ręczny profil — ignoruje brak procesu gry."""
+    state = {"manual_game_profile_lock": True, "manual_game_profile_id": "stellaris"}
+    obs = _obs(["chrome.exe"], state=state)
+    game = await obs.tick()
+    assert game == "Stellaris"
+    assert obs.current_profile_id == "stellaris"

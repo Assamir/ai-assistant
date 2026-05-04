@@ -14,13 +14,15 @@ from backend.config.loader import ConfigLoader
 from backend.config.paths import resolve_config_yaml, sqlite_database_path
 from backend.config.schema import ConfigSchema
 from backend.core.command_matching import CommandMatcher
-from backend.core.interfaces import BaseSTTEngine, BaseTTSEngine, BaseVLMAnalyzer, BaseOCREngine
+from backend.core.interfaces import BaseSTTEngine, BaseTTSEngine, BaseVLMAnalyzer, BaseOCREngine, BaseScreenCapture
 from backend.core.orchestrator import ConversationOrchestrator
 from backend.core.persona_loader import PersonaLoader
 from backend.core.prompt_builder import PromptBuilder
 from backend.db.migration_runner import MigrationRunner
 from backend.mcp.registry import ToolRegistry, build_default_tool_registry
 from backend.services.game_observer import GameObserver
+from backend.services.game_profile import build_game_profile_index
+from backend.services.observer_pause import ObserverPauseManager
 from backend.services.session_watchdog import recover_stale_sessions
 
 _logger = logging.getLogger(__name__)
@@ -108,6 +110,26 @@ class AppContext:
     vlm_engine: Optional[BaseVLMAnalyzer] = None
     ocr_engine: Optional[BaseOCREngine] = None
     vision_pipeline: Optional[Any] = None  # DualVisionPipeline — budowany przy starcie
+    screen_capture: Optional[BaseScreenCapture] = None
+    observer_loop: Optional[Any] = None  # ObserverLoop — po create_app_context
+    db_session_by_ws: Dict[str, int] = field(default_factory=dict)
+    game_profiles: Dict[str, Any] = field(default_factory=dict)
+    observer_pause_manager: Optional[Any] = None
+
+
+async def ensure_ws_db_session(ctx: AppContext, ws_sid: str) -> int:
+    """Tworzy wiersz `sessions` przy pierwszym kontakcie klienta WS (idempotentnie)."""
+    existing = ctx.db_session_by_ws.get(ws_sid)
+    if existing is not None:
+        return existing
+    from backend.db.repositories import SessionRepository
+
+    repo = SessionRepository(ctx.db_path)
+    game = ctx.orchestrator.state.get("current_game")
+    g = game if isinstance(game, str) else None
+    db_id = await repo.start_session(game_detected=g)
+    ctx.db_session_by_ws[ws_sid] = db_id
+    return db_id
 
 
 def try_build_stt_engine(cfg: ConfigSchema) -> Optional[BaseSTTEngine]:
@@ -219,7 +241,13 @@ def create_app_context() -> AppContext:
         emitter=None,
     )
 
-    obs = GameObserver(cfg.observer)
+    profiles = build_game_profile_index(root, cfg)
+
+    obs = GameObserver(
+        cfg.observer,
+        orchestrator_state=orch.state,
+        profiles_by_id=profiles,
+    )
     wake = WakewordDetector(
         enabled=cfg.audio.wakeword_enabled,
         wakeword_models=list(cfg.audio.wakeword_models),
@@ -230,7 +258,12 @@ def create_app_context() -> AppContext:
     ocr = try_build_ocr_engine(cfg)
     vp = build_vision_pipeline(cfg, vlm, ocr)
 
-    return AppContext(
+    from backend.ai.screen_capture import DesktopScreenCapture
+    from backend.services.observer_loop import ObserverLoop
+
+    screen = DesktopScreenCapture()
+
+    ctx = AppContext(
         config=cfg,
         resolved_config_path=yaml_path,
         db_path=db_path,
@@ -249,7 +282,13 @@ def create_app_context() -> AppContext:
         vlm_engine=vlm,
         ocr_engine=ocr,
         vision_pipeline=vp,
+        screen_capture=screen,
+        observer_loop=None,
+        game_profiles=profiles,
     )
+    ctx.observer_loop = ObserverLoop(ctx)
+    ctx.observer_pause_manager = ObserverPauseManager(ctx)
+    return ctx
 
 
 def make_game_emitter(ctx: AppContext):
@@ -257,6 +296,11 @@ def make_game_emitter(ctx: AppContext):
     async def _emit(event_name: str, payload: Mapping[str, Any]) -> None:
         if event_name == "game_detected":
             ctx.orchestrator.state["current_game"] = payload.get("game")
+            gid = payload.get("game_id")
+            if gid:
+                ctx.orchestrator.state["current_game_profile_id"] = gid
+            elif not payload.get("active"):
+                ctx.orchestrator.state.pop("current_game_profile_id", None)
         for sid in list(ctx.websocket_manager._by_session.keys()):
             await ctx.websocket_manager.send_to_session(sid, event_name, dict(payload))
     return _emit
@@ -274,4 +318,5 @@ __all__ = [
     "try_build_vlm_engine",
     "try_build_ocr_engine",
     "build_vision_pipeline",
+    "ensure_ws_db_session",
 ]

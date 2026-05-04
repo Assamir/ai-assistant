@@ -17,6 +17,7 @@ from backend.api.app_context import (
 from backend.config.schema import ConfigSchema
 from backend.core.command_matching import CommandMatcher
 from backend.core.persona_loader import PersonaLoader
+from backend.services.game_profile import build_game_profile_index
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,11 @@ async def apply_reload_configuration(ctx: AppContext, new_cfg: ConfigSchema) -> 
     personas_dir = root / "personas"
     personas_dir.mkdir(parents=True, exist_ok=True)
     pl = PersonaLoader(personas_dir)
+
+    profiles = build_game_profile_index(root, new_cfg)
+    ctx.game_profiles = profiles
+    if ctx.game_observer is not None:
+        ctx.game_observer.set_profiles(profiles)
 
     matcher = CommandMatcher(fuzzy=new_cfg.ai_runtime.command_match_fuzzy)
     ctx.command_matcher = matcher

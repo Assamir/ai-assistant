@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Mapping, MutableMapping, Optional
 
 from backend.config.schema import ObserverConfig
 
@@ -28,18 +28,25 @@ class GameObserver:
         config: ObserverConfig,
         *,
         emitter: Optional[EmitFn] = None,
+        orchestrator_state: Optional[MutableMapping[str, Any]] = None,
+        profiles_by_id: Optional[Mapping[str, Any]] = None,
     ) -> None:
         self._cfg = config
         self._emit = emitter
+        self._state = orchestrator_state
+        self._profiles: Dict[str, Any] = dict(profiles_by_id or {})
         self._task: Optional[asyncio.Task[None]] = None
         self._current_game: Optional[str] = None
+        self._current_profile_id: Optional[str] = None
         self._running = False
+
+    def set_profiles(self, profiles_by_id: Mapping[str, Any]) -> None:
+        """Hot-reload / start: nowy indeks profili."""
+        self._profiles = dict(profiles_by_id)
 
     def update_observer_config(self, config: ObserverConfig) -> None:
         """Hot-reload: nowy ObserverConfig (np. interwał)."""
         self._cfg = config
-
-    # ── publiczne właściwości ────────────────────────────────────────────────
 
     @property
     def is_running(self) -> bool:
@@ -49,7 +56,9 @@ class GameObserver:
     def current_game(self) -> Optional[str]:
         return self._current_game
 
-    # ── API start/stop ───────────────────────────────────────────────────────
+    @property
+    def current_profile_id(self) -> Optional[str]:
+        return self._current_profile_id
 
     async def start(self) -> None:
         if self._running:
@@ -67,8 +76,6 @@ class GameObserver:
                 pass
             self._task = None
 
-    # ── detekcja ─────────────────────────────────────────────────────────────
-
     def _list_processes(self) -> List[str]:
         """Zwraca nazwy bieżących procesów (wymaga psutil; bez niego → [])."""
         try:
@@ -79,15 +86,49 @@ class GameObserver:
         except Exception:
             return []
 
-    def _detect_game(self, process_names: List[str]) -> Optional[str]:
-        """Dopasowuje nazwy procesów do słownika znanych gier (case-insensitive)."""
+    def _detect_from_profiles(self, norm_names: List[str]) -> Optional[Any]:
+        """Pierwszy profil z listy `process_names` zawartych w uruchomionych procesach (kolejność po id)."""
+        lower = {n.lower() for n in norm_names if n}
+        if not lower or not self._profiles:
+            return None
+        for pid in sorted(self._profiles.keys()):
+            prof = self._profiles[pid]
+            for proc in getattr(prof, "process_names", []) or []:
+                pl = proc.lower()
+                if pl in lower:
+                    return prof
+        return None
+
+    def _detect_game_legacy(self, process_names: List[str]) -> Optional[str]:
         for name in process_names:
             game = KNOWN_GAMES.get(name.lower())
             if game:
                 return game
         return None
 
-    # ── jeden tick ───────────────────────────────────────────────────────────
+    def _resolve_detection(
+        self, process_names: List[str]
+    ) -> tuple[Optional[str], Optional[str]]:
+        """Zwraca (nazwa_wyświetlana, profile_id)."""
+        if self._state and self._state.get("manual_game_profile_lock"):
+            mid = self._state.get("manual_game_profile_id")
+            if isinstance(mid, str) and mid in self._profiles:
+                prof = self._profiles[mid]
+                return prof.name, prof.id
+            if isinstance(mid, str) and mid not in self._profiles:
+                _ = mid  # nieznany id — spróbuj procesów
+
+        prof = self._detect_from_profiles(process_names)
+        if prof is not None:
+            return prof.name, prof.id
+
+        legacy = self._detect_game_legacy(process_names)
+        if legacy is None:
+            return None, None
+        for pid, p in self._profiles.items():
+            if p.name == legacy:
+                return legacy, pid
+        return legacy, None
 
     async def tick(self) -> Optional[str]:
         """
@@ -96,19 +137,23 @@ class GameObserver:
         Zwraca aktualnie wykrytą grę (lub None).
         """
         names = await asyncio.to_thread(self._list_processes)
-        game = self._detect_game(names)
+        game, gid = self._resolve_detection(names)
 
-        if game != self._current_game:
+        changed = game != self._current_game or gid != self._current_profile_id
+        if changed:
             self._current_game = game
+            self._current_profile_id = gid
             if self._emit is not None:
                 await self._emit(
                     "game_detected",
-                    {"game": game, "active": game is not None},
+                    {
+                        "game": game,
+                        "game_id": gid,
+                        "active": game is not None,
+                    },
                 )
 
         return self._current_game
-
-    # ── pętla wewnętrzna ─────────────────────────────────────────────────────
 
     async def _loop(self) -> None:
         while self._running:

@@ -40,8 +40,12 @@ async def test_emitter_updates_orchestrator_state(http_client):
     """make_game_emitter sets orchestrator.state['current_game'] on game_detected."""
     _, ctx = http_client
     emitter = make_game_emitter(ctx)
-    await emitter("game_detected", {"game": "Stellaris", "active": True})
+    await emitter(
+        "game_detected",
+        {"game": "Stellaris", "game_id": "stellaris", "active": True},
+    )
     assert ctx.orchestrator.state.get("current_game") == "Stellaris"
+    assert ctx.orchestrator.state.get("current_game_profile_id") == "stellaris"
 
 
 @pytest.mark.asyncio
@@ -49,9 +53,13 @@ async def test_emitter_clears_on_game_close(http_client):
     """Emitter sets current_game=None when game closes."""
     _, ctx = http_client
     emitter = make_game_emitter(ctx)
-    await emitter("game_detected", {"game": "Stellaris", "active": True})
+    await emitter(
+        "game_detected",
+        {"game": "Stellaris", "game_id": "stellaris", "active": True},
+    )
     await emitter("game_detected", {"game": None, "active": False})
     assert ctx.orchestrator.state.get("current_game") is None
+    assert ctx.orchestrator.state.get("current_game_profile_id") is None
 
 
 @pytest.mark.asyncio
@@ -87,6 +95,7 @@ async def test_status_includes_observer(http_client):
     assert "observer" in body
     obs = body["observer"]
     assert "running" in obs
+    assert "vision_loop_running" in obs
     assert "current_game" in obs
 
 
