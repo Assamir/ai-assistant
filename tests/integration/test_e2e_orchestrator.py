@@ -189,6 +189,52 @@ async def test_calculator_error_propagated_gracefully(build_orch):
     assert stub._i == 2
 
 
+@pytest.mark.asyncio
+async def test_tool_calls_persisted_with_db_session(migrated_db_path, tmp_path: Path):
+    """Przy db_path + db_chat_session_id zapisywane są wiersze tool_calls (DOK-10)."""
+    from backend.config.schema import MCPConfig
+    from backend.db.repositories import MessageRepository, SessionRepository, ToolCallsRepository
+
+    personas_dir = tmp_path / "personas"
+    personas_dir.mkdir()
+    cfg = ConfigSchema(
+        llm=LLMConfig(api_base_url="http://stub/", model_name="stub"),
+        ai_runtime=AIControlConfig(max_context_tokens=2048, max_tool_calls_per_turn=3),
+    )
+    reg = build_default_tool_registry(db_path=migrated_db_path, mcp_cfg=MCPConfig(enabled=False))
+    stub = _StubLLM(
+        ChatCompletionResult(content="", tool_calls=[{
+            "id": "c1",
+            "type": "function",
+            "function": {"name": "calculator", "arguments": '{"expression":"2+2"}'},
+        }]),
+        ChatCompletionResult(content="Wynik to 4.", tool_calls=None),
+    )
+    orch = ConversationOrchestrator(
+        configuration=cfg,
+        lm_client=stub,  # type: ignore[arg-type]
+        prompt_builder=PromptBuilder(max_context_tokens=2048),
+        persona_loader=PersonaLoader(personas_dir),
+        command_matcher=CommandMatcher(fuzzy=True),
+        tool_registry=reg,
+        active_persona="default",
+        db_path=migrated_db_path,
+    )
+    db_chat = await SessionRepository(migrated_db_path).start_session()
+    await MessageRepository(migrated_db_path).create_message(db_chat, "user", "policz")
+    await orch.handle_user_message("policz", conversation_tail=[], db_chat_session_id=db_chat)
+
+    msgs = await MessageRepository(migrated_db_path).get_messages_for_session(db_chat)
+    assist_with_tools = [m for m in msgs if m["source"] == "assistant" and m["content"] == "[wywołania narzędzi]"]
+    assert assist_with_tools
+    mid = int(assist_with_tools[0]["id"])
+    rows = await ToolCallsRepository(migrated_db_path).list_for_message(mid)
+    assert len(rows) == 1
+    assert rows[0]["tool_name"] == "calculator"
+    assert rows[0]["success"] in (1, True)
+    assert "4" in (rows[0]["output_json"] or "")
+
+
 # ─── HTTP E2E ─────────────────────────────────────────────────────────────────
 
 

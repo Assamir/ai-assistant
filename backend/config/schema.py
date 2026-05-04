@@ -240,7 +240,11 @@ class MCPConfig(BaseModel):
         default=10,
         ge=1,
         le=60,
-        description="Miękkie throttle wywołań web_search przez minutę (token bucket okna czasu).",
+        description="Limit ścisły wywołań HTTP (web_search + web_scraper) na minutę — 11. zwraca błąd.",
+    )
+    use_playwright_fallback: bool = Field(
+        default=False,
+        description="Gdy httpx+ekstrakcja zwraca pusty tekst — próba renderu przez Playwright (wymaga playwright).",
     )
 
 class ConfigSchema(BaseModel):

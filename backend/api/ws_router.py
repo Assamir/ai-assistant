@@ -50,6 +50,10 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
 
     async def emitter(name: str, payload: dict) -> None:
         await mgr.send_to_session(sid, name, payload)
+        if name == "mcp_cache_invalidate_all":
+            from backend.db.repositories import MCPCacheRepository
+
+            await MCPCacheRepository(ctx.db_path).invalidate_all()
         if name in ("observer_start", "observer_stop"):
             from backend.services.game_detection_tracking import sync_game_detections_on_observer_command
 
@@ -83,15 +87,20 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
     async def process_text(user_text: str) -> None:
         hist = ctx.conversation.tail(sid)
 
+        db_id = await ensure_ws_db_session(ctx, sid)
+        try:
+            from backend.db.repositories import MessageRepository
+
+            await MessageRepository(ctx.db_path).create_message(db_id, "user", user_text.strip())
+        except Exception:
+            pass
 
         verdict = await ctx.orchestrator.handle_user_message(
             user_text,
             conversation_tail=hist,
-
             emitter_override=emitter,
-
+            db_chat_session_id=db_id,
         )
-
 
         ctx.conversation.append(sid, "user", user_text.strip())
         assistant_spoken = str(verdict.message or "").strip()
@@ -100,11 +109,9 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
         emo = verdict.emotion or "neutral"
 
         try:
-            db_id = await ensure_ws_db_session(ctx, sid)
             from backend.db.repositories import MessageRepository
 
             repo = MessageRepository(ctx.db_path)
-            await repo.create_message(db_id, "user", user_text.strip())
             if assistant_spoken:
                 await repo.create_message(db_id, "assistant", assistant_spoken, emotion=str(emo))
         except Exception:

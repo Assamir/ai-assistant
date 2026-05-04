@@ -1,6 +1,6 @@
 # Assystent — Plan Implementacji: Fazy 2–3, Testy, Modele AI
 
-> **Status:** v1.4 — 2026-05-05 (crop profilu, VLM fallback gry, web_search+MCPCache)
+> **Status:** v1.6 — 2026-05-05 (T7 `tool_calls` w SQLite + migracja 002)
 > **Kontekst:** [Plan główny (Faza 1)](implementation_plan.md) · [TEST_PLAN](TEST_PLAN.md) · [DEFINITION_OF_DONE](DEFINITION_OF_DONE.md) · [RISK_REGISTER](RISK_REGISTER.md) · [ROADMAP](IMPLEMENTATION_ROADMAP.md)
 
 ---
@@ -8,20 +8,26 @@
 ## Stan wdrożenia — 2026-05-05
 
 
-| Zakres                    | Stan    | Uwagi                                                                                                                                      |
-| ------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| **T5** Screen / VLM / OCR | 🟢 ~80% | Crop z `GameProfile.screen_regions` (`apply_profile_crop_to_png` w `ObserverLoop`); pozostałe integracje/regresje VLM                      |
+| Zakres                    | Stan    | Uwagi                                                                                                                                            |
+| ------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **T5** Screen / VLM / OCR | 🟢 ~80% | Crop z `GameProfile.screen_regions` (`apply_profile_crop_to_png` w `ObserverLoop`); pozostałe integracje/regresje VLM                            |
 | **T6** Observer / gry     | 🟢 ~95% | VLM fallback przez `probe_game_identity_from_screen` + hook w `GameObserver` (`vlm_fallback_game_detection`), `game_detections` repo (wcześniej) |
-| **T7** MCP rozszerzenia   | 🟡 ~35% | `web_search` (DDG IA API), `MCPCacheRepository`, cache+rate w `ToolRegistry`; brak `web_scraper`, `SandboxValidator` pełnego, testów MCP-T-* |
-| **T8** Memory / profil    | ⬜       | ChromaDB w `requirements.txt` zakomentowane; brak SemanticRecall / ingester / rotacji w kodzie (tabele profilu w SQLite istnieją)          |
-| **T9–T14** Frontend       | ⬜       | Brak katalogu aplikacji Electron/React w repo                                                                                              |
+| **T7** MCP rozszerzenia   | 🟢 ~92% | Narzędzia MCP + cache + rate; `tool_calls` w SQLite przy WS (`ToolCallsRepository`); asystent `[wywołania narzędzi]`; migracja `002` (turn_sequence 1..64); REST voice bez sesji DB — brak logu narzędzi |
+| **T8** Memory / profil    | 🟡 ~25% | `SemanticRecall` (`backend/memory/`) — Chroma ephemeral/persistent + fallback w pamięci (Py 3.14); brak ingester / rotacji FIFO / PlayerProfile YAML                                             |
+| **T9–T14** Frontend       | 🟡 szkielet | Katalog `frontend/` — Electron + Vite + React (T9 minimal); brak Three/VRM, emocji, lip-sync (T10–T14)                                                                                          |
 
 
-**Kamienie M2 i M3** — **częściowo**: backend T5–T7 w toku; frontend (T9+) nadal poza repo.
+**Kamienie M2 i M3** — **częściowo**: T7 backend z logiem narzędzi pod WS; T8 semantic start; T9 szkielet w `frontend/`.
 
+> **Następny krok:** T8 `KnowledgeIngester` + rotacja Chroma; powiązanie REST `/voice/*` z `sessions`; T10–T14 frontend.
 
-> **Następny krok:** T7 `web_scraper` / `SandboxValidator` / testy CACHE-T / MCP-T; T8 Chroma; lub T9 Electron wg priorytetu produktu.
 ---
+
+## Pozostały zakres (po v1.5)
+
+- **T7 dopiski:** opcjonalnie sesja HTTP → ten sam `sessions` / `tool_calls` co WS; pole `tool_calls` w odpowiedzi REST.
+- **T8:** `KnowledgeIngester`, rotacja kolekcji, profil gracza z YAML (plan dzień 3–5).
+- **T9–T14:** realizacja wg tabel w §7 (obecnie tylko szkielety).
 
 ## 6. Faza 2 — Vision, MCP, Memory (T5–T8)
 
@@ -336,5 +342,5 @@ graph LR
 
 ---
 
-> **Następny krok (2026-05-05):** T7 `web_scraper` + testy CACHE/MCP; T8 minimalny Ephemeral Chroma; lub T9 skeleton Electron — [ENV_SETUP.md](../ENV_SETUP.md).
+> **Następny krok (2026-05-05):** T8 ingester + rotacja; T10+ w `frontend/`; dokumentacja ENV dla Playwright/Chroma (`docs/ENV_SETUP.md`).
 

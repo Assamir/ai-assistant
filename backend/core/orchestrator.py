@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json as _json
+import time
 from enum import Enum
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Mapping, MutableMapping, Optional, Sequence
 
@@ -13,7 +14,7 @@ from backend.core.command_matching import CommandMatcher, CooldownTracker
 from backend.core.emotion_parser import parse_emotion_tag, resolve_default_emotion
 from backend.core.persona_loader import LoadedPersona, PersonaLoader
 from backend.core.prompt_builder import PromptBuilder
-from backend.mcp.registry import ToolRegistry
+from backend.mcp.registry import ToolRegistry, _openai_tool_name
 
 
 class OrchestratorState(str, Enum):
@@ -24,6 +25,31 @@ class OrchestratorState(str, Enum):
 
 
 EmitFn = Callable[[str, Mapping[str, Any]], Awaitable[None]]
+
+
+def _openai_tool_input_json(blob: Mapping[str, Any]) -> str:
+    fn = blob.get("function") if isinstance(blob, dict) else None
+    if not isinstance(fn, dict):
+        return "{}"
+    rv = fn.get("arguments")
+    if isinstance(rv, str):
+        return rv
+    try:
+        return _json.dumps(rv or {}, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return "{}"
+
+
+def _tool_payload_success(content: str) -> tuple[bool, Optional[str]]:
+    try:
+        obj = _json.loads(content)
+        if isinstance(obj, dict) and obj.get("ok") is False:
+            return False, (str(obj.get("error", ""))[:2000] or "tool_error")
+        if isinstance(obj, dict) and obj.get("error") in ("rate_limited", "offline"):
+            return False, str(obj.get("error", ""))
+        return True, None
+    except _json.JSONDecodeError:
+        return True, None
 
 
 class SimpleOrchestratorContext:
@@ -58,6 +84,7 @@ class ConversationOrchestrator:
         tool_registry: ToolRegistry,
         active_persona: str = "default",
         emitter: EmitFn | None = None,
+        db_path: Optional[str] = None,
     ) -> None:
         self._cfg = configuration
         self._llm = lm_client
@@ -67,9 +94,10 @@ class ConversationOrchestrator:
         self._registry = tool_registry
         self._cooldown = CooldownTracker()
         self.phase = OrchestratorState.IDLE
-        self.state: Dict[str, Any] = {"active_persona": active_persona}
+        self.state: Dict[str, Any] = {"active_persona": active_persona, "online": True}
         self._emit = emitter
         self._max_tools = configuration.ai_runtime.max_tool_calls_per_turn
+        self._db_path = db_path
 
     def apply_configuration(
         self,
@@ -128,7 +156,7 @@ class ConversationOrchestrator:
 
                 params: Dict[str, Any] = {"city": mm.params.get("city", "")}
                 try:
-                    tool_out = await self._registry.invoke(mm.tool_name, params)
+                    tool_out = await self._registry.invoke(mm.tool_name, params, system_state=self.state)
                     self._cooldown.mark_executed(mm.cmd_id)
                     outcomes.append(
                         CommandExecutionResult(
@@ -172,6 +200,7 @@ class ConversationOrchestrator:
         user_text: str,
         *,
         conversation_tail: Sequence[Dict[str, Any]] = (),
+        db_chat_session_id: Optional[int] = None,
     ) -> ChatCompletionResult:
         self.phase = OrchestratorState.THINKING
         await self.emit_visual_state(self.phase)
@@ -204,42 +233,101 @@ class ConversationOrchestrator:
 
                 msgs.append({"role": "assistant", "content": res.content or "", "tool_calls": tc_list_raw})
 
+                parent_msg_id: Optional[int] = None
+                if self._db_path and db_chat_session_id is not None:
+                    from backend.db.repositories import MessageRepository
+
+                    log_body = (res.content or "").strip() or "[wywołania narzędzi]"
+                    parent_msg_id = await MessageRepository(self._db_path).create_message(
+                        db_chat_session_id,
+                        "assistant",
+                        log_body,
+                    )
+
                 invoke_budget = max(0, self._max_tools - tool_calls_done)
-                if invoke_budget <= 0:
+
+                non_doc_calls = [
+                    b
+                    for b in tc_list_raw
+                    if isinstance(b, dict) and _openai_tool_name(b) not in ("", "generate_document")
+                ]
+                if len(non_doc_calls) > invoke_budget:
                     msgs.append(
                         {
                             "role": "system",
                             "content": (
-                                "[UWAGA] Osiągnięto limit narzędzi na tę turę — daj odpowiedź bez nowych wywołań narzędzi."
+                                "[UWAGA] Osiągnięto limit narzędzi na tę turę — część wywołań została pominięta."
                             ),
                         }
                     )
-                    continue
 
-                for blob in tc_list_raw[:invoke_budget]:
+                scheduled: List[Dict[str, Any]] = []
+                non_doc_used = 0
+                for blob in tc_list_raw:
                     if not isinstance(blob, dict):
                         continue
-                    tool_calls_done += 1
+                    nm = _openai_tool_name(blob)
+                    if nm == "generate_document":
+                        scheduled.append(blob)
+                        continue
+                    if non_doc_used < invoke_budget:
+                        scheduled.append(blob)
+                        non_doc_used += 1
+
+                turn_seq = 0
+                for blob in scheduled:
+                    if not isinstance(blob, dict):
+                        continue
+                    nm = _openai_tool_name(blob)
+                    if nm != "generate_document":
+                        tool_calls_done += 1
+                    in_json = _openai_tool_input_json(blob)
+                    t0 = time.perf_counter()
+                    tool_msg: Optional[Dict[str, Any]] = None
                     try:
-                        tool_msg = await self._registry.invoke_openai_tool_call(blob)
+                        tool_msg = await self._registry.invoke_openai_tool_call(blob, system_state=self.state)
                         entry: Dict[str, Any] = {
                             "role": "tool",
                             "tool_call_id": tool_msg["tool_call_id"],
                             "content": tool_msg["content"],
                         }
-                        nm = tool_msg.get("name")
-                        if nm:
-                            entry["name"] = nm
+                        tnm = tool_msg.get("name")
+                        if tnm:
+                            entry["name"] = tnm
                         msgs.append(entry)
                     except KeyError:
                         tc_id = blob.get("id")
+                        tool_msg = {
+                            "tool_call_id": tc_id if isinstance(tc_id, str) else "",
+                            "name": nm,
+                            "content": _json.dumps({"error": "unknown_tool"}, ensure_ascii=False),
+                        }
                         msgs.append(
                             {
                                 "role": "tool",
-                                "tool_call_id": tc_id if isinstance(tc_id, str) else "",
-                                "content": _json.dumps({"error": "unknown_tool"}, ensure_ascii=False),
+                                "tool_call_id": tool_msg["tool_call_id"],
+                                "content": tool_msg["content"],
                             }
                         )
+                    finally:
+                        if parent_msg_id is not None and self._db_path:
+                            turn_seq += 1
+                            duration_ms = int((time.perf_counter() - t0) * 1000)
+                            payload = (tool_msg or {}).get("content", "") if tool_msg else ""
+                            log_nm = (tool_msg or {}).get("name") or nm or "unknown"
+                            succ, err_note = _tool_payload_success(str(payload))
+                            from backend.db.repositories import ToolCallsRepository
+
+                            await ToolCallsRepository(self._db_path).insert_completed(
+                                parent_msg_id,
+                                turn_seq,
+                                str(log_nm),
+                                in_json,
+                                str(payload) if payload else None,
+                                duration_ms,
+                                succ,
+                                error_message=None if succ else err_note,
+                            )
 
             msgs.append({"role": "system", "content": "[UWAGA] Za dużo rund narzędzi — przerywam z bezpieczeństwa."})
             return await self._llm.chat_completion(msgs, tools=None)
@@ -255,6 +343,7 @@ class ConversationOrchestrator:
         persona_bias_fallback: Optional[str] = None,
         system_health: str = "healthy",
         emitter_override: EmitFn | None = None,
+        db_chat_session_id: Optional[int] = None,
     ) -> CommandExecutionResult:
         cmds = await self.run_commands_if_any(user_text, emitter_override=emitter_override)
         if cmds:
@@ -266,7 +355,11 @@ class ConversationOrchestrator:
             self.phase = OrchestratorState.IDLE
             return CommandExecutionResult(success=True, message=merged or "(brak odpowiedzi)", emotion=emotion)
 
-        res = await self.run_llm_with_tools(user_text, conversation_tail=conversation_tail)
+        res = await self.run_llm_with_tools(
+            user_text,
+            conversation_tail=conversation_tail,
+            db_chat_session_id=db_chat_session_id,
+        )
         persona = self._resolve_persona()
         bias = persona_bias_fallback or persona.frontmatter.tts_emotion_bias
         emotion_tag, stripped = parse_emotion_tag(res.content or "")

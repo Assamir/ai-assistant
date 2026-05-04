@@ -224,7 +224,11 @@ def create_app_context() -> AppContext:
     personas_dir = root / "personas"
     personas_dir.mkdir(parents=True, exist_ok=True)
 
-    reg = build_default_tool_registry(db_path=db_path, mcp_cfg=cfg.mcp)
+    reg = build_default_tool_registry(
+        db_path=db_path,
+        mcp_cfg=cfg.mcp,
+        content_root=str(root.resolve()),
+    )
     matcher = CommandMatcher(fuzzy=cfg.ai_runtime.command_match_fuzzy)
     llm = LMStudioClient(cfg.llm)
     pb = PromptBuilder(max_context_tokens=cfg.ai_runtime.max_context_tokens)
@@ -239,6 +243,7 @@ def create_app_context() -> AppContext:
         tool_registry=reg,
         active_persona="default",
         emitter=None,
+        db_path=db_path,
     )
 
     profiles = build_game_profile_index(root, cfg)
@@ -296,6 +301,10 @@ def create_app_context() -> AppContext:
 
     if ctx.game_observer is not None:
         ctx.game_observer.set_vlm_fallback(_vlm_fallback)
+
+    from backend.mcp.context_tools import register_context_dependent_mcp_tools
+
+    register_context_dependent_mcp_tools(ctx)
     return ctx
 
 

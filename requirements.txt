@@ -52,7 +52,9 @@ pillow>=10.0.0,<12.0.0
 # pip install pyautogui      # fallback screenshot
 # pip install easyocr        # OCR (gdy ocr.enabled)
 
+# chromadb — T8 SemanticRecall (na Python 3.11–3.13 pełny stack; 3.14+ może wymagać aktualizacji chroma — wtedy działa fallback w pamięci w SemanticRecall)
+chromadb>=0.5.0,<0.7.0
+
 # AI-related packages (will be added as needed)
 # whisper
 # piper-tts
-# chromadb

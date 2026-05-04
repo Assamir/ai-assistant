@@ -146,6 +146,67 @@ class MessageRepository:
             return dict(row) if row else None
 
 
+class ToolCallsRepository:
+    """Wiersze `tool_calls` — log narzędzi MCP powiązany z wiadomością asystenta (DOK-10)."""
+
+    def __init__(self, db_path: str):
+        self.db_path = db_path
+
+    async def insert_completed(
+        self,
+        message_id: int,
+        turn_sequence: int,
+        tool_name: str,
+        input_json: str,
+        output_json: Optional[str],
+        duration_ms: int,
+        success: bool,
+        error_message: Optional[str] = None,
+    ) -> int:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            await db.execute(
+                """
+                INSERT INTO tool_calls (
+                    message_id, turn_sequence, tool_name, input_json,
+                    output_json, duration_ms, success, error_message, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+                """,
+                (
+                    message_id,
+                    turn_sequence,
+                    tool_name,
+                    input_json,
+                    output_json,
+                    int(duration_ms),
+                    1 if success else 0,
+                    error_message,
+                ),
+            )
+            await db.commit()
+            cur = await db.execute("SELECT last_insert_rowid()")
+            row = await cur.fetchone()
+            return int(row[0])
+
+    async def list_for_message(self, message_id: int) -> List[Dict[str, Any]]:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                """
+                SELECT id, message_id, turn_sequence, tool_name, input_json,
+                       output_json, duration_ms, success, error_message, created_at
+                FROM tool_calls
+                WHERE message_id = ?
+                ORDER BY turn_sequence ASC, id ASC
+                """,
+                (message_id,),
+            )
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+
+
 class GameDetectionRepository:
     """Wiersze `game_detections` — sesja czatu SQLite (`sessions.id`)."""
 
@@ -261,6 +322,12 @@ class MCPCacheRepository:
                 """,
                 (tool_name, cache_key, response_json, ttl_seconds),
             )
+            await db.commit()
+
+    async def invalidate_all(self) -> None:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            await db.execute("DELETE FROM mcp_cache")
             await db.commit()
 
 

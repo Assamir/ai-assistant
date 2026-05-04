@@ -29,5 +29,18 @@ class AsyncRateWindow:
         await asyncio.sleep(wait)
         await self.acquire()
 
+    async def acquire_strict(self) -> None:
+        """Jedno wywołanie w „świeżym” oknie; przy przepełnieniu — RateLimitedError (bez czekania)."""
+
+        from backend.mcp.exceptions import RateLimitedError
+
+        async with self._lock:
+            now = time.monotonic()
+            while self._times and now - self._times[0] >= self._period:
+                self._times.popleft()
+            if len(self._times) >= self._max:
+                raise RateLimitedError("MCP: przekroczono limit wywołań w oknie czasu.")
+            self._times.append(now)
+
 
 __all__ = ["AsyncRateWindow"]
