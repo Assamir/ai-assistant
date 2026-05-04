@@ -6,6 +6,8 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional
 
+from backend.config.schema import MonitorInfo
+
 
 class BaseLLMClient(ABC):
     """Abstract base class for LLM clients"""
@@ -67,6 +69,20 @@ class BaseVLMAnalyzer(ABC):
     @abstractmethod
     async def analyze_image(self, image_data: bytes) -> str:
         """Analyze an image and return description"""
+        raise NotImplementedError
+
+
+class BaseScreenCapture(ABC):
+    """Abstract base class for desktop frame grab (PNG bytes dla potoku VLM)."""
+
+    @abstractmethod
+    async def list_monitors(self) -> List[MonitorInfo]:
+        """Zwraca dostępne monitory w kolejności zgodnej z `monitor_index` w capture."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def capture_png(self, *, monitor_index: int = 0) -> bytes:
+        """Zrzut ekranu jako PNG (bytes)."""
         raise NotImplementedError
 
 
@@ -190,6 +206,7 @@ __all__ = [
     "BaseSTTEngine",
     "BaseTTSEngine",
     "BaseVLMAnalyzer",
+    "BaseScreenCapture",
     "CircuitBreaker",
     "CircuitBreakerOpen",
     "GPUScheduler",

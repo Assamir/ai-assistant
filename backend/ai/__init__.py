@@ -11,10 +11,21 @@ from backend.ai.faster_whisper_stt import (
 from backend.ai.llm_client import ChatCompletionResult, LMStudioClient
 from backend.ai.piper_tts import PiperTTS
 from backend.ai.voice_input import (
+    AudioBackendUnavailable,
     AudioDuckSignal,
     AudioInputMode,
+    PTTHotkeyListener,
     VoiceInputCoordinator,
     WakewordDetector,
+    resolve_ptt_key_name,
+)
+from backend.ai.screen_capture import (
+    DesktopScreenCapture,
+    MINIMAL_PNG_BYTES,
+    MockScreenCapture,
+    ScreenCaptureError,
+    ScreenCaptureUnavailable,
+    parse_dxcam_output_info,
 )
 
 __all__ = [
@@ -25,7 +36,16 @@ __all__ = [
     "TranscriptionRejected",
     "PiperTTS",
     "AudioInputMode",
+    "AudioBackendUnavailable",
     "AudioDuckSignal",
     "VoiceInputCoordinator",
     "WakewordDetector",
+    "PTTHotkeyListener",
+    "resolve_ptt_key_name",
+    "DesktopScreenCapture",
+    "MINIMAL_PNG_BYTES",
+    "MockScreenCapture",
+    "ScreenCaptureError",
+    "ScreenCaptureUnavailable",
+    "parse_dxcam_output_info",
 ]

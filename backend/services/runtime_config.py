@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from backend.ai.voice_input import WakewordDetector
 from backend.api.app_context import AppContext, try_build_stt_engine, try_build_tts_engine
 from backend.config.schema import ConfigSchema
 from backend.core.command_matching import CommandMatcher
@@ -39,6 +40,12 @@ async def apply_reload_configuration(ctx: AppContext, new_cfg: ConfigSchema) -> 
 
     ctx.stt_engine = try_build_stt_engine(new_cfg)
     ctx.tts_engine = try_build_tts_engine(new_cfg)
+
+    ctx.wakeword_detector = WakewordDetector(
+        enabled=new_cfg.audio.wakeword_enabled,
+        wakeword_models=list(new_cfg.audio.wakeword_models),
+        threshold=new_cfg.audio.wakeword_threshold,
+    )
 
     logger.info("Runtime configuration applied (hot-reload)")
 

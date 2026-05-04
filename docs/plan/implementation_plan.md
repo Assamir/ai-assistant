@@ -270,9 +270,9 @@ sequenceDiagram
 | Tydzień | Ocena   | Uwagi                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **T1**  | ✅ ~90%  | Środowisko i struktura katalogów, `ConfigLoader` + `tests/unit/test_config.py`, klasy bazowe i `MigrationRunner`, repozytoria na `aiosqlite`. Plan wspominał `StorageBackend`/`SQLiteBackend` — w kodzie jest bezpośredni dostęp przez repozytoria (bez osobnej warstwy „StorageBackend”). Liczba tabel w `001_initial.sql`: 12 tabel domenowych + `schema_migrations` (należy zweryfikować względem pełnego DB_SCHEMA 14×). |
-| **T2**  | 🟡 ~75% | `LMStudioClient`, `FasterWhisperSTT`, `PiperTTS`, testy jednostkowe i integracyjne (m.in. mock voice pipeline). `VoiceInputCoordinator` + sygnały duck; **`WakewordDetector` to stub** (brak openWakeWord). Brak dedykowanego `AudioCapture`/pynput w backendzie (PTT głównie przez WS/front w przyszłości).                                                                                                                 |
+| **T2**  | ✅ ~95% | `LMStudioClient`, `FasterWhisperSTT`, `PiperTTS`, testy. `VoiceInputCoordinator` + duck WS z backendu; **`PTTHotkeyListener` (pynput)** opcjonalnie (`audio.backend_ptt_listener_enabled`). **`WakewordDetector`** — openWakeWord lazy-load, domyślnie `hey_jarvis`, `detect_in_chunk()`; mikrofon ciągły → kolejny krok integracji.                                                                                                                                                                                                                                |
 | **T3**  | ✅ ~85%  | `PromptBuilder`, `PersonaLoader`, tiktoken, `parse_emotion_tag`, `CommandMatcher`, `ConversationOrchestrator` ze statusem fazy i narzędziami (limit z config). REST + WebSocket (`WebSocketManager` w `app_context`), testy API/WS/SSE. MCP: rejestr + czas + kalkulator + `random_choice` / `dice_roll` / `format_duration` (poza minimalnym zakresem planu).                                                               |
-| **T4**  | ✅ ~85%  | Watchdog + recovery + hot-reload + health snapshot + DB pod `{content_root}/data/`; smoke wydajności mock pipeline. FPS w grze / pełny PTT UI — poza zakresem backend-only. |
+| **T4**  | ✅ ~85%  | Watchdog + recovery + hot-reload + health snapshot + DB pod `{content_root}/data/`; smoke wydajności mock pipeline. FPS w grze / pełny PTT UI — poza zakresem backend-only.                                                                                                                                                                                                                                                  |
 
 
 ---
@@ -343,9 +343,9 @@ sequenceDiagram
 
 #### Dzień 4: Wakeword + Audio Input
 
-- `[~]` `WakewordDetector` — **placeholder** (`poll_once` → False); openWakeWord **nie**
-- `[ ]` `AudioCapture` — pynput PTT handler (backend: koordynator duck bez capture)
-- `[~]` PTT vs wakeword — enum i koordynator; brak prawdziwego wakeword
+- `[x]` `WakewordDetector` — **openWakeWord** (lazy `Model`, lista modeli z configu, domyślnie `hey_jarvis`); `detect_in_chunk(pcm int16 mono 16 kHz)`; bez pakietu — graceful degrade
+- `[x]` **Backendowy PTT** — `PTTHotkeyListener` (pynput global listener → `VoiceInputCoordinator`); włączanie `audio.backend_ptt_listener_enabled`; **AudioCapture** mikrofonu ciągłość nadal przez frontend / przyszły moduł
+- `[x]` PTT vs wakeword — `audio.input_mode`; duck broadcast na WS z `lifespan`
 - `[x]` Audio duck event emission — `VoiceInputCoordinator`
 - **Model:** Gemini 2.5 Flash — hardware integration
 

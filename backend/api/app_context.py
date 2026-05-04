@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
 from backend.ai.llm_client import LMStudioClient
+from backend.ai.voice_input import WakewordDetector
 from backend.config.loader import ConfigLoader
 from backend.config.paths import resolve_config_yaml, sqlite_database_path
 from backend.config.schema import ConfigSchema
@@ -102,6 +103,8 @@ class AppContext:
     stt_engine: Optional[BaseSTTEngine] = None
     tts_engine: Optional[BaseTTSEngine] = None
     game_observer: Optional[GameObserver] = None
+    voice_input_coordinator: Optional[Any] = None  # VoiceInputCoordinator — ustawiane w lifespan
+    wakeword_detector: Optional[WakewordDetector] = None
 
 
 def try_build_stt_engine(cfg: ConfigSchema) -> Optional[BaseSTTEngine]:
@@ -171,6 +174,11 @@ def create_app_context() -> AppContext:
     )
 
     obs = GameObserver(cfg.observer)
+    wake = WakewordDetector(
+        enabled=cfg.audio.wakeword_enabled,
+        wakeword_models=list(cfg.audio.wakeword_models),
+        threshold=cfg.audio.wakeword_threshold,
+    )
 
     return AppContext(
         config=cfg,
@@ -187,6 +195,7 @@ def create_app_context() -> AppContext:
         stt_engine=try_build_stt_engine(cfg),
         tts_engine=try_build_tts_engine(cfg),
         game_observer=obs,
+        wakeword_detector=wake,
     )
 
 

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from enum import Enum
 
 
@@ -50,6 +50,21 @@ class AudioConfig(BaseModel):
     output_device: Optional[str] = None
     sample_rate: int = 16000
     chunk_size: int = 1024
+    input_mode: Literal["ptt", "wakeword"] = "ptt"
+    backend_ptt_listener_enabled: bool = Field(
+        default=False,
+        description="Globalny hotkey PTT przez pynput w procesie backendu (Windows).",
+    )
+    ptt_key_name: str = Field(
+        default="caps_lock",
+        description="Nazwa klawisza dla pynput (np. caps_lock, f13, scroll_lock).",
+    )
+    wakeword_enabled: bool = False
+    wakeword_models: List[str] = Field(
+        default_factory=lambda: ["hey_jarvis"],
+        description="Prebuilt openWakeWord — domyślnie hey_jarvis (fallback PRD).",
+    )
+    wakeword_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
 
 class LLMConfig(BaseModel):
     api_base_url: str = "http://localhost:1234"
@@ -87,6 +102,18 @@ class ObserverConfig(BaseModel):
         default_factory=lambda: ["game_paused", "low_fps"]
     )
     game_detection_method: str = "psutil"
+
+
+class MonitorInfo(BaseModel):
+    """Pojedynczy ekran / wyjście DXGI — `index` jest argumentem `capture_png(monitor_index=)`."""
+
+    index: int = Field(ge=0, description="Liniowy indeks zgodny z kolejnością z list_monitors().")
+    device_idx: int = Field(default=0, ge=0)
+    output_idx: int = Field(default=0, ge=0)
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    is_primary: bool = False
+    label: str = ""
 
 class MCPConfig(BaseModel):
     enabled: bool = True

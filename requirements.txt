@@ -40,6 +40,14 @@ soundfile>=0.12.0,<0.14.0
 pytest>=8.0.0,<10.0.0
 pytest-asyncio>=0.24.0,<2.0.0
 
+# pip install pynput             # backendowy globalny PTT (opcjonalnie)
+# pip install openwakeword       # wakeword heuristics / hey_jarvis
+
+# Vision / screen capture (optional — T5); DXcam tylko Windows
+pillow>=10.0.0,<12.0.0
+# pip install dxcam          # Windows, DXGI capture
+# pip install pyautogui      # fallback screenshot
+
 # AI-related packages (will be added as needed)
 # whisper
 # piper-tts

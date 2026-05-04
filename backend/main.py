@@ -17,6 +17,12 @@ from backend.api.ws_router import websocket_endpoint
 from backend.db.repositories import SystemStateRepository
 from backend.services.config_hot_reload import start_hot_reload
 from backend.services.session_watchdog import SessionWatchdog
+from backend.ai.voice_input import (
+    AudioDuckSignal,
+    AudioInputMode,
+    PTTHotkeyListener,
+    VoiceInputCoordinator,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,6 +32,41 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     ctx = create_app_context()
     app.state.ctx = ctx
+
+    loop = asyncio.get_running_loop()
+
+    async def broadcast_duck(sig: AudioDuckSignal) -> None:
+        payload = {"target_volume": sig.target_volume, "ramp_ms": sig.ramp_ms}
+        for sid in ctx.websocket_manager.iter_session_ids():
+            await ctx.websocket_manager.send_to_session(sid, "audio_duck", payload)
+
+    def duck_sink(sig: AudioDuckSignal) -> None:
+        fut = asyncio.run_coroutine_threadsafe(broadcast_duck(sig), loop)
+
+        def _done(_f: asyncio.Future[None]) -> None:
+            try:
+                _f.result()
+            except Exception as exc_duck:  # pragma: no cover
+                logger.warning("audio_duck broadcast failed: %s", exc_duck)
+
+        fut.add_done_callback(_done)
+
+    ctx.voice_input_coordinator = VoiceInputCoordinator(
+        mode=AudioInputMode(ctx.config.audio.input_mode),
+        duck_sink=duck_sink,
+    )
+
+    ptt_listener: PTTHotkeyListener | None = None
+    if ctx.config.audio.backend_ptt_listener_enabled:
+        try:
+            ptt_listener = PTTHotkeyListener(
+                ctx.voice_input_coordinator,
+                key_name=ctx.config.audio.ptt_key_name,
+            )
+            ptt_listener.start()
+            logger.info("Backend PTT listener active (%s)", ctx.config.audio.ptt_key_name)
+        except Exception as exc:
+            logger.warning("Backend PTT listener skipped: %s", exc)
 
     hot: object | None = None
     wd_task: asyncio.Task[None] | None = None
@@ -59,6 +100,11 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        if ptt_listener is not None:
+            try:
+                ptt_listener.stop()
+            except Exception:
+                logger.debug("PTT listener stop failed", exc_info=True)
         watchdog.stop()
         if wd_task is not None:
             wd_task.cancel()
