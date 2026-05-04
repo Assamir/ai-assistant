@@ -2,6 +2,17 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from enum import Enum
 
+
+class GeneralConfig(BaseModel):
+    assistant_name: str = "Aria"
+    content_root: str = "."
+
+
+class AIControlConfig(BaseModel):
+    max_context_tokens: int = Field(default=4096, ge=512, le=128_000)
+    command_match_fuzzy: bool = True
+    max_tool_calls_per_turn: int = Field(default=5, ge=1, le=50)
+
 class LogLevel(str, Enum):
     DEBUG = "DEBUG"
     INFO = "INFO"
@@ -83,6 +94,9 @@ class MCPConfig(BaseModel):
     cache_ttl_seconds: int = 3600
 
 class ConfigSchema(BaseModel):
+    general: GeneralConfig = GeneralConfig()
+    ai_runtime: AIControlConfig = AIControlConfig()
+
     # Core config
     log_level: LogLevel = LogLevel.INFO
     

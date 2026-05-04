@@ -49,6 +49,13 @@ def main() -> int:
     except ImportError as e:
         print(f"  (opcjonalnie) librosa/soundfile niedostępny: {e}")
 
+    try:
+        importlib.import_module("tiktoken")
+        importlib.import_module("asteval")
+        print("  OK import tiktoken + asteval")
+    except ImportError as e:
+        print(f"  (opcjonalnie) tiktoken/asteval niedostępny: {e}")
+
     from backend.db.migration_runner import MigrationRunner
 
     with tempfile.TemporaryDirectory() as td:
