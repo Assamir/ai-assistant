@@ -10,6 +10,7 @@ from backend.ai.faster_whisper_stt import (
 )
 from backend.ai.llm_client import ChatCompletionResult, LMStudioClient
 from backend.ai.moondream_vlm import Moondream2VLM, MoondreamDependencyError
+from backend.ai.easyocr_engine import EasyOCREngine, OCRDependencyError
 from backend.ai.piper_tts import PiperTTS
 from backend.ai.voice_input import (
     AudioBackendUnavailable,
@@ -28,12 +29,16 @@ from backend.ai.screen_capture import (
     ScreenCaptureUnavailable,
     parse_dxcam_output_info,
 )
+from backend.ai.scene_dhash import SceneDeduper, compute_dhash_png, hamming_u64
+from backend.ai.vision_pipeline import DualVisionPipeline, VisionFrameResult
 
 __all__ = [
     "LMStudioClient",
     "ChatCompletionResult",
     "Moondream2VLM",
     "MoondreamDependencyError",
+    "EasyOCREngine",
+    "OCRDependencyError",
     "FasterWhisperSTT",
     "ConfidenceTier",
     "TranscriptionRejected",
@@ -51,4 +56,9 @@ __all__ = [
     "ScreenCaptureError",
     "ScreenCaptureUnavailable",
     "parse_dxcam_output_info",
+    "SceneDeduper",
+    "compute_dhash_png",
+    "hamming_u64",
+    "DualVisionPipeline",
+    "VisionFrameResult",
 ]
