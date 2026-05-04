@@ -14,7 +14,7 @@ from backend.config.loader import ConfigLoader
 from backend.config.paths import resolve_config_yaml, sqlite_database_path
 from backend.config.schema import ConfigSchema
 from backend.core.command_matching import CommandMatcher
-from backend.core.interfaces import BaseSTTEngine, BaseTTSEngine, BaseVLMAnalyzer
+from backend.core.interfaces import BaseSTTEngine, BaseTTSEngine, BaseVLMAnalyzer, BaseOCREngine
 from backend.core.orchestrator import ConversationOrchestrator
 from backend.core.persona_loader import PersonaLoader
 from backend.core.prompt_builder import PromptBuilder
@@ -106,6 +106,8 @@ class AppContext:
     voice_input_coordinator: Optional[Any] = None  # VoiceInputCoordinator — ustawiane w lifespan
     wakeword_detector: Optional[WakewordDetector] = None
     vlm_engine: Optional[BaseVLMAnalyzer] = None
+    ocr_engine: Optional[BaseOCREngine] = None
+    vision_pipeline: Optional[Any] = None  # DualVisionPipeline — budowany przy starcie
 
 
 def try_build_stt_engine(cfg: ConfigSchema) -> Optional[BaseSTTEngine]:
@@ -147,6 +149,34 @@ def try_build_vlm_engine(cfg: ConfigSchema) -> Optional[BaseVLMAnalyzer]:
     except Exception as exc:
         _logger.warning("VLM engine init failed: %s", exc)
     return None
+
+
+def try_build_ocr_engine(cfg: ConfigSchema) -> Optional[BaseOCREngine]:
+    """EasyOCR przy `ocr.enabled`; pierwszy odczyt ładuje Reader."""
+    if not cfg.ocr.enabled:
+        return None
+    try:
+        from backend.ai.easyocr_engine import EasyOCREngine
+
+        return EasyOCREngine(cfg.ocr)
+    except ImportError:
+        _logger.info("easyocr not installed — OCR engine disabled")
+    except Exception as exc:
+        _logger.warning("OCR engine init failed: %s", exc)
+    return None
+
+
+def build_vision_pipeline(
+    cfg: ConfigSchema,
+    vlm: Optional[BaseVLMAnalyzer],
+    ocr: Optional[BaseOCREngine],
+) -> Optional[Any]:
+    """Potok VLM+OCR; None gdy brak obu silników."""
+    if vlm is None and ocr is None:
+        return None
+    from backend.ai.vision_pipeline import DualVisionPipeline
+
+    return DualVisionPipeline(vlm_engine=vlm, ocr_engine=ocr, ocr_config=cfg.ocr)
 
 
 def load_resolved_config() -> tuple[ConfigSchema, Optional[str], Path]:
@@ -196,6 +226,10 @@ def create_app_context() -> AppContext:
         threshold=cfg.audio.wakeword_threshold,
     )
 
+    vlm = try_build_vlm_engine(cfg)
+    ocr = try_build_ocr_engine(cfg)
+    vp = build_vision_pipeline(cfg, vlm, ocr)
+
     return AppContext(
         config=cfg,
         resolved_config_path=yaml_path,
@@ -212,7 +246,9 @@ def create_app_context() -> AppContext:
         tts_engine=try_build_tts_engine(cfg),
         game_observer=obs,
         wakeword_detector=wake,
-        vlm_engine=try_build_vlm_engine(cfg),
+        vlm_engine=vlm,
+        ocr_engine=ocr,
+        vision_pipeline=vp,
     )
 
 
@@ -236,4 +272,6 @@ __all__ = [
     "try_build_stt_engine",
     "try_build_tts_engine",
     "try_build_vlm_engine",
+    "try_build_ocr_engine",
+    "build_vision_pipeline",
 ]

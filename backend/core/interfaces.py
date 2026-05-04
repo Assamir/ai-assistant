@@ -72,6 +72,15 @@ class BaseVLMAnalyzer(ABC):
         raise NotImplementedError
 
 
+class BaseOCREngine(ABC):
+    """Abstract base class for OCR na klatce (PNG/JPEG bytes)."""
+
+    @abstractmethod
+    async def extract_text(self, image_data: bytes) -> str:
+        """Zwraca tekst (np. wiele linii) z obrazu."""
+        raise NotImplementedError
+
+
 class BaseScreenCapture(ABC):
     """Abstract base class for desktop frame grab (PNG bytes dla potoku VLM)."""
 
@@ -206,6 +215,7 @@ __all__ = [
     "BaseSTTEngine",
     "BaseTTSEngine",
     "BaseVLMAnalyzer",
+    "BaseOCREngine",
     "BaseScreenCapture",
     "CircuitBreaker",
     "CircuitBreakerOpen",

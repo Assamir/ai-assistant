@@ -119,6 +119,44 @@ class VLMConfig(BaseModel):
             return "vikhyatk/moondream2"
         return str(v).strip()
 
+class OCRConfig(BaseModel):
+    """EasyOCR — opcjonalny; domyślnie wyłączony (CI bez easyocr)."""
+
+    enabled: bool = False
+    languages: List[str] = Field(default_factory=lambda: ["pl", "en"])
+    use_gpu: bool = True
+    gpu_priority: int = Field(default=4, ge=1, le=4)
+    confidence_threshold: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Minimalna pewność EasyOCR na linię (0 = bez filtrowania).",
+    )
+    trigger_keywords: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Puste → OCR zawsze po VLM (gdy VLM jest). Niepuste → OCR tylko gdy opis VLM "
+            "zawiera którykolwiek substring (case-insensitive). Bez VLM — OCR zawsze."
+        ),
+    )
+
+    @field_validator("languages", mode="before")
+    @classmethod
+    def normalize_langs(cls, v: Any) -> List[str]:
+        if not v:
+            return ["pl", "en"]
+        if isinstance(v, str):
+            return [v.strip()] if v.strip() else ["pl", "en"]
+        return [str(x).strip() for x in v if str(x).strip()] or ["pl", "en"]
+
+    @field_validator("trigger_keywords", mode="before")
+    @classmethod
+    def normalize_keywords(cls, v: Any) -> List[str]:
+        if not v:
+            return []
+        return [str(x).strip().lower() for x in v if str(x).strip()]
+
+
 class ObserverConfig(BaseModel):
     observer_type: str = "strategy"  # strategy or casual
     check_interval_seconds: int = 5
@@ -165,7 +203,10 @@ class ConfigSchema(BaseModel):
     
     # VLM settings
     vlm: VLMConfig = VLMConfig()
-    
+
+    # OCR settings (EasyOCR)
+    ocr: OCRConfig = OCRConfig()
+
     # Observer settings
     observer: ObserverConfig = ObserverConfig()
     

@@ -25,6 +25,11 @@ def build_health_snapshot(ctx: AppContext) -> Dict[str, Any]:
             "enabled_in_config": ctx.config.vlm.enabled,
             "engine_initialized": ctx.vlm_engine is not None,
         },
+        "ocr": {
+            "enabled_in_config": ctx.config.ocr.enabled,
+            "engine_initialized": ctx.ocr_engine is not None,
+        },
+        "vision_pipeline": {"available": ctx.vision_pipeline is not None},
         "database": {"path": ctx.db_path},
         "observer": {
             "running": ctx.game_observer.is_running if ctx.game_observer else False,

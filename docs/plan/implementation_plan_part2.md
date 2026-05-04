@@ -8,13 +8,13 @@
 ## Stan wdrożenia — 2026-05-04
 
 
-| Zakres                    | Stan             | Uwagi                                                                                                                                      |
-| ------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| **T5** Screen / VLM / OCR | 🟡 ~45% | `ScreenCapture`, parser DXcam; **`Moondream2VLM`** (`vlm.enabled`) + GPUScheduler P4; brak EasyOCR, dHash, testów E2E capture→VLM                                                                                                                           |
-| **T6** Observer / gry     | 🟡 ~10%          | Jest `GameObserver` (psutil, lista znanych gier, emit na WS) — **bez** profili YAML, pętli capture→VLM→LLM→komentarz, diversity/rate limit |
-| **T7** MCP rozszerzenia   | ⬜                | Brak `web_search`, `web_scraper`, `SandboxValidator`, `MCPCache` (tylko tabela SQL); narzędzia: czas + kalkulator + `tools_extra`          |
-| **T8** Memory / profil    | ⬜                | ChromaDB w `requirements.txt` zakomentowane; brak SemanticRecall / ingester / rotacji w kodzie (tabele profilu w SQLite istnieją)          |
-| **T9–T14** Frontend       | ⬜                | Brak katalogu aplikacji Electron/React w repo                                                                                              |
+| Zakres                    | Stan    | Uwagi                                                                                                                                      |
+| ------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **T5** Screen / VLM / OCR | 🟡 ~65% | `ScreenCapture`, dHash + `SceneDeduper`, **`EasyOCREngine`**, `Moondream2VLM`, `DualVisionPipeline` (`ocr.trigger_keywords`), health/runtime; crop region / pełny observer loop — kolejne kroki |
+| **T6** Observer / gry     | 🟡 ~10% | Jest `GameObserver` (psutil, lista znanych gier, emit na WS) — **bez** profili YAML, pętli capture→VLM→LLM→komentarz, diversity/rate limit |
+| **T7** MCP rozszerzenia   | ⬜       | Brak `web_search`, `web_scraper`, `SandboxValidator`, `MCPCache` (tylko tabela SQL); narzędzia: czas + kalkulator + `tools_extra`          |
+| **T8** Memory / profil    | ⬜       | ChromaDB w `requirements.txt` zakomentowane; brak SemanticRecall / ingester / rotacji w kodzie (tabele profilu w SQLite istnieją)          |
+| **T9–T14** Frontend       | ⬜       | Brak katalogu aplikacji Electron/React w repo                                                                                              |
 
 
 **Kamienie M2 i M3** z tego dokumentu — **niedostępne** przy obecnym kodzie.

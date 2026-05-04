@@ -6,7 +6,14 @@ import logging
 from pathlib import Path
 
 from backend.ai.voice_input import WakewordDetector
-from backend.api.app_context import AppContext, try_build_stt_engine, try_build_tts_engine, try_build_vlm_engine
+from backend.api.app_context import (
+    AppContext,
+    build_vision_pipeline,
+    try_build_ocr_engine,
+    try_build_stt_engine,
+    try_build_tts_engine,
+    try_build_vlm_engine,
+)
 from backend.config.schema import ConfigSchema
 from backend.core.command_matching import CommandMatcher
 from backend.core.persona_loader import PersonaLoader
@@ -41,6 +48,8 @@ async def apply_reload_configuration(ctx: AppContext, new_cfg: ConfigSchema) -> 
     ctx.stt_engine = try_build_stt_engine(new_cfg)
     ctx.tts_engine = try_build_tts_engine(new_cfg)
     ctx.vlm_engine = try_build_vlm_engine(new_cfg)
+    ctx.ocr_engine = try_build_ocr_engine(new_cfg)
+    ctx.vision_pipeline = build_vision_pipeline(new_cfg, ctx.vlm_engine, ctx.ocr_engine)
 
     ctx.wakeword_detector = WakewordDetector(
         enabled=new_cfg.audio.wakeword_enabled,
