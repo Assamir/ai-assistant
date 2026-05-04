@@ -1,6 +1,6 @@
 # Assystent — Pełny Plan Implementacji
 
-> **Status:** v1.1 — 2026-05-02
+> **Status:** v1.2 — 2026-05-04 (sekcja „Stan wdrożenia” + checklist Fazy 1)
 > **Źródła:** Wszystkie 24 dokumenty DOK-01–DOK-16 + PRD 00-06
 > **Pliki towarzyszące:** [Fazy 2–3 + Testy + Modele](implementation_plan_part2.md) · [TEST_PLAN](TEST_PLAN.md) · [DEFINITION_OF_DONE](DEFINITION_OF_DONE.md) · [RISK_REGISTER](RISK_REGISTER.md) · [IMPLEMENTATION_ROADMAP](IMPLEMENTATION_ROADMAP.md)
 
@@ -264,150 +264,165 @@ sequenceDiagram
 
 ## 5. Faza 1 — Backend Core (T1–T4)
 
+### 5.0 Stan wdrożenia w repo (2026-05-04)
+
+
+| Tydzień | Ocena   | Uwagi                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **T1**  | ✅ ~90%  | Środowisko i struktura katalogów, `ConfigLoader` + `tests/unit/test_config.py`, klasy bazowe i `MigrationRunner`, repozytoria na `aiosqlite`. Plan wspominał `StorageBackend`/`SQLiteBackend` — w kodzie jest bezpośredni dostęp przez repozytoria (bez osobnej warstwy „StorageBackend”). Liczba tabel w `001_initial.sql`: 12 tabel domenowych + `schema_migrations` (należy zweryfikować względem pełnego DB_SCHEMA 14×). |
+| **T2**  | 🟡 ~75% | `LMStudioClient`, `FasterWhisperSTT`, `PiperTTS`, testy jednostkowe i integracyjne (m.in. mock voice pipeline). `VoiceInputCoordinator` + sygnały duck; **`WakewordDetector` to stub** (brak openWakeWord). Brak dedykowanego `AudioCapture`/pynput w backendzie (PTT głównie przez WS/front w przyszłości).                                                                                                                 |
+| **T3**  | ✅ ~85%  | `PromptBuilder`, `PersonaLoader`, tiktoken, `parse_emotion_tag`, `CommandMatcher`, `ConversationOrchestrator` ze statusem fazy i narzędziami (limit z config). REST + WebSocket (`WebSocketManager` w `app_context`), testy API/WS/SSE. MCP: rejestr + czas + kalkulator + `random_choice` / `dice_roll` / `format_duration` (poza minimalnym zakresem planu).                                                               |
+| **T4**  | ✅ ~85%  | Watchdog + recovery + hot-reload + health snapshot + DB pod `{content_root}/data/`; smoke wydajności mock pipeline. FPS w grze / pełny PTT UI — poza zakresem backend-only. |
+
+
+---
+
 ### T1: Setup + Interfaces + Config
 
 #### Dzień 1–2: Projekt i środowisko
 
-- `[ ]` Wykonaj ENV_SETUP.md — content root, venv, requirements
-- `[ ]` Struktura backend: `backend/{api,core,config,db,ai,mcp,services}/`
-- `[ ]` `__init__.py`, `main.py` (FastAPI app skeleton)
-- `[ ]` `scripts/setup.ps1`, `scripts/verify_env.py`
+- `[x]` Wykonaj ENV_SETUP.md — content root, venv, requirements
+- `[x]` Struktura backend: `backend/{api,core,config,db,ai,mcp,services}/`
+- `[x]` `__init__.py`, `main.py` (FastAPI app skeleton)
+- `[x]` `scripts/setup.ps1`, `scripts/verify_env.py`
 - **Model:** Gemini 2.5 Flash — boilerplate setup
 
 #### Dzień 3: Config Loader
 
-- `[ ]` `backend/config/schema.py` — Pydantic V2 models (z DOK-03)
-- `[ ]` `backend/config/loader.py` — hierarchia: defaults < yaml < env
-- `[ ]` Walidacja semantyczna (cross-field)
-- `[ ]` Zapis znormalizowanej konfiguracji
-- `[ ]` 15 unit testów (walidacja, defaults, env override)
+- `[x]` `backend/config/schema.py` — Pydantic V2 models (z DOK-03)
+- `[x]` `backend/config/loader.py` — hierarchia: defaults < yaml < env
+- `[x]` Walidacja semantyczna (cross-field)
+- `[ ]` Zapis znormalizowanej konfiguracji (nie zweryfikowano wyczerpująco)
+- `[~]` Unit testy config — `tests/unit/test_config.py` (pełna liczba „15” nie assertowana w docs)
 - **Model:** Gemini 2.5 Pro — complex Pydantic schemas
 
 #### Dzień 4: Interfaces + Base Classes
 
-- `[ ]` `BaseLLMClient`, `BaseSTTEngine`, `BaseTTSEngine`, `BaseVLMAnalyzer`
-- `[ ]` `StorageBackend` + `SQLiteBackend` (aiosqlite)
-- `[ ]` `BaseRepository` + concrete repos (Session, Message)
-- `[ ]` `GPUScheduler` (z DOK-08 §1)
-- `[ ]` `CircuitBreaker` (z DOK-08 §2)
+- `[x]` `BaseLLMClient`, `BaseSTTEngine`, `BaseTTSEngine`, `BaseVLMAnalyzer`
+- `[ ]` `StorageBackend` + `SQLiteBackend` (aiosqlite) — **nie wdrożono**; CRUD przez repozytoria
+- `[~]` `BaseRepository` — brak wspólnej klasy bazowej; repozytoria konkretne w `repositories.py`
+- `[x]` `GPUScheduler` (z DOK-08 §1)
+- `[x]` `CircuitBreaker` (z DOK-08 §2)
 - **Model:** Gemini 2.5 Pro — architecture patterns
 
 #### Dzień 5: Database
 
-- `[ ]` `backend/db/migrations/001_initial.sql` — 14 tabel z DB_SCHEMA
-- `[ ]` `MigrationRunner` (z DOK-11 §12)
-- `[ ]` SQLite pragmas (WAL, foreign keys)
-- `[ ]` `conftest.py` z in-memory fixtures
-- `[ ]` 10 testów CRUD dla SessionRepo, MessageRepo
+- `[x]` `backend/db/migrations/001_initial.sql` — schemat zgodny z DB_SCHEMA (12 tabel biznesowych + migracje; porównać z doc „14 tabel”)
+- `[x]` `MigrationRunner` (z DOK-11 §12)
+- `[x]` SQLite pragmas (WAL, foreign keys) — w kodzie połączenia
+- `[x]` `conftest.py` z in-memory fixtures
+- `[x]` Testy CRUD / DB — `tests/unit/test_db.py` i integracje
 - **Model:** Gemini 2.5 Flash — SQL DDL generation
 
 ### T2: AI Engines (STT + TTS + LLM)
 
 #### Dzień 1: LLM Client
 
-- `[ ]` `LMStudioClient(BaseLLMClient)` — OpenAI-compatible
-- `[ ]` Streaming response (SSE token-by-token)
-- `[ ]` Function calling support (tools array)
-- `[ ]` Circuit breaker integration
-- `[ ]` 8 testów (mock httpx responses)
+- `[x]` `LMStudioClient(BaseLLMClient)` — OpenAI-compatible
+- `[x]` Streaming response (SSE token-by-token)
+- `[x]` Function calling support (tools array)
+- `[x]` Circuit breaker integration
+- `[x]` Testy z mock httpx — `tests/unit/test_llm_client.py`, integracje SSE
 - **Model:** Gemini 2.5 Pro — async streaming patterns
 
 #### Dzień 2: STT Engine
 
-- `[ ]` `FasterWhisperSTT(BaseSTTEngine)` — GPU scheduler integration
-- `[ ]` Confidence threshold logic (high/low/reject)
-- `[ ]` Audio preprocessing (format normalization)
-- `[ ]` 6 testów z mock audio
+- `[x]` `FasterWhisperSTT(BaseSTTEngine)` — GPU scheduler integration
+- `[x]` Confidence threshold logic (high/low/reject)
+- `[x]` Audio preprocessing (format normalization)
+- `[x]` Testy — `tests/unit/test_faster_whisper_stt.py`
 - **Model:** Gemini 2.5 Flash — adapter pattern
 
 #### Dzień 3: TTS Engine
 
-- `[ ]` `PiperTTS(BaseTTSEngine)` — subprocess binary call
-- `[ ]` Emotion modulation (speed/pitch z DOK-06 §10)
-- `[ ]` Audio output streaming (chunked WAV)
-- `[ ]` 6 testów
+- `[x]` `PiperTTS(BaseTTSEngine)` — subprocess binary call
+- `[x]` Emotion modulation (speed/pitch z DOK-06 §10) — moduł `tts_emotion.py`
+- `[x]` Audio output streaming (chunked WAV)
+- `[x]` Testy — `tests/unit/test_piper_tts.py`
 - **Model:** Gemini 2.5 Flash — subprocess integration
 
 #### Dzień 4: Wakeword + Audio Input
 
-- `[ ]` `WakewordDetector` — openWakeWord integration
-- `[ ]` `AudioCapture` — pynput PTT handler
-- `[ ]` PTT vs wakeword mode switching
-- `[ ]` Audio duck event emission
+- `[~]` `WakewordDetector` — **placeholder** (`poll_once` → False); openWakeWord **nie**
+- `[ ]` `AudioCapture` — pynput PTT handler (backend: koordynator duck bez capture)
+- `[~]` PTT vs wakeword — enum i koordynator; brak prawdziwego wakeword
+- `[x]` Audio duck event emission — `VoiceInputCoordinator`
 - **Model:** Gemini 2.5 Flash — hardware integration
 
 #### Dzień 5: Integration test T2
 
-- `[ ]` End-to-end: audio→STT→text, text→LLM→response, response→TTS→audio
-- `[ ]` GPU scheduler verification (sequential execution)
-- `[ ]` Buffer + bug fixes
+- `[x]` End-to-end (mock): audio→STT→… — `tests/integration/test_voice_pipeline_mock.py`, `test_e2e_orchestrator.py`
+- `[~]` GPU scheduler verification — częściowo przez testy STT
+- `[x]` Buffer + bug fixes — iteracyjnie w repo
+- **Model:** —
 
 ### T3: Orchestrator + Commands
 
 #### Dzień 1: PromptBuilder
 
-- `[ ]` `PromptBuilder` (z DOK-05 §3) — section assembly + trimming
-- `[ ]` PersonaLoader — YAML frontmatter + markdown body
-- `[ ]` Token counting (approx. or tiktoken)
-- `[ ]` 12 testów
+- `[x]` `PromptBuilder` (z DOK-05 §3) — section assembly + trimming
+- `[x]` PersonaLoader — YAML frontmatter + markdown body
+- `[x]` Token counting (approx. or tiktoken)
+- `[x]` Testy — `tests/unit/test_prompt_builder.py`
 - **Model:** Gemini 2.5 Pro — complex prompt logic
 
 #### Dzień 2: EmotionParser + CommandMatcher
 
-- `[ ]` `parse_emotion_tag()` (z DOK-06 §8)
-- `[ ]` `CommandMatcher` — normalize, regex match, fuzzy (z DOK-07)
-- `[ ]` `CooldownTracker`, `ConfirmationSession`
-- `[ ]` Handler registry + 16 builtin handlers
-- `[ ]` 15 testów (CMD-T-01 → CMD-T-15 z DOK-07 §13)
+- `[x]` `parse_emotion_tag()` (z DOK-06 §8)
+- `[x]` `CommandMatcher` — normalize, regex match, fuzzy (z DOK-07)
+- `[x]` `CooldownTracker`, `ConfirmationSession` (w `command_matching`)
+- `[~]` Handler registry + builtin handlers — zaimplementowane; liczba „16” nie zweryfikowana w tym dokumencie
+- `[x]` Testy — `tests/unit/test_command_matcher.py`, `test_emotion_parser.py`
 - **Model:** Gemini 2.5 Pro — regex + NLP matching
 
 #### Dzień 3: Orchestrator
 
-- `[ ]` `Orchestrator` — main pipeline: voice→command?→LLM→TTS
-- `[ ]` Streaming response pipeline (DOK-08 §9)
-- `[ ]` Tool call lifecycle (max 5 per turn)
-- `[ ]` State machine (Idle/Listening/Thinking/Speaking)
+- `[x]` `ConversationOrchestrator` — pipeline: komendy → LLM → TTS-side effects
+- `[x]` Streaming response pipeline (fragmenty DOK-08)
+- `[x]` Tool call lifecycle (max z `ai_runtime.max_tool_calls_per_turn`)
+- `[x]` State machine (Idle/Listening/Thinking/Speaking) — `OrchestratorState`
 - **Model:** Gemini 2.5 Pro — complex state management
 
 #### Dzień 4: API + WebSocket
 
-- `[ ]` REST routes: `/health`, `/status`, `/config`, `/voice/`*
-- `[ ]` `WebSocketManager` — multiplexed events
-- `[ ]` Session management (create on connect, close on disconnect)
-- `[ ]` 8 testów (httpx test client)
+- `[~]` REST routes: `/health`, `/status` tak; pełna lista `/config`, `/voice/`* — zweryfikuj `routes.py`
+- `[x]` `WebSocketManager` — multiplexed events
+- `[x]` Session management (create on connect, close on disconnect)
+- `[x]` Testy klienta — `tests/integration/test_api_http_ws.py`, `test_ws_chat.py`
 - **Model:** Gemini 2.5 Pro — FastAPI + WebSocket
 
 #### Dzień 5: MCP basics + integration
 
-- `[ ]` `get_current_time` tool
-- `[ ]` `calculator` tool (asteval)
-- `[ ]` Tool registry + schemas
-- `[ ]` End-to-end test: full voice pipeline
+- `[x]` `get_current_time` tool
+- `[x]` `calculator` tool (asteval)
+- `[x]` Tool registry + schemas
+- `[x]` Narzędzia dodatkowe w `tools_extra.py` (poza planem dnia 5)
+- `[x]` Testy rejestru / narzędzi — `test_mcp_registry.py`, `test_mcp_tools_extra.py`
 - **Model:** Gemini 2.5 Flash — simple tools
 
 ### T4: Quality + Performance
 
 #### Dzień 1–2: Session Watchdog + Hardening
 
-- `[ ]` `SessionWatchdog` (DOK-08 §3)
-- `[ ]` Crash detection on startup
-- `[ ]` Graceful shutdown procedure
-- `[ ]` Health aggregation logic
-- `[ ]` SystemState repository
+- `[x]` `SessionWatchdog` — pętla w `lifespan`, sync CB, hibernacja + `health_events`
+- `[x]` Crash detection on startup — `recover_stale_sessions`, niezamknięte `sessions` → `crashed`
+- `[x]` Graceful shutdown — watchdog, hot-reload, `game_observer`, LLM
+- `[x]` Health aggregation — `build_health_snapshot` w `/api/v1/status` i `/api/v1/health`
+- `[x]` SystemState — aktualizacja przy recovery, CB i hibernacji
 
 #### Dzień 3: File watcher + Hot-reload
 
-- `[ ]` `watchdog` integration for config/, personas/
-- `[ ]` Hot-reload per key (tabela z DOK-03 §7)
-- `[ ]` Voice notification on config change
+- `[x]` `watchdog` — config YAML (katalog pliku) oraz `personas/`
+- `[x]` Hot-reload — `apply_reload_configuration` (orchestrator, persony, LLM, STT/TTS, observer)
+- `[~]` Voice notification — WS `config_reloaded` + `text_overlay` (TTS docelowo w kliencie)
 
 #### Dzień 4–5: Performance + Buffer
 
-- `[ ]` Performance baseline test z grą (PoE2/Stellaris)
+- `[~]` Performance baseline — smoke mock pipeline (`test_performance_baseline.py`); brak testu FPS w grze
 - `[ ]` FPS impact measurement (<5% target)
-- `[ ]` Latency measurement (PTT→first audio <3s)
-- `[ ]` Bug fixes, code review, documentation
-- `[ ]` **MILESTONE: Rozmowa głosowa z terminala działa**
+- `[ ]` Latency PTT→audio — backend gotowy; pomiar end-to-end z frontem / klientem
+- `[x]` Testy recovery (`test_crash_recovery.py`) + aktualizacja integracji health
+- `[~]` **MILESTONE głosowy** — ścieżka backend+WS działa; pełne PTT z UI w Fazie 3
 
 ---
 

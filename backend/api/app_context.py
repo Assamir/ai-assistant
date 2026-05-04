@@ -10,14 +10,17 @@ from typing import Any, Dict, List, Mapping, Optional
 
 from backend.ai.llm_client import LMStudioClient
 from backend.config.loader import ConfigLoader
+from backend.config.paths import resolve_config_yaml, sqlite_database_path
 from backend.config.schema import ConfigSchema
 from backend.core.command_matching import CommandMatcher
 from backend.core.interfaces import BaseSTTEngine, BaseTTSEngine
 from backend.core.orchestrator import ConversationOrchestrator
 from backend.core.persona_loader import PersonaLoader
 from backend.core.prompt_builder import PromptBuilder
+from backend.db.migration_runner import MigrationRunner
 from backend.mcp.registry import ToolRegistry, build_default_tool_registry
 from backend.services.game_observer import GameObserver
+from backend.services.session_watchdog import recover_stale_sessions
 
 _logger = logging.getLogger(__name__)
 
@@ -76,11 +79,16 @@ class WebSocketManager:
             except Exception:
                 self.disconnect(ws)
 
+    def iter_session_ids(self) -> List[str]:
+        return list(self._by_session.keys())
+
 
 @dataclass
 class AppContext:
 
     config: ConfigSchema
+    resolved_config_path: Optional[str]
+    db_path: str
     conversation: ConversationStore
     prompt_builder: PromptBuilder
     persona_loader: PersonaLoader
@@ -96,7 +104,7 @@ class AppContext:
     game_observer: Optional[GameObserver] = None
 
 
-def _try_build_stt_engine(cfg: ConfigSchema) -> Optional[BaseSTTEngine]:
+def try_build_stt_engine(cfg: ConfigSchema) -> Optional[BaseSTTEngine]:
     """Tworzy FasterWhisperSTT z configu; zwraca None przy braku pakietu."""
     try:
         from backend.ai.faster_whisper_stt import FasterWhisperSTT
@@ -108,7 +116,7 @@ def _try_build_stt_engine(cfg: ConfigSchema) -> Optional[BaseSTTEngine]:
     return None
 
 
-def _try_build_tts_engine(cfg: ConfigSchema) -> Optional[BaseTTSEngine]:
+def try_build_tts_engine(cfg: ConfigSchema) -> Optional[BaseTTSEngine]:
     """Tworzy PiperTTS jeśli piper_voice_onnx_path jest ustawiony; inaczej None."""
     if not cfg.tts.piper_voice_onnx_path:
         return None
@@ -122,9 +130,27 @@ def _try_build_tts_engine(cfg: ConfigSchema) -> Optional[BaseTTSEngine]:
     return None
 
 
+def load_resolved_config() -> tuple[ConfigSchema, Optional[str], Path]:
+    """Defaults + env, potem YAML z content_root jeśli istnieje."""
+    loader = ConfigLoader()
+    preliminary = loader.load_config(None)
+    root = Path(preliminary.general.content_root).expanduser()
+    yaml_path = resolve_config_yaml(root)
+    if yaml_path is not None:
+        cfg = loader.load_config(str(yaml_path))
+        return cfg, str(yaml_path), root
+    return preliminary, None, root
+
+
 def create_app_context() -> AppContext:
-    cfg = ConfigLoader().load_config(None)
-    personas_dir = Path(cfg.general.content_root).expanduser() / "personas"
+    cfg, yaml_path, root = load_resolved_config()
+    data_parent = root / "data"
+    data_parent.mkdir(parents=True, exist_ok=True)
+    db_path = str(sqlite_database_path(root))
+    MigrationRunner(db_path).run_migrations()
+    recover_stale_sessions(db_path)
+
+    personas_dir = root / "personas"
     personas_dir.mkdir(parents=True, exist_ok=True)
 
     reg = build_default_tool_registry()
@@ -148,6 +174,8 @@ def create_app_context() -> AppContext:
 
     return AppContext(
         config=cfg,
+        resolved_config_path=yaml_path,
+        db_path=db_path,
         conversation=ConversationStore(),
         prompt_builder=pb,
         persona_loader=pl,
@@ -156,8 +184,8 @@ def create_app_context() -> AppContext:
         llm_client=llm,
         orchestrator=orch,
         websocket_manager=WebSocketManager(),
-        stt_engine=_try_build_stt_engine(cfg),
-        tts_engine=_try_build_tts_engine(cfg),
+        stt_engine=try_build_stt_engine(cfg),
+        tts_engine=try_build_tts_engine(cfg),
         game_observer=obs,
     )
 
@@ -172,4 +200,13 @@ def make_game_emitter(ctx: AppContext):
     return _emit
 
 
-__all__ = ["AppContext", "ConversationStore", "WebSocketManager", "create_app_context", "make_game_emitter"]
+__all__ = [
+    "AppContext",
+    "ConversationStore",
+    "WebSocketManager",
+    "create_app_context",
+    "make_game_emitter",
+    "load_resolved_config",
+    "try_build_stt_engine",
+    "try_build_tts_engine",
+]
