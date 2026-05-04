@@ -60,8 +60,11 @@ class STTConfig(BaseModel):
 
 class TTSConfig(BaseModel):
     model_name: str = "tts_models/pl_PL/mai_female"
-    voice_speed: float = 1.0
+    voice_speed: float = Field(default=1.0, ge=0.25, le=3.0)
     emotion_modulation: bool = True
+    piper_executable: str = "piper"
+    piper_voice_onnx_path: Optional[str] = None
+    chunk_bytes: int = Field(default=4096, ge=512, le=65536)
 
 class VLMConfig(BaseModel):
     model_name: str = "moondream2"

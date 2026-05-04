@@ -42,6 +42,13 @@ def main() -> int:
     except ImportError as e:
         print(f"  (opcjonalnie) faster_whisper niedostępny: {e}")
 
+    try:
+        importlib.import_module("librosa")
+        importlib.import_module("soundfile")
+        print("  OK import librosa + soundfile")
+    except ImportError as e:
+        print(f"  (opcjonalnie) librosa/soundfile niedostępny: {e}")
+
     from backend.db.migration_runner import MigrationRunner
 
     with tempfile.TemporaryDirectory() as td:

@@ -22,9 +22,11 @@ typing-extensions>=4.8.0,<5.0.0
 # HTTP client (LM Studio / OpenAI-compatible)
 httpx>=0.27.0,<0.29.0
 
-# STT / arrays (Faster-Whisper — lazy import przy pierwszym użyciu)
+# STT / TTS (arrays + Piper post-process)
 numpy>=1.26.0,<3.0.0
 faster-whisper>=1.0.0,<2.0.0
+librosa>=0.10.0,<0.12.0
+soundfile>=0.12.0,<0.14.0
 
 # Tests (tydzień 1)
 pytest>=8.0.0,<10.0.0

@@ -9,6 +9,13 @@ from backend.ai.faster_whisper_stt import (
     TranscriptionRejected,
 )
 from backend.ai.llm_client import ChatCompletionResult, LMStudioClient
+from backend.ai.piper_tts import PiperTTS
+from backend.ai.voice_input import (
+    AudioDuckSignal,
+    AudioInputMode,
+    VoiceInputCoordinator,
+    WakewordDetector,
+)
 
 __all__ = [
     "LMStudioClient",
@@ -16,4 +23,9 @@ __all__ = [
     "FasterWhisperSTT",
     "ConfidenceTier",
     "TranscriptionRejected",
+    "PiperTTS",
+    "AudioInputMode",
+    "AudioDuckSignal",
+    "VoiceInputCoordinator",
+    "WakewordDetector",
 ]
