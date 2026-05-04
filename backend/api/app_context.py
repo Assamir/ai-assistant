@@ -224,7 +224,7 @@ def create_app_context() -> AppContext:
     personas_dir = root / "personas"
     personas_dir.mkdir(parents=True, exist_ok=True)
 
-    reg = build_default_tool_registry()
+    reg = build_default_tool_registry(db_path=db_path, mcp_cfg=cfg.mcp)
     matcher = CommandMatcher(fuzzy=cfg.ai_runtime.command_match_fuzzy)
     llm = LMStudioClient(cfg.llm)
     pb = PromptBuilder(max_context_tokens=cfg.ai_runtime.max_context_tokens)
@@ -288,6 +288,14 @@ def create_app_context() -> AppContext:
     )
     ctx.observer_loop = ObserverLoop(ctx)
     ctx.observer_pause_manager = ObserverPauseManager(ctx)
+
+    async def _vlm_fallback() -> Any:
+        from backend.services.game_vlm_fallback import probe_game_identity_from_screen
+
+        return await probe_game_identity_from_screen(ctx)
+
+    if ctx.game_observer is not None:
+        ctx.game_observer.set_vlm_fallback(_vlm_fallback)
     return ctx
 
 
@@ -301,6 +309,9 @@ def make_game_emitter(ctx: AppContext):
                 ctx.orchestrator.state["current_game_profile_id"] = gid
             elif not payload.get("active"):
                 ctx.orchestrator.state.pop("current_game_profile_id", None)
+            from backend.services.game_detection_tracking import record_game_detection_on_game_emit
+
+            await record_game_detection_on_game_emit(ctx, payload)
         for sid in list(ctx.websocket_manager._by_session.keys()):
             await ctx.websocket_manager.send_to_session(sid, event_name, dict(payload))
     return _emit

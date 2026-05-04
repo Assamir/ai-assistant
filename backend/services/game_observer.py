@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Awaitable, Callable, Dict, List, Mapping, MutableMapping, Optional
+import time
+from typing import Any, Awaitable, Callable, Dict, List, Mapping, MutableMapping, Optional, Tuple
 
 from backend.config.schema import ObserverConfig
 
 EmitFn = Callable[[str, Mapping[str, Any]], Awaitable[None]]
+VlmGameFallbackFn = Callable[[], Awaitable[Optional[Tuple[str, Optional[str]]]]]
 
 KNOWN_GAMES: Dict[str, str] = {
     "stellaris.exe": "Stellaris",
@@ -30,6 +32,7 @@ class GameObserver:
         emitter: Optional[EmitFn] = None,
         orchestrator_state: Optional[MutableMapping[str, Any]] = None,
         profiles_by_id: Optional[Mapping[str, Any]] = None,
+        vlm_fallback_fn: Optional[VlmGameFallbackFn] = None,
     ) -> None:
         self._cfg = config
         self._emit = emitter
@@ -39,6 +42,11 @@ class GameObserver:
         self._current_game: Optional[str] = None
         self._current_profile_id: Optional[str] = None
         self._running = False
+        self._vlm_fallback_fn = vlm_fallback_fn
+        self._last_vlm_attempt_mono: Optional[float] = None
+
+    def set_vlm_fallback(self, fn: Optional[VlmGameFallbackFn]) -> None:
+        self._vlm_fallback_fn = fn
 
     def set_profiles(self, profiles_by_id: Mapping[str, Any]) -> None:
         """Hot-reload / start: nowy indeks profili."""
@@ -138,6 +146,31 @@ class GameObserver:
         """
         names = await asyncio.to_thread(self._list_processes)
         game, gid = self._resolve_detection(names)
+
+        locked = bool(self._state and self._state.get("manual_game_profile_lock"))
+
+        if (
+            game is None
+            and not locked
+            and self._cfg.vlm_fallback_game_detection
+            and self._vlm_fallback_fn is not None
+            and (
+                self._last_vlm_attempt_mono is None
+                or (
+                    time.monotonic() - self._last_vlm_attempt_mono
+                    >= float(self._cfg.vlm_fallback_min_interval_seconds)
+                )
+            )
+        ):
+            self._last_vlm_attempt_mono = time.monotonic()
+            try:
+                vlm_pick = await self._vlm_fallback_fn()
+            except Exception:
+                vlm_pick = None
+            if isinstance(vlm_pick, tuple) and len(vlm_pick) == 2:
+                g2, gid2 = vlm_pick
+                if isinstance(g2, str) and g2.strip():
+                    game, gid = g2.strip(), gid2 if isinstance(gid2, str) else None
 
         changed = game != self._current_game or gid != self._current_profile_id
         if changed:

@@ -204,6 +204,16 @@ class ObserverConfig(BaseModel):
         default_factory=lambda: ["game_paused", "low_fps"]
     )
     game_detection_method: str = "psutil"
+    vlm_fallback_game_detection: bool = Field(
+        default=False,
+        description="Gdy brak dopasowania psutil/manual — periodycznie VLM+LLM dobiera profil po opisie ekranu (wymaga vlm.enabled).",
+    )
+    vlm_fallback_min_interval_seconds: int = Field(
+        default=120,
+        ge=30,
+        le=3600,
+        description="Minimalny odstęp między próbami fallbacku VLM (GameObserver).",
+    )
 
 
 class MonitorInfo(BaseModel):
@@ -220,7 +230,18 @@ class MonitorInfo(BaseModel):
 class MCPConfig(BaseModel):
     enabled: bool = True
     tools_enabled: List[str] = Field(default_factory=list)
-    cache_ttl_seconds: int = 3600
+    cache_ttl_seconds: int = Field(
+        default=3600,
+        ge=60,
+        le=86400,
+        description="TTL wpisów MCP cache dla narzędzi takich jak web_search.",
+    )
+    web_search_calls_per_minute: int = Field(
+        default=10,
+        ge=1,
+        le=60,
+        description="Miękkie throttle wywołań web_search przez minutę (token bucket okna czasu).",
+    )
 
 class ConfigSchema(BaseModel):
     general: GeneralConfig = GeneralConfig()

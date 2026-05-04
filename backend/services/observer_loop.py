@@ -10,6 +10,7 @@ import time
 from collections import deque
 from typing import Any, Mapping, Optional
 
+from backend.ai.screen_region_crop import apply_profile_crop_to_png
 from backend.ai.scene_dhash import SceneDeduper, compute_dhash_png
 from backend.ai.vision_pipeline import VisionFrameResult
 from backend.api.app_context import AppContext, ensure_ws_db_session
@@ -204,6 +205,13 @@ class ObserverLoop:
         self._in_cycle = True
         try:
             png = await cap.capture_png(monitor_index=0)
+            gid = self._ctx.orchestrator.state.get("current_game_profile_id")
+            profile = (
+                self._ctx.game_profiles.get(gid)
+                if isinstance(gid, str)
+                else None
+            )
+            png = apply_profile_crop_to_png(png, profile)
             h = compute_dhash_png(png)
             if len(self._dhash_window) == 3 and list(self._dhash_window).count(h) >= 3:
                 return

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from __future__ import annotations
+
 import asyncio
 import json as _json
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Dict, List, Mapping, MutableMapping, Optional
+from typing import AbstractSet, Any, Awaitable, Callable, Dict, List, Mapping, MutableMapping, Optional
 from zoneinfo import ZoneInfo
+
+from backend.config.schema import MCPConfig
 
 _TOOL_GET_TIME = {
     "type": "function",
@@ -60,8 +64,24 @@ class ToolRegistration:
 class ToolRegistry:
     """Narzędzia wywoływane z Orkiestratora przy function calling."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        db_path: Optional[str] = None,
+        cache_ttl_seconds: int = 3600,
+        cache_tool_names: Optional[AbstractSet[str]] = None,
+        web_search_calls_per_minute: int = 10,
+    ) -> None:
         self._tools: MutableMapping[str, ToolRegistration] = {}
+        self._db_path = db_path
+        self._cache_ttl = max(60, int(cache_ttl_seconds))
+        self._cache_tools = frozenset(cache_tool_names or {"web_search"})
+        from backend.mcp.rate_window import AsyncRateWindow
+
+        self._web_search_limiter = AsyncRateWindow(
+            max_calls=max(1, int(web_search_calls_per_minute)),
+            period_seconds=60.0,
+        )
 
     def register(self, name: str, schema_fragment: Mapping[str, Any], handler: Handler, *, replace: bool = False) -> None:
         if name in self._tools and not replace:
@@ -79,10 +99,42 @@ class ToolRegistry:
         if reg is None:
             raise KeyError(name)
         args = dict(arguments or {})
+        use_cache = self._db_path is not None and name in self._cache_tools
+        cache_key = ""
+        if use_cache:
+            from backend.db.repositories import MCPCacheRepository
+            from backend.mcp.cache_key import canonical_mcp_cache_key
+
+            cache_key = canonical_mcp_cache_key(name, args)
+            repo = MCPCacheRepository(self._db_path)
+            cached = await repo.get_fresh_json(name, cache_key)
+            if cached is not None:
+                try:
+                    return _json.loads(cached)
+                except _json.JSONDecodeError:
+                    pass
+
+        if name == "web_search":
+            await self._web_search_limiter.acquire()
+
         result = reg.handler(**args)
         if asyncio.iscoroutine(result):
-            return await result  # type: ignore[no-any-return]
-        return result
+            out = await result  # type: ignore[no-any-return]
+        else:
+            out = result
+
+        if use_cache and name in self._cache_tools:
+            from backend.db.repositories import MCPCacheRepository
+
+            try:
+                dumped = out if isinstance(out, str) else _json.dumps(out, ensure_ascii=False)
+            except (TypeError, ValueError):
+                dumped = ""
+            if dumped:
+                repo = MCPCacheRepository(self._db_path)
+                await repo.put_json(name, cache_key, str(dumped), self._cache_ttl)
+
+        return out
 
     async def invoke_openai_tool_call(self, tool_call_blob: Mapping[str, Any]) -> Dict[str, Any]:
         fn = tool_call_blob.get("function") if isinstance(tool_call_blob, dict) else None
@@ -146,7 +198,11 @@ def tool_calculator(expression: str) -> Dict[str, Any]:
     return {"ok": True, "result": value}
 
 
-def build_default_tool_registry() -> ToolRegistry:
+def build_default_tool_registry(
+    *,
+    db_path: str | None = None,
+    mcp_cfg: MCPConfig | None = None,
+) -> ToolRegistry:
     from backend.mcp.tools_extra import (
         _TOOL_DICE_ROLL,
         _TOOL_FORMAT_DURATION,
@@ -155,13 +211,31 @@ def build_default_tool_registry() -> ToolRegistry:
         tool_format_duration,
         tool_random_choice,
     )
+    from backend.mcp.web_search import _TOOL_WEB_SEARCH, tool_web_search
 
-    reg = ToolRegistry()
+    mcp = mcp_cfg or MCPConfig()
+    reg = ToolRegistry(
+        db_path=str(db_path) if db_path else None,
+        cache_ttl_seconds=mcp.cache_ttl_seconds,
+        web_search_calls_per_minute=mcp.web_search_calls_per_minute,
+    )
     reg.register("get_current_time", _TOOL_GET_TIME, tool_get_current_time)
     reg.register("calculator", _TOOL_CALC, tool_calculator)
     reg.register("random_choice", _TOOL_RANDOM_CHOICE, tool_random_choice)
     reg.register("dice_roll", _TOOL_DICE_ROLL, tool_dice_roll)
     reg.register("format_duration", _TOOL_FORMAT_DURATION, tool_format_duration)
+    if mcp.enabled:
+        reg.register("web_search", _TOOL_WEB_SEARCH, tool_web_search)
+
+    whitelist = frozenset(mcp.tools_enabled) if mcp.tools_enabled else None
+    if whitelist:
+        unwanted = [
+            nm
+            for nm in tuple(reg._tools.keys())
+            if nm not in whitelist and nm not in ("get_current_time", "calculator")
+        ]
+        for nm in unwanted:
+            reg.unregister(nm)
     return reg
 
 

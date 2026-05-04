@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 import aiosqlite
 
 from backend.db.connection import apply_pragmas_async
+
+DetectionMethod = Literal["process", "vlm", "manual"]
 
 
 class SessionRepository:
@@ -142,6 +144,124 @@ class MessageRepository:
             )
             row = await cursor.fetchone()
             return dict(row) if row else None
+
+
+class GameDetectionRepository:
+    """Wiersze `game_detections` — sesja czatu SQLite (`sessions.id`)."""
+
+    def __init__(self, db_path: str):
+        self.db_path = db_path
+
+    async def close_open_for_chat_session(self, chat_session_id: int) -> None:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            await db.execute(
+                """
+                UPDATE game_detections
+                SET ended_at = unixepoch()
+                WHERE session_id = ? AND ended_at IS NULL
+                """,
+                (chat_session_id,),
+            )
+            await db.commit()
+
+    async def start_detection(
+        self,
+        chat_session_id: int,
+        game: str,
+        *,
+        process_name: Optional[str] = None,
+        detection_method: DetectionMethod = "process",
+    ) -> int:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            await db.execute(
+                """
+                INSERT INTO game_detections (
+                    session_id, game, process_name, detection_method, started_at
+                )
+                VALUES (?, ?, ?, ?, unixepoch())
+                """,
+                (chat_session_id, game, process_name, detection_method),
+            )
+            await db.commit()
+            cur = await db.execute("SELECT last_insert_rowid()")
+            row = await cur.fetchone()
+            return int(row[0])
+
+    async def list_for_chat_session(self, chat_session_id: int) -> List[Dict[str, Any]]:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                """
+                SELECT id, session_id, game, process_name, detection_method,
+                       started_at, ended_at
+                FROM game_detections
+                WHERE session_id = ?
+                ORDER BY started_at ASC, id ASC
+                """,
+                (chat_session_id,),
+            )
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+
+
+class MCPCacheRepository:
+    """Tabela `mcp_cache` — SHA256 cache_key, TTL od `created_at`."""
+
+    def __init__(self, db_path: str):
+        self.db_path = db_path
+
+    async def get_fresh_json(self, tool_name: str, cache_key: str) -> Optional[str]:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                """
+                SELECT id, response_json
+                FROM mcp_cache
+                WHERE tool_name = ? AND cache_key = ?
+                  AND (unixepoch() - created_at) < ttl_seconds
+                """,
+                (tool_name, cache_key),
+            )
+            row = await cur.fetchone()
+            if row is None:
+                return None
+            row_id = int(row["id"])
+            await db.execute(
+                "UPDATE mcp_cache SET hit_count = hit_count + 1 WHERE id = ?",
+                (row_id,),
+            )
+            await db.commit()
+            return str(row["response_json"])
+
+    async def put_json(
+        self,
+        tool_name: str,
+        cache_key: str,
+        response_json: str,
+        ttl_seconds: int,
+    ) -> None:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            await db.execute(
+                """
+                INSERT INTO mcp_cache (
+                    tool_name, cache_key, response_json, ttl_seconds, hit_count, created_at
+                )
+                VALUES (?, ?, ?, ?, 0, unixepoch())
+                ON CONFLICT(cache_key) DO UPDATE SET
+                    tool_name = excluded.tool_name,
+                    response_json = excluded.response_json,
+                    ttl_seconds = excluded.ttl_seconds,
+                    hit_count = 0,
+                    created_at = unixepoch()
+                """,
+                (tool_name, cache_key, response_json, ttl_seconds),
+            )
+            await db.commit()
 
 
 class SystemStateRepository:

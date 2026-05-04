@@ -50,6 +50,10 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
 
     async def emitter(name: str, payload: dict) -> None:
         await mgr.send_to_session(sid, name, payload)
+        if name in ("observer_start", "observer_stop"):
+            from backend.services.game_detection_tracking import sync_game_detections_on_observer_command
+
+            await sync_game_detections_on_observer_command(ctx, name)
 
 
     async def emit_chunks(text_body: str, emotion: str) -> None:

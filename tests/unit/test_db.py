@@ -100,3 +100,15 @@ async def test_migration_runner_idempotent(migrated_db_path):
     runner = MigrationRunner(str(p))
     st = runner.get_migration_status()
     assert st["current_version"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_mcp_cache_repository_roundtrip(migrated_db_path):
+    from backend.db.repositories import MCPCacheRepository
+    from backend.mcp.cache_key import canonical_mcp_cache_key
+
+    repo = MCPCacheRepository(migrated_db_path)
+    key = canonical_mcp_cache_key("web_search", {"query": "x"})
+    await repo.put_json("web_search", key, '{"ok":true}', 3600)
+    got = await repo.get_fresh_json("web_search", key)
+    assert got == '{"ok":true}'

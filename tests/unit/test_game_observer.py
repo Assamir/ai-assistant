@@ -212,6 +212,68 @@ async def test_loop_emits_on_game_detection():
     assert "Stellaris" in events
 
 
+
+
+@pytest.mark.asyncio
+async def test_vlm_fallback_when_no_process_match():
+    cfg = ObserverConfig(
+        check_interval_seconds=60,
+        vlm_fallback_game_detection=True,
+        vlm_fallback_min_interval_seconds=30,
+    )
+    payloads: List[dict] = []
+
+    async def capture(name, payload):  # type: ignore[no-untyped-def]
+        payloads.append(payload)
+
+    async def vlm() -> Tuple[str, str]:
+        return ("Cyberpunk 2077", "cyberpunk2077")
+
+    obs = GameObserver(
+        cfg,
+        emitter=capture,
+        orchestrator_state={},
+        profiles_by_id=profiles_from_known_games(),
+        vlm_fallback_fn=vlm,
+    )
+    obs._list_processes = lambda: ["chrome.exe"]
+
+    await obs.tick()
+    assert obs.current_game == "Cyberpunk 2077"
+    assert obs.current_profile_id == "cyberpunk2077"
+    assert len(payloads) == 1
+
+
+@pytest.mark.asyncio
+async def test_vlm_fallback_respects_manual_lock():
+    cfg = ObserverConfig(
+        check_interval_seconds=60,
+        vlm_fallback_game_detection=True,
+        vlm_fallback_min_interval_seconds=30,
+    )
+
+    calls = 0
+
+    async def vlm() -> Optional[Tuple[str, str]]:
+        nonlocal calls
+        calls += 1
+        return ("Cyberpunk 2077", "cyberpunk2077")
+
+    state = {"manual_game_profile_lock": True, "manual_game_profile_id": "stellaris"}
+    obs = GameObserver(
+        cfg,
+        emitter=None,
+        orchestrator_state=state,
+        profiles_by_id=profiles_from_known_games(),
+        vlm_fallback_fn=vlm,
+    )
+    obs._list_processes = lambda: ["chrome.exe"]
+
+    game = await obs.tick()
+    assert game == "Stellaris"
+    assert calls == 0
+
+
 # ─── KNOWN_GAMES słownik ──────────────────────────────────────────────────────
 
 
