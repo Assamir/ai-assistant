@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,6 +17,8 @@ from backend.core.orchestrator import ConversationOrchestrator
 from backend.core.persona_loader import PersonaLoader
 from backend.core.prompt_builder import PromptBuilder
 from backend.mcp.registry import ToolRegistry, build_default_tool_registry
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -91,6 +94,32 @@ class AppContext:
     tts_engine: Optional[BaseTTSEngine] = None
 
 
+def _try_build_stt_engine(cfg: ConfigSchema) -> Optional[BaseSTTEngine]:
+    """Tworzy FasterWhisperSTT z configu; zwraca None przy braku pakietu."""
+    try:
+        from backend.ai.faster_whisper_stt import FasterWhisperSTT
+        return FasterWhisperSTT(cfg.stt)
+    except ImportError:
+        _logger.info("faster-whisper not installed — STT engine disabled")
+    except Exception as exc:
+        _logger.warning("STT engine init failed: %s", exc)
+    return None
+
+
+def _try_build_tts_engine(cfg: ConfigSchema) -> Optional[BaseTTSEngine]:
+    """Tworzy PiperTTS jeśli piper_voice_onnx_path jest ustawiony; inaczej None."""
+    if not cfg.tts.piper_voice_onnx_path:
+        return None
+    try:
+        from backend.ai.piper_tts import PiperTTS
+        return PiperTTS(cfg.tts)
+    except ImportError:
+        _logger.info("piper dependencies not installed — TTS engine disabled")
+    except Exception as exc:
+        _logger.warning("TTS engine init failed: %s", exc)
+    return None
+
+
 def create_app_context() -> AppContext:
     cfg = ConfigLoader().load_config(None)
     personas_dir = Path(cfg.general.content_root).expanduser() / "personas"
@@ -123,6 +152,8 @@ def create_app_context() -> AppContext:
         llm_client=llm,
         orchestrator=orch,
         websocket_manager=WebSocketManager(),
+        stt_engine=_try_build_stt_engine(cfg),
+        tts_engine=_try_build_tts_engine(cfg),
     )
 
 

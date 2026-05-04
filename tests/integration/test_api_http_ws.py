@@ -77,10 +77,8 @@ def test_websocket_ping_pong_starlette():
 
 
 @pytest.mark.asyncio
-
 async def test_voice_transcribe_503_when_no_stt(httpx_async: AsyncClient):
+    app.state.ctx.stt_engine = None  # wymuś brak silnika STT
     files = {"audio": ("x.wav", b"PCM", "application/octet-stream")}
-
-
     r = await httpx_async.post("/api/v1/voice/transcribe", files=files)
     assert r.status_code == 503
