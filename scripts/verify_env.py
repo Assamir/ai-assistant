@@ -29,10 +29,18 @@ def main() -> int:
         "aiosqlite",
         "structlog",
         "watchdog",
+        "httpx",
+        "numpy",
     ]
     for name in modules:
         importlib.import_module(name)
         print(f"  OK import {name}")
+
+    try:
+        importlib.import_module("faster_whisper")
+        print("  OK import faster_whisper")
+    except ImportError as e:
+        print(f"  (opcjonalnie) faster_whisper niedostępny: {e}")
 
     from backend.db.migration_runner import MigrationRunner
 

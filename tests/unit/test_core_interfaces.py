@@ -96,5 +96,5 @@ async def test_circuit_breaker_async_success():
     async def ok():
         return 42
 
-    assert await cb.call_async(ok()) == 42
+    assert await cb.call_async(ok) == 42
     assert cb.state == "CLOSED"

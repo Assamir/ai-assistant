@@ -4,7 +4,7 @@ import asyncio
 import itertools
 import time
 from abc import ABC, abstractmethod
-from typing import Any, AsyncIterator, Awaitable, Dict, List, Optional
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional
 
 
 class BaseLLMClient(ABC):
@@ -12,14 +12,22 @@ class BaseLLMClient(ABC):
 
     @abstractmethod
     async def generate_response(
-        self, prompt: str, history: Optional[List[Dict[str, Any]]] = None
+        self,
+        prompt: str,
+        history: Optional[List[Dict[str, Any]]] = None,
+        *,
+        tools: Optional[List[Dict[str, Any]]] = None,
     ) -> str:
         """Generate a response from the LLM"""
         raise NotImplementedError
 
     @abstractmethod
     async def stream_response(
-        self, prompt: str, history: Optional[List[Dict[str, Any]]] = None
+        self,
+        prompt: str,
+        history: Optional[List[Dict[str, Any]]] = None,
+        *,
+        tools: Optional[List[Dict[str, Any]]] = None,
     ) -> AsyncIterator[str]:
         """Stream responses from the LLM token by token"""
         raise NotImplementedError
@@ -129,15 +137,27 @@ class CircuitBreaker:
         self._success()
         return result
 
-    async def call_async(self, coro: Awaitable[Any]) -> Any:
+    async def call_async(self, factory: Callable[[], Awaitable[Any]]) -> Any:
         self._before_call_sync()
         try:
-            result = await coro
+            result = await factory()
         except Exception:
             self._failure()
             raise
         self._success()
         return result
+
+    def check_allow(self) -> None:
+        """Zgłaszaj CircuitBreakerOpen, gdy obwód jest OPEN i timeout nie minął."""
+        self._before_call_sync()
+
+    def mark_success(self) -> None:
+        """Udane wywołanie zewnętrzne (np. po zakończeniu streamu SSE)."""
+        self._success()
+
+    def mark_failure(self) -> None:
+        """Błąd wywołania zewnętrznego bez owijania w call_async (np. stream)."""
+        self._failure()
 
     def _before_call_sync(self) -> None:
         if self.state == "OPEN":

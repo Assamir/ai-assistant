@@ -49,7 +49,14 @@ class LLMConfig(BaseModel):
 class STTConfig(BaseModel):
     model_name: str = "large-v3"
     language: str = "pl"
-    confidence_threshold: float = 0.8
+    confidence_threshold: float = Field(default=0.8, ge=0.0, le=1.0)
+    confidence_floor: float = Field(
+        default=0.45,
+        ge=0.0,
+        le=1.0,
+        description="Poniżej tej wartości wynik jest REJECT (powyżej + < threshold → LOW).",
+    )
+    beam_size: int = Field(default=5, ge=1, le=16)
 
 class TTSConfig(BaseModel):
     model_name: str = "tts_models/pl_PL/mai_female"
