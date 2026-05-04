@@ -1,6 +1,6 @@
 # Assystent — Plan Implementacji: Fazy 2–3, Testy, Modele AI
 
-> **Status:** v1.2 — 2026-05-04 (sekcja „Stan wdrożenia” dla Faz 2–3)
+> **Status:** v1.3 — 2026-05-04 (T6: profile YAML, GameObserver+ObserverLoop domknięte)
 > **Kontekst:** [Plan główny (Faza 1)](implementation_plan.md) · [TEST_PLAN](TEST_PLAN.md) · [DEFINITION_OF_DONE](DEFINITION_OF_DONE.md) · [RISK_REGISTER](RISK_REGISTER.md) · [ROADMAP](IMPLEMENTATION_ROADMAP.md)
 
 ---
@@ -10,8 +10,8 @@
 
 | Zakres                    | Stan    | Uwagi                                                                                                                                      |
 | ------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| **T5** Screen / VLM / OCR | 🟡 ~65% | `ScreenCapture`, dHash + `SceneDeduper`, **`EasyOCREngine`**, `Moondream2VLM`, `DualVisionPipeline` (`ocr.trigger_keywords`), health/runtime; crop region / pełny observer loop — kolejne kroki |
-| **T6** Observer / gry     | 🟡 ~10% | Jest `GameObserver` (psutil, lista znanych gier, emit na WS) — **bez** profili YAML, pętli capture→VLM→LLM→komentarz, diversity/rate limit |
+| **T5** Screen / VLM / OCR | 🟡 ~65% | `ScreenCapture`, dHash, OCR/VLM, `DualVisionPipeline`; crop z profilu gry — kolejny krok |
+| **T6** Observer / gry     | 🟢 ~85% | `GameProfile`+YAML (`content_root/game_profiles`), indeks z `KNOWN_GAMES`+config, `GameObserver` (psutil, `game_id`, ręczny lock), `ObserverLoop`, pauza, skip z configu, SQLite WS; VLM fallback detekcji — nie |
 | **T7** MCP rozszerzenia   | ⬜       | Brak `web_search`, `web_scraper`, `SandboxValidator`, `MCPCache` (tylko tabela SQL); narzędzia: czas + kalkulator + `tools_extra`          |
 | **T8** Memory / profil    | ⬜       | ChromaDB w `requirements.txt` zakomentowane; brak SemanticRecall / ingester / rotacji w kodzie (tabele profilu w SQLite istnieją)          |
 | **T9–T14** Frontend       | ⬜       | Brak katalogu aplikacji Electron/React w repo                                                                                              |
