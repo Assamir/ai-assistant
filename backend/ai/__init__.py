@@ -9,6 +9,7 @@ from backend.ai.faster_whisper_stt import (
     TranscriptionRejected,
 )
 from backend.ai.llm_client import ChatCompletionResult, LMStudioClient
+from backend.ai.moondream_vlm import Moondream2VLM, MoondreamDependencyError
 from backend.ai.piper_tts import PiperTTS
 from backend.ai.voice_input import (
     AudioBackendUnavailable,
@@ -31,6 +32,8 @@ from backend.ai.screen_capture import (
 __all__ = [
     "LMStudioClient",
     "ChatCompletionResult",
+    "Moondream2VLM",
+    "MoondreamDependencyError",
     "FasterWhisperSTT",
     "ConfidenceTier",
     "TranscriptionRejected",

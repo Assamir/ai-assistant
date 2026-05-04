@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any, Literal
 from enum import Enum
 
@@ -93,7 +93,31 @@ class TTSConfig(BaseModel):
     chunk_bytes: int = Field(default=4096, ge=512, le=65536)
 
 class VLMConfig(BaseModel):
-    model_name: str = "moondream2"
+    """Vision-language (Moondream2 przez transformers); domyślnie wyłączone — brak torch w CI."""
+
+    enabled: bool = False
+    model_name: str = "vikhyatk/moondream2"
+    revision: Optional[str] = Field(
+        default="2025-06-21",
+        description="Rewizja HF (vikhyatk/moondream2); None = domyślna gałąź.",
+    )
+    device: Literal["auto", "cuda", "cpu", "mps"] = "auto"
+    dtype: Literal["auto", "float16", "float32", "bfloat16"] = "auto"
+    caption_length: Literal["short", "normal"] = "normal"
+    analysis_prompt: Optional[str] = Field(
+        default=None,
+        description="Jeśli ustawione — `model.query(image, prompt)` zamiast caption.",
+    )
+    gpu_priority: int = Field(default=4, ge=1, le=4, description="GPUScheduler: VLM = najniższy priorytet (4).")
+
+    @field_validator("model_name", mode="before")
+    @classmethod
+    def normalize_legacy_model_name(cls, v: Any) -> str:
+        if isinstance(v, str) and v.strip() == "moondream2":
+            return "vikhyatk/moondream2"
+        if v is None or (isinstance(v, str) and not str(v).strip()):
+            return "vikhyatk/moondream2"
+        return str(v).strip()
 
 class ObserverConfig(BaseModel):
     observer_type: str = "strategy"  # strategy or casual

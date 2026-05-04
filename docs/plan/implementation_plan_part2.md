@@ -10,7 +10,7 @@
 
 | Zakres                    | Stan             | Uwagi                                                                                                                                      |
 | ------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| **T5** Screen / VLM / OCR | ⬜ nie rozpoczęty | Brak `ScreenCapture`, `Moondream2VLM`, `EasyOCR`, dHash w `backend/`                                                                       |
+| **T5** Screen / VLM / OCR | 🟡 ~45% | `ScreenCapture`, parser DXcam; **`Moondream2VLM`** (`vlm.enabled`) + GPUScheduler P4; brak EasyOCR, dHash, testów E2E capture→VLM                                                                                                                           |
 | **T6** Observer / gry     | 🟡 ~10%          | Jest `GameObserver` (psutil, lista znanych gier, emit na WS) — **bez** profili YAML, pętli capture→VLM→LLM→komentarz, diversity/rate limit |
 | **T7** MCP rozszerzenia   | ⬜                | Brak `web_search`, `web_scraper`, `SandboxValidator`, `MCPCache` (tylko tabela SQL); narzędzia: czas + kalkulator + `tools_extra`          |
 | **T8** Memory / profil    | ⬜                | ChromaDB w `requirements.txt` zakomentowane; brak SemanticRecall / ingester / rotacji w kodzie (tabele profilu w SQLite istnieją)          |

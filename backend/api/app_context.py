@@ -14,7 +14,7 @@ from backend.config.loader import ConfigLoader
 from backend.config.paths import resolve_config_yaml, sqlite_database_path
 from backend.config.schema import ConfigSchema
 from backend.core.command_matching import CommandMatcher
-from backend.core.interfaces import BaseSTTEngine, BaseTTSEngine
+from backend.core.interfaces import BaseSTTEngine, BaseTTSEngine, BaseVLMAnalyzer
 from backend.core.orchestrator import ConversationOrchestrator
 from backend.core.persona_loader import PersonaLoader
 from backend.core.prompt_builder import PromptBuilder
@@ -105,6 +105,7 @@ class AppContext:
     game_observer: Optional[GameObserver] = None
     voice_input_coordinator: Optional[Any] = None  # VoiceInputCoordinator — ustawiane w lifespan
     wakeword_detector: Optional[WakewordDetector] = None
+    vlm_engine: Optional[BaseVLMAnalyzer] = None
 
 
 def try_build_stt_engine(cfg: ConfigSchema) -> Optional[BaseSTTEngine]:
@@ -130,6 +131,21 @@ def try_build_tts_engine(cfg: ConfigSchema) -> Optional[BaseTTSEngine]:
         _logger.info("piper dependencies not installed — TTS engine disabled")
     except Exception as exc:
         _logger.warning("TTS engine init failed: %s", exc)
+    return None
+
+
+def try_build_vlm_engine(cfg: ConfigSchema) -> Optional[BaseVLMAnalyzer]:
+    """Moondream2 gdy `vlm.enabled`; wagi ładują się przy pierwszej inferencji."""
+    if not cfg.vlm.enabled:
+        return None
+    try:
+        from backend.ai.moondream_vlm import Moondream2VLM
+
+        return Moondream2VLM(cfg.vlm)
+    except ImportError:
+        _logger.info("Moondream VLM unavailable")
+    except Exception as exc:
+        _logger.warning("VLM engine init failed: %s", exc)
     return None
 
 
@@ -196,6 +212,7 @@ def create_app_context() -> AppContext:
         tts_engine=try_build_tts_engine(cfg),
         game_observer=obs,
         wakeword_detector=wake,
+        vlm_engine=try_build_vlm_engine(cfg),
     )
 
 
@@ -218,4 +235,5 @@ __all__ = [
     "load_resolved_config",
     "try_build_stt_engine",
     "try_build_tts_engine",
+    "try_build_vlm_engine",
 ]

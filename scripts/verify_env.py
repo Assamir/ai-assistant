@@ -56,6 +56,50 @@ def main() -> int:
     except ImportError as e:
         print(f"  (opcjonalnie) tiktoken/asteval niedostępny: {e}")
 
+    try:
+        import setuptools
+
+        print(
+            f"  setuptools {setuptools.__version__} "
+            "(torch often requires setuptools<82; pip downgrade is OK)"
+        )
+    except ImportError:
+        print("  (missing setuptools — unusual)")
+
+    try:
+        import torch
+
+        tv = getattr(torch, "__version__", "?")
+        print(f"  OK import torch ({tv})")
+        cuda_ok = bool(torch.cuda.is_available())
+        print(f"  torch.cuda.is_available() = {cuda_ok}")
+        if cuda_ok:
+            print(f"  CUDA device 0: {torch.cuda.get_device_name(0)}")
+        elif "+cpu" in tv.lower():
+            print("  Info: CPU torch wheel (+cpu); for NVIDIA GPU see ENV_SETUP.md section 4.4 / pytorch.org")
+    except ImportError as e:
+        print(f"  (optional) torch — VLM/Moondream: pip install torch transformers accelerate — {e}")
+
+    try:
+        import transformers
+
+        print(f"  OK import transformers ({transformers.__version__})")
+    except ImportError as e:
+        print(f"  (opcjonalnie) transformers — {e}")
+
+    try:
+        import accelerate
+
+        print(f"  OK import accelerate ({accelerate.__version__})")
+    except ImportError:
+        print("  (opcjonalnie) accelerate — zalecane przy transformers / device_map")
+
+    try:
+        importlib.import_module("PIL")
+        print("  OK import Pillow (PIL)")
+    except ImportError as e:
+        print(f"  (opcjonalnie) Pillow — {e}")
+
     from backend.db.migration_runner import MigrationRunner
 
     with tempfile.TemporaryDirectory() as td:

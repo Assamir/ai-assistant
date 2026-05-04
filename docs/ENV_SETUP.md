@@ -1,7 +1,7 @@
 # ENV_SETUP.md — Środowisko Deweloperskie Assystent
 
-> **Status:** v1.0
-> **Data:** 2026-04-30
+> **Status:** v1.1
+> **Data:** 2026-05-04
 > **Cel:** Kompletny manual konfiguracji środowiska deweloperskiego. Osoba na świeżym Windows 11 powinna skończyć w < 2h.
 > **Źródło decyzji:** DECISIONS_LOG.md (v1.1) — nie podważaj wartości z tego pliku.
 
@@ -314,6 +314,40 @@ python -c "import fastapi, faster_whisper, chromadb, easyocr, dxcam; print('OK')
 
 > **Rozmiar instalacji łączny:** ~4–5 GB (PyTorch + wszystkie zależności)
 
+### 4.4 Torch, transformers, PATH i konflikty wersji (Windows)
+
+**Ten sam interpreter co backend.** Uruchamiaj backend (`uvicorn`, testy) tym Pythonem, którym instalowałeś pakiety — najlepiej **venv z repo** (`python -m venv .venv`, potem `.\scripts\setup.ps1`). Instalacja „user” (`Defaulting to user installation`) też działa, byle **`python` w terminalu** to był ten sam plik wykonywalny (`where python`).
+
+**PATH i skrypty CLI.** Pip ostrzega, że `torchrun.exe`, `accelerate.exe`, `transformers.exe` trafiły np. do:
+
+`%LOCALAPPDATA%\Programs\Python\Python3xx\Scripts` lub `%APPDATA%\Roaming\Python\Python3xx\Scripts`.
+
+Do codziennego backendu **nie musisz** dodawać tego do PATH (wystarczy `python -m uvicorn …`). Dodaj katalog `Scripts` do PATH użytkownika tylko wtedy, gdy chcesz wygodnie wywoływać te narzędzia z dowolnego folderu.
+
+**CUDA vs CPU.** Po `pip install torch` sprawdź:
+
+```powershell
+python -c "import torch; print(torch.__version__); print('cuda', torch.cuda.is_available())"
+```
+
+Jeśli jest **`+cpu`** lub `cuda False`, a masz GPU NVIDIA — zainstaluj build z CUDA według [Get Started (PyTorch)](https://pytorch.org/get-started/locally/) (osobna komenda z `--index-url`). Backendowy moduł `Moondream2VLM` (`backend/ai/moondream_vlm.py`) używa `device: auto|cuda|cpu|mps` z `config.yaml`.
+
+**setuptools.** Pakiet **torch** często wymusza **`setuptools<82`** — pip może **obniżyć** wersję setuptools. To oczekiwane; przy konfliktach z innymi projektami na tej samej instalacji Pythona użyj **osobnego venv** wyłącznie pod Assystenta.
+
+**tokenizers.** **transformers** pinuje kompatybilną wersję **tokenizers** — nie podnoś jej ręcznie „na sztywno”, dopóki upstream tego nie wymaga.
+
+**Włączenie VLM w konfiguracji** (`c:\ai\asystent\config\config.yaml` lub content root z `general.content_root`):
+
+```yaml
+vlm:
+  enabled: true
+  model_name: vikhyatk/moondream2
+  revision: "2025-06-21"
+  device: auto
+```
+
+Pierwsza inferencja pobierze wagi z Hugging Face (duży transfer).
+
 ---
 
 ## 5. Pobieranie modeli AI
@@ -481,19 +515,28 @@ snapshot_download(
 print("Moondream2: OK")
 ```
 
-**Weryfikacja:**
+**Weryfikacja (HF lub katalog lokalny — ten sam wzorzec co backend):**
 ```python
-from transformers import AutoModelForCausalLM, AutoTokenizer
-import torch
+from pathlib import Path
 
-tokenizer = AutoTokenizer.from_pretrained(r"c:\ai\asystent\models\moondream")
-model = AutoModelForCausalLM.from_pretrained(
-    r"c:\ai\asystent\models\moondream",
-    trust_remote_code=True,
-    torch_dtype=torch.float16,
-    device_map="cuda"
-)
-print("Moondream2 załadowany:", model.device)
+import torch
+from PIL import Image
+from transformers import AutoModelForCausalLM
+
+local_dir = Path(r"c:\ai\asystent\models\moondream")
+repo_id = str(local_dir) if (local_dir / "config.json").is_file() else "vikhyatk/moondream2"
+
+device_kind = "cuda" if torch.cuda.is_available() else "cpu"
+dtype = torch.float16 if device_kind == "cuda" else torch.float32
+
+load_kw = dict(trust_remote_code=True, torch_dtype=dtype, device_map={"": device_kind})
+if repo_id == "vikhyatk/moondream2":
+    load_kw["revision"] = "2025-06-21"
+
+model = AutoModelForCausalLM.from_pretrained(repo_id, **load_kw)
+img = Image.new("RGB", (64, 64), color=(40, 120, 200))
+cap = model.caption(img, length="short", stream=False)
+print("Moondream2:", cap.get("caption", cap))
 ```
 
 ### 5.6 EasyOCR (auto-download)

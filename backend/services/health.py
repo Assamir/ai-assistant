@@ -21,6 +21,10 @@ def build_health_snapshot(ctx: AppContext) -> Dict[str, Any]:
         },
         "stt": {"available": ctx.stt_engine is not None},
         "tts": {"available": ctx.tts_engine is not None},
+        "vlm": {
+            "enabled_in_config": ctx.config.vlm.enabled,
+            "engine_initialized": ctx.vlm_engine is not None,
+        },
         "database": {"path": ctx.db_path},
         "observer": {
             "running": ctx.game_observer.is_running if ctx.game_observer else False,
