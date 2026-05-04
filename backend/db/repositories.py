@@ -7,6 +7,7 @@ import aiosqlite
 from backend.db.connection import apply_pragmas_async
 
 DetectionMethod = Literal["process", "vlm", "manual"]
+SnapshotTrigger = Literal["session_start", "character_change", "game_detected"]
 
 
 class SessionRepository:
@@ -205,6 +206,74 @@ class ToolCallsRepository:
             )
             rows = await cursor.fetchall()
             return [dict(r) for r in rows]
+
+    async def list_for_chat_after_message(
+        self,
+        chat_session_id: int,
+        after_message_id_exclusive: int,
+    ) -> List[Dict[str, Any]]:
+        """Wszystkie `tool_calls` powiązane z wiadomościami w sesji czatu utworzonymi po danym `messages.id`."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                """
+                SELECT tc.id, tc.message_id, tc.turn_sequence, tc.tool_name, tc.input_json,
+                       tc.output_json, tc.duration_ms, tc.success, tc.error_message, tc.created_at
+                FROM tool_calls tc
+                INNER JOIN messages m ON m.id = tc.message_id
+                WHERE m.session_id = ? AND m.id > ?
+                ORDER BY tc.id ASC
+                """,
+                (chat_session_id, after_message_id_exclusive),
+            )
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+
+
+class PlayerContextSnapshotRepository:
+    """INSERT do ``player_context_snapshots`` (DOK / DB_SCHEMA)."""
+
+    def __init__(self, db_path: str):
+        self.db_path = db_path
+
+    async def insert(
+        self,
+        session_id: int,
+        game: str,
+        active_character: str,
+        *,
+        trigger: SnapshotTrigger,
+        character_class: Optional[str] = None,
+        build_name: Optional[str] = None,
+        build_url: Optional[str] = None,
+        league: Optional[str] = None,
+    ) -> int:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            await db.execute(
+                """
+                INSERT INTO player_context_snapshots (
+                    session_id, game, active_character, character_class,
+                    build_name, build_url, league, trigger, captured_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+                """,
+                (
+                    session_id,
+                    game,
+                    active_character,
+                    character_class,
+                    build_name,
+                    build_url,
+                    league,
+                    trigger,
+                ),
+            )
+            await db.commit()
+            cur = await db.execute("SELECT last_insert_rowid()")
+            row = await cur.fetchone()
+            return int(row[0])
 
 
 class GameDetectionRepository:

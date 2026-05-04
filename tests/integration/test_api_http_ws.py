@@ -53,6 +53,15 @@ async def test_api_status_contains_phase(httpx_async: AsyncClient):
     assert "orchestrator" in res.json()
 
 
+@pytest.mark.asyncio
+async def test_api_player_profile_endpoint(httpx_async: AsyncClient):
+    res = await httpx_async.get("/api/v1/player-profile")
+    assert res.status_code == 200
+    body = res.json()
+    assert "path" in body and "profile" in body
+    assert body["profile"]["games"] == {}
+
+
 
 @pytest.mark.asyncio
 async def test_api_config_data(httpx_async: AsyncClient):

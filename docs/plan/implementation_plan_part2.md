@@ -1,33 +1,32 @@
 # Assystent — Plan Implementacji: Fazy 2–3, Testy, Modele AI
 
-> **Status:** v1.6 — 2026-05-05 (T7 `tool_calls` w SQLite + migracja 002)
+> **Status:** v1.8 — 2026-05-05 (T10–T14 baseline: VRM + `emotions.json` + WS audio; ConfigPanel; `electron-builder` NSIS; stosy Three z R3F 8 / three 0.169)
 > **Kontekst:** [Plan główny (Faza 1)](implementation_plan.md) · [TEST_PLAN](TEST_PLAN.md) · [DEFINITION_OF_DONE](DEFINITION_OF_DONE.md) · [RISK_REGISTER](RISK_REGISTER.md) · [ROADMAP](IMPLEMENTATION_ROADMAP.md)
 
 ---
 
-## Stan wdrożenia — 2026-05-05
+## Stan wdrożenia — 2026-05-05 (v1.8)
 
 
-| Zakres                    | Stan    | Uwagi                                                                                                                                            |
-| ------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **T5** Screen / VLM / OCR | 🟢 ~80% | Crop z `GameProfile.screen_regions` (`apply_profile_crop_to_png` w `ObserverLoop`); pozostałe integracje/regresje VLM                            |
-| **T6** Observer / gry     | 🟢 ~95% | VLM fallback przez `probe_game_identity_from_screen` + hook w `GameObserver` (`vlm_fallback_game_detection`), `game_detections` repo (wcześniej) |
-| **T7** MCP rozszerzenia   | 🟢 ~92% | Narzędzia MCP + cache + rate; `tool_calls` w SQLite przy WS (`ToolCallsRepository`); asystent `[wywołania narzędzi]`; migracja `002` (turn_sequence 1..64); REST voice bez sesji DB — brak logu narzędzi |
-| **T8** Memory / profil    | 🟡 ~25% | `SemanticRecall` (`backend/memory/`) — Chroma ephemeral/persistent + fallback w pamięci (Py 3.14); brak ingester / rotacji FIFO / PlayerProfile YAML                                             |
-| **T9–T14** Frontend       | 🟡 szkielet | Katalog `frontend/` — Electron + Vite + React (T9 minimal); brak Three/VRM, emocji, lip-sync (T10–T14)                                                                                          |
+| Zakres                    | Stan        | Uwagi                                                                                                                                                                                                    |
+| ------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **T5** Screen / VLM / OCR | 🟢 ~80%     | Crop z `GameProfile.screen_regions` (`apply_profile_crop_to_png` w `ObserverLoop`); pozostałe integracje/regresje VLM                                                                                    |
+| **T6** Observer / gry     | 🟢 ~95%     | VLM fallback przez `probe_game_identity_from_screen` + hook w `GameObserver` (`vlm_fallback_game_detection`), `game_detections` repo (wcześniej)                                                         |
+| **T7** MCP rozszerzenia   | 🟢 ~95%     | Narzędzia MCP + cache + rate; `tool_calls` w SQLite przy WS/REST/SSE (`ToolCallsRepository`); odpowiedź JSON + `done` SSE z `session_id` / `chat_session_id`                                             |
+| **T8** Memory / profil    | 🟢 ~70%     | `SemanticRecall` + `KnowledgeIngester` + config `memory` + FIFO; **`PlayerProfileRepository`** (`data/player_profile.yaml`) + `PlayerContextSnapshotRepository` + prompt + **`GET /api/v1/player-profile`**; brak auto resetu sezonu / daily meta pełnego                   |
+| **T9–T14** Frontend       | 🟢 ~72%     | T9 jak wcześniej; **T10** `AvatarCanvas` (R3F + `@pixiv/three-vrm`, przezroczyste tło WebGL, światła „aura”); **T11** `src/emotions.json` + mapowanie na presety VRM + zdarzenie WS `emotion`; **T12** `useAudioStreamPlayer` (składanie `audio_stream`) + prosty ruch warg (`aa` przy odtwarzaniu); **T13** `ConfigPanel` (Połączenie / Avatar / Więcej); **T14** root `build` w `package.json` + skrypt `electron:dist` (NSIS). Brak: idle bone animacji, pełny analizator RMS, Setup Wizard, ikony buildera. |
 
 
-**Kamienie M2 i M3** — **częściowo**: T7 backend z logiem narzędzi pod WS; T8 semantic start; T9 szkielet w `frontend/`.
+**Kamienie M2 i M3** — **prawie**: backend Fazy 2 domknięty funkcjonalnie; **frontend Fazy 3 — baseline** (avatar + audio + konfig + pakiet Windows).
 
-> **Następny krok:** T8 `KnowledgeIngester` + rotacja Chroma; powiązanie REST `/voice/*` z `sessions`; T10–T14 frontend.
+> **Następny krok (po v1.8):** idle / spring bone subtle; lip-sync z `AnalyserNode`; rozszerzenie ConfigPanel + `PUT /api/v1/config`; ikony i bug bash przed releasem; dokumentacja ENV.
 
 ---
 
-## Pozostały zakres (po v1.5)
+## Pozostały zakres (po v1.8)
 
-- **T7 dopiski:** opcjonalnie sesja HTTP → ten sam `sessions` / `tool_calls` co WS; pole `tool_calls` w odpowiedzi REST.
-- **T8:** `KnowledgeIngester`, rotacja kolekcji, profil gracza z YAML (plan dzień 3–5).
-- **T9–T14:** realizacja wg tabel w §7 (obecnie tylko szkielety).
+- **T8 dopiski:** archiwum sezonu → `player_profile_archives`, daily meta check, komendy zmiany postaci.
+- **T10–T14 dopiski:** pełne idle / aura shader; warstwy emocji + crossfade; prawdziwy lip-sync; kreator ustawień; README/CHANGELOG/licencje pod release; ikony instalatora.
 
 ## 6. Faza 2 — Vision, MCP, Memory (T5–T8)
 
@@ -342,5 +341,5 @@ graph LR
 
 ---
 
-> **Następny krok (2026-05-05):** T8 ingester + rotacja; T10+ w `frontend/`; dokumentacja ENV dla Playwright/Chroma (`docs/ENV_SETUP.md`).
+> **Następny krok (2026-05-05):** hardening T8 (FIFO/archive); polish T10–T14 zgodnie z §7; `docs/ENV_SETUP.md` dla Playwright/Chroma.
 

@@ -227,6 +227,34 @@ class MonitorInfo(BaseModel):
     is_primary: bool = False
     label: str = ""
 
+class MemoryConfig(BaseModel):
+    """Pamięć semantyczna (Chroma / fallback) + katalog ``knowledge`` pod ``content_root``."""
+
+    enabled: bool = Field(default=False, description="Gdy True — SemanticRecall + opcjonalny ingester przy starcie.")
+    knowledge_dir: str = Field(
+        default="knowledge",
+        description="Podkatalog ``content_root`` z plikami .md/.txt do indeksowania.",
+    )
+    chroma_subdir: str = Field(
+        default="chroma",
+        description="Podkatalog ``data/`` dla Chroma PersistentClient (gdy ``chroma_persist``).",
+    )
+    chroma_persist: bool = Field(default=True, description="False = EphemeralClient (bez zapisu na dysk).")
+    max_kb_chunks: int = Field(default=8_000, ge=100, le=500_000)
+    chunk_size: int = Field(default=1200, ge=256, le=32_000)
+    chunk_overlap: int = Field(default=200, ge=0, le=8_000)
+    ingest_on_startup: bool = Field(default=True, description="Jednorazowy ingest ``knowledge_dir`` przy starcie.")
+    watch_knowledge: bool = Field(
+        default=False,
+        description="Watchdog — ponowny ingest po zmianach plików (wątek w tle).",
+    )
+    inject_into_prompt: bool = Field(
+        default=True,
+        description="Wstrzykiwanie skrótów z KB do tur LLM (przed wiadomością użytkownika).",
+    )
+    recall_top_k: int = Field(default=4, ge=1, le=12)
+
+
 class MCPConfig(BaseModel):
     enabled: bool = True
     tools_enabled: List[str] = Field(default_factory=list)
@@ -277,6 +305,9 @@ class ConfigSchema(BaseModel):
     
     # MCP settings
     mcp: MCPConfig = MCPConfig()
+
+    # Semantic memory (T8)
+    memory: MemoryConfig = MemoryConfig()
     
     # Quiet hours (cross-midnight support)
     quiet_hours_start: str = "23:00"  # HH:MM format

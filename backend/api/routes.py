@@ -26,8 +26,9 @@ from pydantic import BaseModel, Field
 
 
 
-from backend.api.app_context import AppContext
+from backend.api.app_context import AppContext, ensure_ws_db_session
 from backend.services.health import build_health_snapshot
+from backend.db.repositories import MessageRepository, ToolCallsRepository
 
 
 
@@ -96,7 +97,11 @@ async def api_status(dep: Deps):
                 "current_game": dep.orchestrator.state.get("current_game"),
 
             },
-
+            "memory": {
+                "enabled": dep.config.memory.enabled,
+                "recall_active": dep.semantic_recall is not None,
+                "watching": dep.knowledge_watcher is not None,
+            },
         }
 
     )
@@ -128,6 +133,24 @@ async def api_health(dep: Deps):
 async def api_config(dep: Deps):
 
     return {"data": json.loads(dep.config.model_dump_json())}
+
+
+
+
+@router.get("/player-profile")
+
+async def api_player_profile(dep: Deps):
+
+    store = dep.player_profile_store
+
+    if store is None:
+
+        return {"path": None, "profile": None}
+
+    prof = store.load()
+
+    return {"path": str(store.path), "profile": json.loads(prof.model_dump_json())}
+
 
 
 
@@ -287,88 +310,95 @@ async def voice_chat(body: VoiceChatBody, dep: Deps, request: Request):
 
         orch = dep.orchestrator
 
-
-
         async def gen():
 
             from backend.core.emotion_parser import parse_emotion_tag
 
-
+            db_id = await ensure_ws_db_session(dep, sess)
+            msg_repo = MessageRepository(dep.db_path)
+            await msg_repo.create_message(db_id, "user", body.text.strip())
 
             pieces: list[str] = []
-
             async for chunk in orch.stream_reply_tokens(body.text, history_tail=hist):
-
                 pieces.append(chunk)
-
                 yield f"event: token\ndata: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"
 
             assembled = "".join(pieces)
 
-
-
             emotion, stripped_body = parse_emotion_tag(assembled)
-
             yield f"event: emotion\ndata: {json.dumps({'emotion': emotion}, ensure_ascii=False)}\n\n"
 
             dep.conversation.append(sess, "user", body.text)
-
             reply_plain = stripped_body.strip()
-
             if reply_plain:
-
-
-
                 dep.conversation.append(sess, "assistant", reply_plain)
+                try:
+                    await msg_repo.create_message(
+                        db_id,
+                        "assistant",
+                        reply_plain,
+                        emotion=str(emotion or "neutral"),
+                    )
+                except Exception:
+                    pass
 
-            yield f"event: done\ndata: {json.dumps({'ok': True}, ensure_ascii=False)}\n\n"
-
-
+            # Ścieżka stream bez narzędzi — spójność API z JSON (puste tool_calls).
+            yield f"event: done\ndata: {json.dumps({'ok': True, 'session_id': sess, 'chat_session_id': db_id, 'tool_calls': []}, ensure_ascii=False)}\n\n"
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 
 
 
+    db_id = await ensure_ws_db_session(dep, sess)
+    msg_repo = MessageRepository(dep.db_path)
+    user_mid = await msg_repo.create_message(db_id, "user", body.text.strip())
+
     outcome = await dep.orchestrator.handle_user_message(
-
         body.text,
-
         conversation_tail=hist,
-
         system_health="healthy",
-
+        db_chat_session_id=db_id,
     )
 
     dep.conversation.append(sess, "user", body.text)
 
+    emo = str(outcome.emotion or "neutral")
     if outcome.message:
 
-
-
         dep.conversation.append(sess, "assistant", str(outcome.message))
+        try:
+            await msg_repo.create_message(
+                db_id,
+                "assistant",
+                str(outcome.message).strip(),
+                emotion=emo,
+            )
+        except Exception:
+            pass
+
+    tool_rows = await ToolCallsRepository(dep.db_path).list_for_chat_after_message(db_id, user_mid)
+    tool_calls_payload = [
+        {
+            "id": int(r["id"]),
+            "message_id": int(r["message_id"]),
+            "tool_name": r["tool_name"],
+            "success": bool(r["success"]),
+            "duration_ms": int(r["duration_ms"] or 0),
+        }
+        for r in tool_rows
+    ]
 
     mid = uuid.uuid4().int % (10**9)
 
-
-
     return {
-
         "message_id": mid,
-
-
-
         "content": outcome.message or "",
-
         "emotion": outcome.emotion,
-
-        "tool_calls": [],
-
-
-
+        "tool_calls": tool_calls_payload,
         "duration_ms": 0,
-
         "language_used": "pl",
-
+        "session_id": sess,
+        "chat_session_id": db_id,
     }
 
 
@@ -437,24 +467,17 @@ async def voice_process(
 
     sess = sess_extra or str(uuid.uuid4())
 
-
-
     hist = dep.conversation.tail(sess)
 
-
-
-
+    db_id = await ensure_ws_db_session(dep, sess)
+    msg_repo = MessageRepository(dep.db_path)
+    await msg_repo.create_message(db_id, "user", user_text.strip())
 
     outcome = await dep.orchestrator.handle_user_message(
-
         user_text,
-
         conversation_tail=hist,
-
-
-
         system_health="healthy",
-
+        db_chat_session_id=db_id,
     )
 
     dep.conversation.append(sess, "user", user_text)
@@ -464,12 +487,16 @@ async def voice_process(
 
 
     if outcome.message:
-
         dep.conversation.append(sess, "assistant", str(outcome.message))
-
-
-
-
+        try:
+            await msg_repo.create_message(
+                db_id,
+                "assistant",
+                str(outcome.message).strip(),
+                emotion=str(outcome.emotion or "neutral"),
+            )
+        except Exception:
+            pass
 
     tts = getattr(dep, "tts_engine", None)
 

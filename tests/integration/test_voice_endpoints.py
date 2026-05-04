@@ -9,11 +9,16 @@ from typing import AsyncIterator
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from pathlib import Path
 from httpx import ASGITransport, AsyncClient
 
 from backend.core.command_handlers import CommandExecutionResult
 from backend.core.interfaces import BaseSTTEngine, BaseTTSEngine
+from backend.core.orchestrator import ConversationOrchestrator
+from backend.db.migration_runner import MigrationRunner
+from backend.mcp.registry import build_default_tool_registry
 from backend.main import app
+from backend.services.player_profile import PlayerProfileRepository
 
 
 # ─── Pomocnicze ──────────────────────────────────────────────────────────────
@@ -53,11 +58,45 @@ class _MockTTS(BaseTTSEngine):
 
 
 @pytest.fixture
-async def voice_client():
+async def voice_client(tmp_path: Path):
     """AsyncClient z mockowanymi STT i TTS wstrzykniętymi do app.state.ctx."""
     from backend.api.app_context import create_app_context
+    from pathlib import Path as Pth
+
+    db_path = str(tmp_path / "voice_http.db")
+    MigrationRunner(db_path).run_migrations()
 
     ctx = create_app_context()
+    root = Pth(ctx.config.general.content_root).expanduser()
+    ctx.db_path = db_path
+    ctx.tool_registry = build_default_tool_registry(
+        db_path=db_path,
+        mcp_cfg=ctx.config.mcp,
+        content_root=str(root.resolve()),
+    )
+    ctx.player_profile_store = PlayerProfileRepository(
+        str((root / "data" / "player_profile.yaml").resolve()),
+        db_path,
+    )
+    pers = ctx.orchestrator.state.get("active_persona", "default")
+    if not isinstance(pers, str):
+        pers = "default"
+    ctx.orchestrator = ConversationOrchestrator(
+        configuration=ctx.config,
+        lm_client=ctx.llm_client,
+        prompt_builder=ctx.prompt_builder,
+        persona_loader=ctx.persona_loader,
+        command_matcher=ctx.command_matcher,
+        tool_registry=ctx.tool_registry,
+        active_persona=pers,
+        emitter=None,
+        db_path=db_path,
+        semantic_recall=ctx.semantic_recall,
+        player_profile_repo=ctx.player_profile_store,
+    )
+    from backend.mcp.context_tools import register_context_dependent_mcp_tools
+
+    register_context_dependent_mcp_tools(ctx)
     ctx.stt_engine = _MockSTT()
     ctx.tts_engine = _MockTTS()
     app.state.ctx = ctx

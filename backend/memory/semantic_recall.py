@@ -50,6 +50,8 @@ class SemanticRecall:
         self._mode: str = "chroma"
         self._conv_docs: List[str] = []
         self._kb_docs: List[str] = []
+        self._kb_metas: List[Mapping[str, Any]] = []
+        self._ingest_seq: int = 0
         self._conv: Any = None
         self._kb: Any = None
         try:
@@ -73,6 +75,7 @@ class SemanticRecall:
             self._client = None
             self._conv = None
             self._kb = None
+            self._kb_metas = []
 
     @property
     def conversations(self) -> Any:
@@ -97,13 +100,80 @@ class SemanticRecall:
         metadatas: Sequence[Mapping[str, Any]] | None = None,
     ) -> None:
         if self._mode == "memory":
-            self._kb_docs.extend(str(d) for d in documents)
+            for i, d in enumerate(documents):
+                self._ingest_seq += 1
+                m: dict[str, Any] = dict(metadatas[i]) if metadatas is not None and i < len(metadatas) else {}
+                m["ingest_seq"] = self._ingest_seq
+                self._kb_docs.append(str(d))
+                self._kb_metas.append(m)
             return
         embs = [_hash_embedding(d) for d in documents]
-        kwargs: dict[str, Any] = {"ids": list(ids), "documents": list(documents), "embeddings": embs}
-        if metadatas is not None:
-            kwargs["metadatas"] = list(metadatas)
-        self._kb.add(**kwargs)
+        meta_list: list[dict[str, Any]] = []
+        for i in range(len(documents)):
+            self._ingest_seq += 1
+            m = dict(metadatas[i]) if metadatas is not None and i < len(metadatas) else {}
+            m["ingest_seq"] = self._ingest_seq
+            meta_list.append(m)
+        self._kb.add(ids=list(ids), documents=list(documents), embeddings=embs, metadatas=meta_list)
+
+    def remove_knowledge_chunks_where(self, where: Mapping[str, Any]) -> int:
+        """Usuwa chunki ``knowledge_base``, których metadane spełniają równościowo wszystkie pary z ``where``."""
+
+        def _meta_ok(m: Mapping[str, Any] | None) -> bool:
+            if not m:
+                return False
+            return all(m.get(k) == v for k, v in where.items())
+
+        if self._mode == "memory":
+            new_docs: list[str] = []
+            new_metas: list[Mapping[str, Any]] = []
+            removed = 0
+            for d, m in zip(self._kb_docs, self._kb_metas):
+                if _meta_ok(m):
+                    removed += 1
+                    continue
+                new_docs.append(d)
+                new_metas.append(m)
+            self._kb_docs = new_docs
+            self._kb_metas = new_metas
+            return removed
+        data = self._kb.get(where=dict(where))
+        ids = data.get("ids") or []
+        if not ids:
+            return 0
+        self._kb.delete(ids=ids)
+        return len(ids)
+
+    def prune_knowledge_base(self, max_documents: int) -> None:
+        """FIFO po ``ingest_seq`` / kolejności listy — utrzymuje co najwyżej ``max_documents`` chunków."""
+        if max_documents < 0:
+            return
+        if self._mode == "memory":
+            overflow = len(self._kb_docs) - max_documents
+            if overflow > 0:
+                del self._kb_docs[0:overflow]
+                del self._kb_metas[0:overflow]
+            return
+        data = self._kb.get(include=["metadatas"])
+        ids = data.get("ids") or []
+        if len(ids) <= max_documents:
+            return
+        metas_raw = data.get("metadatas") or []
+        indexed: list[tuple[int, str]] = []
+        for i, doc_id in enumerate(ids):
+            m = metas_raw[i] if i < len(metas_raw) else None
+            seq = 0
+            if isinstance(m, dict):
+                try:
+                    seq = int(m.get("ingest_seq") or 0)
+                except (TypeError, ValueError):
+                    seq = 0
+            indexed.append((seq, doc_id))
+        indexed.sort(key=lambda x: x[0])
+        to_drop = len(ids) - max_documents
+        drop_ids = [doc_id for _, doc_id in indexed[:to_drop]]
+        if drop_ids:
+            self._kb.delete(ids=drop_ids)
 
     def recall_conversations(self, query: str, k: int = 4) -> List[str]:
         if self._mode == "memory":

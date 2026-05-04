@@ -37,6 +37,17 @@ async def record_game_detection_on_game_emit(ctx: AppContext, payload: Mapping[s
                     game_label,
                     detection_method=method,
                 )
+            pstore = getattr(ctx, "player_profile_store", None)
+            if pstore is not None:
+                for chat_sid in db_ids:
+                    try:
+                        await pstore.record_snapshot(
+                            session_id=chat_sid,
+                            game_id=game_label,
+                            trigger="game_detected",
+                        )
+                    except Exception:
+                        pass
     except Exception as exc:
         _logger.debug("game_detections (game_emit) skipped: %s", exc)
 

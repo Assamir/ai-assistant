@@ -15,6 +15,7 @@ def test_defaults():
     assert cfg.llm.api_base_url == "http://localhost:1234"
     assert cfg.stt.language == "pl"
     assert cfg.observer.observer_type == "strategy"
+    assert cfg.memory.enabled is False
 
 
 def test_yaml_overrides_defaults(tmp_path):
@@ -122,3 +123,15 @@ def test_observer_skip_conditions_yaml(tmp_path):
     )
     cfg = ConfigLoader().load_config(str(path))
     assert cfg.observer.skip_conditions == ["game_paused"]
+
+
+def test_yaml_memory_section(tmp_path):
+    path = tmp_path / "c.yaml"
+    path.write_text(
+        yaml.safe_dump({"memory": {"enabled": True, "recall_top_k": 6, "chroma_persist": False}}),
+        encoding="utf-8",
+    )
+    cfg = ConfigLoader().load_config(str(path))
+    assert cfg.memory.enabled is True
+    assert cfg.memory.recall_top_k == 6
+    assert cfg.memory.chroma_persist is False

@@ -124,6 +124,12 @@ async def lifespan(app: FastAPI):
             await ctx.llm_client.aclose()
         except Exception as exc:  # pragma: no cover
             logger.debug("llm client close: %s", exc)
+        kw = getattr(ctx, "knowledge_watcher", None)
+        if kw is not None:
+            try:
+                kw.stop()
+            except Exception as exc_kw:
+                logger.debug("knowledge watcher stop: %s", exc_kw)
 
 
 app = FastAPI(

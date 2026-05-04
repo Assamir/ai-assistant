@@ -15,10 +15,48 @@ from backend.main import app
 
 
 @pytest.fixture
-async def http_client():
+async def http_client(tmp_path):
+    from pathlib import Path as Pth
+
     from backend.api.app_context import create_app_context
+    from backend.core.orchestrator import ConversationOrchestrator
+    from backend.db.migration_runner import MigrationRunner
+    from backend.mcp.context_tools import register_context_dependent_mcp_tools
+    from backend.mcp.registry import build_default_tool_registry
+    from backend.services.player_profile import PlayerProfileRepository
+
+    db_path = str(tmp_path / "sse_ctx.db")
+    MigrationRunner(db_path).run_migrations()
 
     ctx = create_app_context()
+    root = Pth(ctx.config.general.content_root).expanduser()
+    ctx.db_path = db_path
+    ctx.tool_registry = build_default_tool_registry(
+        db_path=db_path,
+        mcp_cfg=ctx.config.mcp,
+        content_root=str(root.resolve()),
+    )
+    ctx.player_profile_store = PlayerProfileRepository(
+        str((root / "data" / "player_profile.yaml").resolve()),
+        db_path,
+    )
+    pers = ctx.orchestrator.state.get("active_persona", "default")
+    if not isinstance(pers, str):
+        pers = "default"
+    ctx.orchestrator = ConversationOrchestrator(
+        configuration=ctx.config,
+        lm_client=ctx.llm_client,
+        prompt_builder=ctx.prompt_builder,
+        persona_loader=ctx.persona_loader,
+        command_matcher=ctx.command_matcher,
+        tool_registry=ctx.tool_registry,
+        active_persona=pers,
+        emitter=None,
+        db_path=db_path,
+        semantic_recall=ctx.semantic_recall,
+        player_profile_repo=ctx.player_profile_store,
+    )
+    register_context_dependent_mcp_tools(ctx)
     ctx.tts_engine = None
     app.state.ctx = ctx
     transport = ASGITransport(app=app)
@@ -100,11 +138,42 @@ async def test_voice_chat_sse_contains_token_events(http_client):
 
 @pytest.mark.asyncio
 async def test_voice_chat_sse_ends_with_done(http_client):
-    """SSE body kończy się zdarzeniem 'done'."""
+    """SSE body kończy się zdarzeniem 'done' z session_id / chat_session_id."""
+    import json as _json
+
     ac, ctx = http_client
     with patch.object(ctx.orchestrator, "stream_reply_tokens", new=_fake_stream):
         r = await ac.post("/api/v1/voice/chat", json={"text": "Hej!", "stream": True})
     assert "event: done" in r.text
+    for line in r.text.split("\n"):
+        if line.startswith("data: ") and '"ok"' in line:
+            payload = _json.loads(line[6:])
+            assert payload.get("ok") is True
+            assert payload.get("session_id")
+            assert payload.get("chat_session_id") is not None
+            assert payload.get("tool_calls") == []
+            break
+    else:
+        raise AssertionError("brak linii data: z done")
+
+
+@pytest.mark.asyncio
+async def test_voice_chat_sse_persists_sqlite_messages(http_client):
+    """SSE zapisuje user + assistant do tabeli messages (jak JSON / WS)."""
+    ac, ctx = http_client
+    from backend.db.repositories import MessageRepository
+
+    sid = "sse-sqlite-session"
+    with patch.object(ctx.orchestrator, "stream_reply_tokens", new=_fake_stream):
+        await ac.post(
+            "/api/v1/voice/chat",
+            json={"text": "Hej SSE!", "stream": True, "session_id": sid},
+        )
+    db_id = ctx.db_session_by_ws.get(sid)
+    assert db_id is not None
+    msgs = await MessageRepository(ctx.db_path).get_messages_for_session(db_id)
+    roles = {m["source"] for m in msgs}
+    assert "user" in roles and "assistant" in roles
 
 
 @pytest.mark.asyncio

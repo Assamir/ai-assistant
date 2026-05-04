@@ -16,7 +16,9 @@ from backend.core.orchestrator import ConversationOrchestrator
 from backend.core.persona_loader import PersonaLoader
 from backend.core.prompt_builder import PromptBuilder
 from backend.mcp.registry import build_default_tool_registry
+from backend.db.migration_runner import MigrationRunner
 from backend.main import app
+from backend.services.player_profile import PlayerProfileRepository
 
 
 # ─── Stub LLM ────────────────────────────────────────────────────────────────
@@ -69,10 +71,44 @@ def build_orch(tmp_path: Path):
 
 @pytest.fixture
 async def http_stub_client(tmp_path: Path):
-    """AsyncClient z app.state.ctx i handle_user_message wystawionym jako fixture."""
+    """AsyncClient z app.state.ctx; SQLite w tmp_path (bez zapisu w data/ projektu)."""
     from backend.api.app_context import create_app_context
+    from pathlib import Path as Pth
+
+    db_path = str(tmp_path / "http_e2e.db")
+    MigrationRunner(db_path).run_migrations()
 
     ctx = create_app_context()
+    root = Pth(ctx.config.general.content_root).expanduser()
+    ctx.db_path = db_path
+    ctx.tool_registry = build_default_tool_registry(
+        db_path=db_path,
+        mcp_cfg=ctx.config.mcp,
+        content_root=str(root.resolve()),
+    )
+    ctx.player_profile_store = PlayerProfileRepository(
+        str((root / "data" / "player_profile.yaml").resolve()),
+        db_path,
+    )
+    pers = ctx.orchestrator.state.get("active_persona", "default")
+    if not isinstance(pers, str):
+        pers = "default"
+    ctx.orchestrator = ConversationOrchestrator(
+        configuration=ctx.config,
+        lm_client=ctx.llm_client,
+        prompt_builder=ctx.prompt_builder,
+        persona_loader=ctx.persona_loader,
+        command_matcher=ctx.command_matcher,
+        tool_registry=ctx.tool_registry,
+        active_persona=pers,
+        emitter=None,
+        db_path=db_path,
+        semantic_recall=ctx.semantic_recall,
+        player_profile_repo=ctx.player_profile_store,
+    )
+    from backend.mcp.context_tools import register_context_dependent_mcp_tools
+
+    register_context_dependent_mcp_tools(ctx)
     app.state.ctx = ctx
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -251,6 +287,48 @@ async def test_voice_chat_content_and_emotion(http_stub_client):
     assert body["content"] == "Teraz jest 12:00."
     assert body["emotion"] == "neutral"
     assert "message_id" in body
+    assert body["tool_calls"] == []
+    assert body.get("session_id")
+    assert body.get("chat_session_id") is not None
+
+
+@pytest.mark.asyncio
+async def test_voice_chat_rest_returns_tool_calls_summary(http_stub_client):
+    """POST /voice/chat bez stream — ten sam `sessions.id` co WS, skrót tool_calls w JSON."""
+    ac, ctx = http_stub_client
+    stub = _StubLLM(
+        ChatCompletionResult(content="", tool_calls=[{
+            "id": "c1",
+            "type": "function",
+            "function": {"name": "calculator", "arguments": '{"expression":"2+2"}'},
+        }]),
+        ChatCompletionResult(content="Wynik to 4.", tool_calls=None),
+    )
+    pers = ctx.orchestrator.state.get("active_persona", "default")
+    if not isinstance(pers, str):
+        pers = "default"
+    ctx.orchestrator = ConversationOrchestrator(
+        configuration=ctx.config,
+        lm_client=stub,  # type: ignore[arg-type]
+        prompt_builder=ctx.prompt_builder,
+        persona_loader=ctx.persona_loader,
+        command_matcher=ctx.command_matcher,
+        tool_registry=ctx.tool_registry,
+        active_persona=pers,
+        emitter=None,
+        db_path=ctx.db_path,
+        semantic_recall=ctx.semantic_recall,
+        player_profile_repo=ctx.player_profile_store,
+    )
+    r = await ac.post("/api/v1/voice/chat", json={"text": "policz", "session_id": "rest-sess-1"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["session_id"] == "rest-sess-1"
+    assert isinstance(body["chat_session_id"], int) and body["chat_session_id"] >= 1
+    assert len(body["tool_calls"]) == 1
+    assert body["tool_calls"][0]["tool_name"] == "calculator"
+    assert body["tool_calls"][0]["success"] is True
+    assert "4" in body["content"]
 
 
 @pytest.mark.asyncio

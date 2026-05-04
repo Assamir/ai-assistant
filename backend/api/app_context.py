@@ -19,10 +19,13 @@ from backend.core.orchestrator import ConversationOrchestrator
 from backend.core.persona_loader import PersonaLoader
 from backend.core.prompt_builder import PromptBuilder
 from backend.db.migration_runner import MigrationRunner
+from backend.memory.knowledge_ingester import KnowledgeDirectoryWatcher, KnowledgeIngester
+from backend.memory.semantic_recall import SemanticRecall
 from backend.mcp.registry import ToolRegistry, build_default_tool_registry
 from backend.services.game_observer import GameObserver
 from backend.services.game_profile import build_game_profile_index
 from backend.services.observer_pause import ObserverPauseManager
+from backend.services.player_profile import PlayerProfileRepository
 from backend.services.session_watchdog import recover_stale_sessions
 
 _logger = logging.getLogger(__name__)
@@ -115,10 +118,57 @@ class AppContext:
     db_session_by_ws: Dict[str, int] = field(default_factory=dict)
     game_profiles: Dict[str, Any] = field(default_factory=dict)
     observer_pause_manager: Optional[Any] = None
+    semantic_recall: Optional[SemanticRecall] = None
+    knowledge_ingester: Optional[KnowledgeIngester] = None
+    knowledge_watcher: Optional[KnowledgeDirectoryWatcher] = None
+    player_profile_store: Optional[PlayerProfileRepository] = None
+
+
+def init_semantic_memory(
+    cfg: ConfigSchema,
+    root: Path,
+) -> tuple[Optional[SemanticRecall], Optional[KnowledgeIngester], Optional[KnowledgeDirectoryWatcher]]:
+    """Tworzy SemanticRecall + opcjonalny ingest / watcher wg ``cfg.memory``."""
+    if not cfg.memory.enabled:
+        return None, None, None
+
+    persist_path: Optional[str] = None
+    if cfg.memory.chroma_persist:
+        chroma_dir = (root / "data" / cfg.memory.chroma_subdir).resolve()
+        chroma_dir.mkdir(parents=True, exist_ok=True)
+        persist_path = str(chroma_dir)
+    sr = SemanticRecall(persist_directory=persist_path)
+    ing = KnowledgeIngester(
+        sr,
+        chunk_size=cfg.memory.chunk_size,
+        chunk_overlap=cfg.memory.chunk_overlap,
+        max_total_chunks=cfg.memory.max_kb_chunks,
+    )
+    kb_dir = (root / cfg.memory.knowledge_dir).resolve()
+    kb_dir.mkdir(parents=True, exist_ok=True)
+    watcher: Optional[KnowledgeDirectoryWatcher] = None
+    if cfg.memory.ingest_on_startup:
+        try:
+            n = ing.ingest_directory(kb_dir)
+            _logger.info("Knowledge ingest (%s): %s chunks", kb_dir, n)
+        except Exception as exc:
+            _logger.warning("Knowledge ingest failed: %s", exc)
+    if cfg.memory.watch_knowledge:
+        watcher = KnowledgeDirectoryWatcher(ing, kb_dir)
+        try:
+            watcher.start()
+        except Exception as exc:
+            _logger.warning("Knowledge watcher not started: %s", exc)
+            watcher = None
+    return sr, ing, watcher
 
 
 async def ensure_ws_db_session(ctx: AppContext, ws_sid: str) -> int:
-    """Tworzy wiersz `sessions` przy pierwszym kontakcie klienta WS (idempotentnie)."""
+    """Tworzy wiersz `sessions` dla klucza sesji klienta (WebSocket `sid` albo `session_id` z REST voice).
+
+    Mapa `db_session_by_ws` jest współdzielona: ten sam identyfikator (np. UUID z body) daje ten sam `sessions.id`
+    przy kolejnych żądaniach HTTP lub po rekonnekcie WS.
+    """
     existing = ctx.db_session_by_ws.get(ws_sid)
     if existing is not None:
         return existing
@@ -129,7 +179,22 @@ async def ensure_ws_db_session(ctx: AppContext, ws_sid: str) -> int:
     g = game if isinstance(game, str) else None
     db_id = await repo.start_session(game_detected=g)
     ctx.db_session_by_ws[ws_sid] = db_id
+    try:
+        await record_player_profile_snapshot_session_start(ctx, db_id)
+    except Exception:
+        pass
     return db_id
+
+
+async def record_player_profile_snapshot_session_start(ctx: AppContext, db_id: int) -> None:
+    """``player_context_snapshots`` przy pierwszym utworzeniu sesji czatu (jeśli jest profil)."""
+    store = ctx.player_profile_store
+    if store is None:
+        return
+    game = ctx.orchestrator.state.get("current_game")
+    if not isinstance(game, str) or not game.strip():
+        return
+    await store.record_snapshot(session_id=db_id, game_id=game.strip(), trigger="session_start")
 
 
 def try_build_stt_engine(cfg: ConfigSchema) -> Optional[BaseSTTEngine]:
@@ -224,6 +289,13 @@ def create_app_context() -> AppContext:
     personas_dir = root / "personas"
     personas_dir.mkdir(parents=True, exist_ok=True)
 
+    semantic_recall, knowledge_ingester, knowledge_watcher = init_semantic_memory(cfg, root)
+
+    player_profile_store = PlayerProfileRepository(
+        str((root / "data" / "player_profile.yaml").resolve()),
+        db_path,
+    )
+
     reg = build_default_tool_registry(
         db_path=db_path,
         mcp_cfg=cfg.mcp,
@@ -244,6 +316,8 @@ def create_app_context() -> AppContext:
         active_persona="default",
         emitter=None,
         db_path=db_path,
+        semantic_recall=semantic_recall,
+        player_profile_repo=player_profile_store,
     )
 
     profiles = build_game_profile_index(root, cfg)
@@ -290,6 +364,10 @@ def create_app_context() -> AppContext:
         screen_capture=screen,
         observer_loop=None,
         game_profiles=profiles,
+        semantic_recall=semantic_recall,
+        knowledge_ingester=knowledge_ingester,
+        knowledge_watcher=knowledge_watcher,
+        player_profile_store=player_profile_store,
     )
     ctx.observer_loop = ObserverLoop(ctx)
     ctx.observer_pause_manager = ObserverPauseManager(ctx)
@@ -339,4 +417,5 @@ __all__ = [
     "try_build_ocr_engine",
     "build_vision_pipeline",
     "ensure_ws_db_session",
+    "init_semantic_memory",
 ]

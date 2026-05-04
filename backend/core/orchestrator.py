@@ -15,6 +15,7 @@ from backend.core.emotion_parser import parse_emotion_tag, resolve_default_emoti
 from backend.core.persona_loader import LoadedPersona, PersonaLoader
 from backend.core.prompt_builder import PromptBuilder
 from backend.mcp.registry import ToolRegistry, _openai_tool_name
+from backend.memory.semantic_recall import SemanticRecall
 
 
 class OrchestratorState(str, Enum):
@@ -85,6 +86,8 @@ class ConversationOrchestrator:
         active_persona: str = "default",
         emitter: EmitFn | None = None,
         db_path: Optional[str] = None,
+        semantic_recall: Optional[SemanticRecall] = None,
+        player_profile_repo: Optional[Any] = None,
     ) -> None:
         self._cfg = configuration
         self._llm = lm_client
@@ -98,6 +101,8 @@ class ConversationOrchestrator:
         self._emit = emitter
         self._max_tools = configuration.ai_runtime.max_tool_calls_per_turn
         self._db_path = db_path
+        self._semantic_recall = semantic_recall
+        self._player_profile_repo = player_profile_repo
 
     def apply_configuration(
         self,
@@ -210,6 +215,11 @@ class ConversationOrchestrator:
         current_game = self.state.get("current_game")
         obs_ctx = f"Aktualnie wykryta gra: {current_game}." if current_game else None
 
+        pp_summary: Optional[str] = None
+        if self._player_profile_repo is not None:
+            gid = self.state.get("current_game")
+            pp_summary = self._player_profile_repo.summary_for_game(gid if isinstance(gid, str) else None)
+
         msgs: List[Dict[str, Any]] = self._pb.build_messages(
             assistant_name=self._cfg.general.assistant_name,
             content_root=str(self._cfg.general.content_root),
@@ -217,7 +227,22 @@ class ConversationOrchestrator:
             history_messages=list(conversation_tail),
             max_context_tokens=self._cfg.ai_runtime.max_context_tokens,
             observer_context=obs_ctx,
+            player_profile_summary=pp_summary,
         )
+        if self._semantic_recall is not None and self._cfg.memory.inject_into_prompt:
+            k = self._cfg.memory.recall_top_k
+            kb_snippets = self._semantic_recall.recall_knowledge(user_text.strip(), k=max(1, min(k, 12)))
+            if kb_snippets:
+                block = "\n\n---\n\n".join(s.strip() for s in kb_snippets if str(s).strip())
+                if block:
+                    msgs.append(
+                        {
+                            "role": "system",
+                            "content": (
+                                "[Baza wiedzy — fragmenty z plików użytkownika; mogą być niekompletne.]\n" + block
+                            ),
+                        }
+                    )
         msgs.append({"role": "user", "content": user_text})
 
         tool_calls_done = 0
