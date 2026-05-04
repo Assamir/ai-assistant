@@ -6,7 +6,7 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from backend.ai.llm_client import LMStudioClient
 from backend.config.loader import ConfigLoader
@@ -17,6 +17,7 @@ from backend.core.orchestrator import ConversationOrchestrator
 from backend.core.persona_loader import PersonaLoader
 from backend.core.prompt_builder import PromptBuilder
 from backend.mcp.registry import ToolRegistry, build_default_tool_registry
+from backend.services.game_observer import GameObserver
 
 _logger = logging.getLogger(__name__)
 
@@ -92,6 +93,7 @@ class AppContext:
     websocket_manager: WebSocketManager
     stt_engine: Optional[BaseSTTEngine] = None
     tts_engine: Optional[BaseTTSEngine] = None
+    game_observer: Optional[GameObserver] = None
 
 
 def _try_build_stt_engine(cfg: ConfigSchema) -> Optional[BaseSTTEngine]:
@@ -142,6 +144,8 @@ def create_app_context() -> AppContext:
         emitter=None,
     )
 
+    obs = GameObserver(cfg.observer)
+
     return AppContext(
         config=cfg,
         conversation=ConversationStore(),
@@ -154,7 +158,18 @@ def create_app_context() -> AppContext:
         websocket_manager=WebSocketManager(),
         stt_engine=_try_build_stt_engine(cfg),
         tts_engine=_try_build_tts_engine(cfg),
+        game_observer=obs,
     )
 
 
-__all__ = ["AppContext", "ConversationStore", "WebSocketManager", "create_app_context"]
+def make_game_emitter(ctx: AppContext):
+    """Returns an async emitter that updates orchestrator state and broadcasts over WebSocket."""
+    async def _emit(event_name: str, payload: Mapping[str, Any]) -> None:
+        if event_name == "game_detected":
+            ctx.orchestrator.state["current_game"] = payload.get("game")
+        for sid in list(ctx.websocket_manager._by_session.keys()):
+            await ctx.websocket_manager.send_to_session(sid, event_name, dict(payload))
+    return _emit
+
+
+__all__ = ["AppContext", "ConversationStore", "WebSocketManager", "create_app_context", "make_game_emitter"]

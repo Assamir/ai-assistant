@@ -164,12 +164,16 @@ class ConversationOrchestrator:
         persona = self._resolve_persona()
         tools_payload = self._registry.openai_tools()
 
+        current_game = self.state.get("current_game")
+        obs_ctx = f"Aktualnie wykryta gra: {current_game}." if current_game else None
+
         msgs: List[Dict[str, Any]] = self._pb.build_messages(
             assistant_name=self._cfg.general.assistant_name,
             content_root=str(self._cfg.general.content_root),
             persona_body_markdown=persona.body_markdown,
             history_messages=list(conversation_tail),
             max_context_tokens=self._cfg.ai_runtime.max_context_tokens,
+            observer_context=obs_ctx,
         )
         msgs.append({"role": "user", "content": user_text})
 

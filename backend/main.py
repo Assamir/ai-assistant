@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket
 
-from backend.api.app_context import create_app_context
+from backend.api.app_context import create_app_context, make_game_emitter
 from backend.api.routes import router as api_router
 from backend.api.ws_router import websocket_endpoint
 
@@ -22,15 +22,16 @@ async def lifespan(app: FastAPI):
     ctx = create_app_context()
     app.state.ctx = ctx
 
+    if ctx.game_observer is not None:
+        ctx.game_observer._emit = make_game_emitter(ctx)
+        await ctx.game_observer.start()
 
     try:
         yield
     finally:
-
-
+        if ctx.game_observer is not None:
+            await ctx.game_observer.stop()
         try:
-
-
             await ctx.llm_client.aclose()
         except Exception as exc:  # pragma: no cover
             logger.debug("llm client close: %s", exc)

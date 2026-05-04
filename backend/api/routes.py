@@ -98,6 +98,16 @@ async def api_status(dep: Deps):
 
             "persona": {"active": dep.orchestrator.state.get("active_persona", "default")},
 
+
+
+            "observer": {
+
+                "running": dep.game_observer.is_running if dep.game_observer else False,
+
+                "current_game": dep.orchestrator.state.get("current_game"),
+
+            },
+
         }
 
     )
