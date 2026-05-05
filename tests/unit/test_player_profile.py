@@ -102,3 +102,57 @@ async def test_archive_unknown_game_returns_none(tmp_path):
     repo.save(PlayerProfile())
     aid = await repo.archive_game_entry(game_id="nope", season="S1", reason="manual")
     assert aid is None
+
+
+def test_patch_game_league_and_archive_hint(tmp_path):
+    path = tmp_path / "p.yaml"
+    db_path = str(tmp_path / "x.db")
+    MigrationRunner(db_path).run_migrations()
+    repo = PlayerProfileRepository(str(path), db_path)
+    repo.save(
+        PlayerProfile(
+            games={
+                "poe2": GameEntry(
+                    league="S1",
+                    active_character="A",
+                    characters=[Character(name="A", char_class="W")],
+                )
+            }
+        )
+    )
+    out = repo.patch_game_entry(
+        "poe2",
+        league="S2",
+        update_league=True,
+        update_game_version=False,
+    )
+    assert out is not None
+    assert out["league_changed"] is True
+    assert out["archive_recommended"] is True
+    assert out["previous_league"] == "S1"
+    loaded = repo.load()
+    assert loaded.games["poe2"].league == "S2"
+
+
+def test_set_active_character(tmp_path):
+    path = tmp_path / "a.yaml"
+    db_path = str(tmp_path / "y.db")
+    MigrationRunner(db_path).run_migrations()
+    repo = PlayerProfileRepository(str(path), db_path)
+    repo.save(
+        PlayerProfile(
+            games={
+                "g1": GameEntry(
+                    characters=[
+                        Character(name="One", char_class="X"),
+                        Character(name="Two", char_class="Y"),
+                    ],
+                )
+            }
+        )
+    )
+    bad = repo.set_active_character_name("g1", "Nope")
+    assert bad.get("ok") is False
+    good = repo.set_active_character_name("g1", "Two")
+    assert good.get("ok") is True
+    assert repo.load().games["g1"].active_character == "Two"

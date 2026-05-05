@@ -197,6 +197,64 @@ class PlayerProfileRepository:
         repo = PlayerProfileArchiveRepository(self._db_path)
         return await repo.list_recent(game=game, limit=limit)
 
+    def patch_game_entry(
+        self,
+        game_id: str,
+        *,
+        league: Optional[str] = None,
+        game_version: Optional[str] = None,
+        update_league: bool = False,
+        update_game_version: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        """Częściowa aktualizacja ``league`` / ``game_version``. Zwraca ``None`` gdy brak gry w profilu."""
+        gid = str(game_id).strip()
+        if not gid or (not update_league and not update_game_version):
+            return None
+        profile = self.load()
+        entry = profile.games.get(gid)
+        if entry is None:
+            return None
+        prev_league = entry.league
+        prev_ver = entry.game_version
+        if update_league:
+            entry.league = "" if league is None else str(league)
+        if update_game_version:
+            entry.game_version = "" if game_version is None else str(game_version)
+        profile.games[gid] = entry
+        self.save(profile)
+        league_changed = update_league and prev_league != entry.league
+        ver_changed = update_game_version and prev_ver != entry.game_version
+        archive_recommended = league_changed and bool(str(prev_league).strip())
+        return {
+            "game": gid,
+            "league_changed": league_changed,
+            "game_version_changed": ver_changed,
+            "previous_league": prev_league if update_league else None,
+            "league": entry.league if update_league else prev_league,
+            "previous_game_version": prev_ver if update_game_version else None,
+            "game_version": entry.game_version if update_game_version else prev_ver,
+            "archive_recommended": archive_recommended,
+            "profile": profile,
+        }
+
+    def set_active_character_name(self, game_id: str, character_name: str) -> Dict[str, Any]:
+        """Ustawia ``active_character`` jeśli istnieje w ``characters``."""
+        gid = str(game_id).strip()
+        name_clean = str(character_name).strip()
+        if not gid or not name_clean:
+            return {"ok": False, "error": "invalid_input"}
+        profile = self.load()
+        entry = profile.games.get(gid)
+        if entry is None:
+            return {"ok": False, "error": "game_not_in_profile"}
+        names = [c.name for c in entry.characters]
+        if name_clean not in names:
+            return {"ok": False, "error": "character_not_in_list", "characters": names}
+        entry.active_character = name_clean
+        profile.games[gid] = entry
+        self.save(profile)
+        return {"ok": True, "active_character": name_clean, "profile": profile}
+
 
 __all__ = [
     "Character",

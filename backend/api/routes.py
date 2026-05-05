@@ -19,7 +19,7 @@ import os
 import uuid
 
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
 
@@ -266,6 +266,69 @@ async def api_player_profile(dep: Deps):
     prof = store.load()
 
     return {"path": str(store.path), "profile": json.loads(prof.model_dump_json())}
+
+
+class PlayerProfileGamePatchBody(BaseModel):
+    league: Optional[str] = None
+    game_version: Optional[str] = None
+
+
+class PlayerProfileActiveCharacterBody(BaseModel):
+    character: str = Field(..., min_length=1, max_length=256)
+
+
+@router.patch("/player-profile/games/{game}")
+async def api_player_profile_patch_game(game: str, body: PlayerProfileGamePatchBody, dep: Deps):
+    store = dep.player_profile_store
+    if store is None:
+        raise HTTPException(status_code=503, detail={"code": "PLAYER_PROFILE_UNAVAILABLE"})
+    fields_set = body.model_fields_set
+    if "league" not in fields_set and "game_version" not in fields_set:
+        raise HTTPException(status_code=400, detail={"code": "EMPTY_PATCH"})
+    out = store.patch_game_entry(
+        game,
+        league=body.league,
+        game_version=body.game_version,
+        update_league="league" in fields_set,
+        update_game_version="game_version" in fields_set,
+    )
+    if out is None:
+        raise HTTPException(status_code=404, detail={"code": "GAME_NOT_IN_PROFILE"})
+    profile = out.pop("profile")
+    if out.get("archive_recommended"):
+        payload = {
+            "game": out["game"],
+            "previous_league": out.get("previous_league"),
+            "league": out.get("league"),
+            "archive_recommended": True,
+            "hint": "POST /api/v1/player-profile/games/{game}/archive — profil YAML nie jest czyszczony automatycznie.",
+        }
+        for sid in dep.websocket_manager.iter_session_ids():
+            try:
+                await dep.websocket_manager.send_to_session(sid, "player_profile.league_changed", payload)
+            except Exception:
+                pass
+    return {**out, "profile": json.loads(profile.model_dump_json())}
+
+
+@router.post("/player-profile/games/{game}/active-character")
+async def api_player_profile_set_active_character(game: str, body: PlayerProfileActiveCharacterBody, dep: Deps):
+    store = dep.player_profile_store
+    if store is None:
+        raise HTTPException(status_code=503, detail={"code": "PLAYER_PROFILE_UNAVAILABLE"})
+    result = store.set_active_character_name(game, body.character)
+    if not result.get("ok"):
+        code = str(result.get("error", "error"))
+        if code == "game_not_in_profile":
+            raise HTTPException(status_code=404, detail={"code": code})
+        if code == "character_not_in_list":
+            raise HTTPException(
+                status_code=422,
+                detail={"code": code, "characters": result.get("characters", [])},
+            )
+        raise HTTPException(status_code=400, detail={"code": code})
+    profile = result.pop("profile")
+    return {"active_character": result["active_character"], "profile": json.loads(profile.model_dump_json())}
 
 
 
