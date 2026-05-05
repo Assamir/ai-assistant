@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { readApiBaseUrl } from "./apiBase";
 import { AvatarCanvas } from "./AvatarCanvas";
 import { ConfigPanel, type ConfigTabId } from "./ConfigPanel";
+import { SetupWizard, SETUP_WIZARD_STORAGE_KEY, hasSetupWizardDismissed } from "./SetupWizard";
 import { useAudioStreamPlayer } from "./useAudioStreamPlayer";
 import { useWebSocket, type WsFrame } from "./useWebSocket";
 
@@ -46,6 +47,9 @@ export function App() {
   const [ttsVoiceSpeed, setTtsVoiceSpeed] = useState("1");
   const [busyConfig, setBusyConfig] = useState(false);
   const [configMessage, setConfigMessage] = useState<string | null>(null);
+  const [showWizard, setShowWizard] = useState(
+    () => typeof window !== "undefined" && !hasSetupWizardDismissed(),
+  );
 
   const { feedAudioChunk, isSpeaking, mouthLevel, stop: stopAudio } = useAudioStreamPlayer();
 
@@ -257,8 +261,27 @@ export function App() {
       </div>
 
       <p style={{ marginTop: "1.5rem", fontSize: 12, color: "#6d6680" }}>
-        <code>npm run dev</code> → Vite · <code>ASSYSTENT_DEV=1 npm run electron</code> → okno Electron.
+        <code>npm run dev</code> → Vite · <code>ASSYSTENT_DEV=1 npm run electron</code> → okno Electron.{" "}
+        <button
+          type="button"
+          onClick={() => {
+            localStorage.removeItem(SETUP_WIZARD_STORAGE_KEY);
+            setShowWizard(true);
+          }}
+          style={btnMuted}
+        >
+          Kreator startowy
+        </button>
+        {" · "}Zmienne: <code>docs/ENV_SETUP.md</code>
       </p>
+
+      {showWizard ? (
+        <SetupWizard
+          apiBase={apiBase}
+          onFinish={() => setShowWizard(false)}
+          onOpenConnectionSettings={() => setConfigTab("connection")}
+        />
+      ) : null}
     </main>
   );
 }

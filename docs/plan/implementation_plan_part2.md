@@ -1,32 +1,32 @@
 # Assystent — Plan Implementacji: Fazy 2–3, Testy, Modele AI
 
-> **Status:** v1.9 — 2026-05-05 (lip-sync RMS Web Audio; idle kości; `PUT /api/v1/config` + CORS; panel API/status/TTS; test integracyjny config)
-> **Kontekst:** [Plan główny (Faza 1)](implementation_plan.md) · [TEST_PLAN](TEST_PLAN.md) · [DEFINITION_OF_DONE](DEFINITION_OF_DONE.md) · [RISK_REGISTER](RISK_REGISTER.md) · [ROADMAP](IMPLEMENTATION_ROADMAP.md)
+> **Status:** v1.10 — 2026-05-06 (`docs/ENV_SETUP.md`; CORS z `ASSYSTENT_CORS_ORIGINS`; Setup Wizard + `frontend/build/README.txt` dla ikon)
+> **Kontekst:** [Plan główny (Faza 1)](implementation_plan.md) · [ENV_SETUP](../ENV_SETUP.md) · [TEST_PLAN](TEST_PLAN.md) · [DEFINITION_OF_DONE](DEFINITION_OF_DONE.md) · [RISK_REGISTER](RISK_REGISTER.md) · [ROADMAP](IMPLEMENTATION_ROADMAP.md)
 
 ---
 
-## Stan wdrożenia — 2026-05-05 (v1.9)
+## Stan wdrożenia — 2026-05-06 (v1.10)
 
 
-| Zakres                    | Stan        | Uwagi                                                                                                                                                                                                    |
-| ------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **T5** Screen / VLM / OCR | 🟢 ~80%     | Crop z `GameProfile.screen_regions` (`apply_profile_crop_to_png` w `ObserverLoop`); pozostałe integracje/regresje VLM                                                                                    |
-| **T6** Observer / gry     | 🟢 ~95%     | VLM fallback przez `probe_game_identity_from_screen` + hook w `GameObserver` (`vlm_fallback_game_detection`), `game_detections` repo (wcześniej)                                                         |
-| **T7** MCP rozszerzenia   | 🟢 ~95%     | Narzędzia MCP + cache + rate; `tool_calls` w SQLite przy WS/REST/SSE (`ToolCallsRepository`); odpowiedź JSON + `done` SSE z `session_id` / `chat_session_id`                                             |
-| **T8** Memory / profil    | 🟢 ~70%     | `SemanticRecall` + `KnowledgeIngester` + config `memory` + FIFO; **`PlayerProfileRepository`** (`data/player_profile.yaml`) + `PlayerContextSnapshotRepository` + prompt + **`GET /api/v1/player-profile`**; brak auto resetu sezonu / daily meta pełnego                   |
-| **T9–T14** Frontend       | 🟢 ~85%     | Jak v1.8 + **lip-sync** (`AnalyserNode` / RMS → `aa`); **idle** klatka piersiowa na `chest`/`spine`/`hips`; **REST** zapis konfiguracji **`PUT /api/v1/config`** (merge + YAML + hot-reload) + **CORS** w `main.py`; panel: URL API, status JSON, **TTS voice_speed**; responsywny grid. Dalej: Setup Wizard, ikony NSIS, pełny shader aury. |
+| Zakres                    | Stan    | Uwagi                                                                                                                                                                                                                                                                                        |
+| ------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **T5** Screen / VLM / OCR | 🟢 ~80% | Crop z `GameProfile.screen_regions` (`apply_profile_crop_to_png` w `ObserverLoop`); pozostałe integracje/regresje VLM                                                                                                                                                                        |
+| **T6** Observer / gry     | 🟢 ~95% | VLM fallback przez `probe_game_identity_from_screen` + hook w `GameObserver` (`vlm_fallback_game_detection`), `game_detections` repo (wcześniej)                                                                                                                                             |
+| **T7** MCP rozszerzenia   | 🟢 ~95% | Narzędzia MCP + cache + rate; `tool_calls` w SQLite przy WS/REST/SSE (`ToolCallsRepository`); odpowiedź JSON + `done` SSE z `session_id` / `chat_session_id`                                                                                                                                 |
+| **T8** Memory / profil    | 🟢 ~70% | `SemanticRecall` + `KnowledgeIngester` + config `memory` + FIFO; `**PlayerProfileRepository`** (`data/player_profile.yaml`) + `PlayerContextSnapshotRepository` + prompt + `**GET /api/v1/player-profile`**; brak auto resetu sezonu / daily meta pełnego                                    |
+| **T9–T14** Frontend       | 🟢 ~88% | v1.9 + **Setup Wizard** (pierwsze uruchomienie + przycisk „Kreator startowy”); `**docs/ENV_SETUP.md`**; CORS konfigurowalny (`ASSYSTENT_CORS_ORIGINS`, wildcard bez credentials); `**frontend/build/README.txt`** pod ikonę NSIS. Dalej: ikona w repo, crossfade emocji, auth `PUT /config`. |
 
 
 **Kamienie M2 i M3** — **prawie**: backend + frontend Fazy 3 z API konfiguracji i klipem audio; do zamknięcia milestone: polish release (ikony, wizard, dokumentacja).
 
-> **Następny krok (po v1.9):** Setup Wizard (kroki); ikony `electron-builder`; `docs/ENV_SETUP.md`; opcjonalnie auth na `PUT /config`.
+> **Następny krok (po v1.10):** ikona `build/icon.png` w repozytorium lub pipeline; opcjonalnie auth na `PUT /config`; crossfade emocji / aura; T8 archiwum sezonu.
 
 ---
 
-## Pozostały zakres (po v1.9)
+## Pozostały zakres (po v1.10)
 
 - **T8 dopiski:** archiwum sezonu → `player_profile_archives`, daily meta check, komendy zmiany postaci.
-- **T10–T14 dopiski:** aura shader / crossfade emocji; kreator ustawień (wizard); hardening CORS (origins z ENV); README/CHANGELOG; ikony instalatora.
+- **T10–T14 dopiski:** dodać **icon.png** do `frontend/build/` (patrz README); warstwy emocji + aura; README/CHANGELOG; auth na `PUT /config` jeśli backend publiczny.
 
 ## 6. Faza 2 — Vision, MCP, Memory (T5–T8)
 

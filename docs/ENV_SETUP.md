@@ -958,3 +958,31 @@ Przed pierwszym uruchomieniem backendu, upewnij się:
 | **Polski domyślny** | Piper: głos PL żeński; EasyOCR: `["pl", "en"]`; Whisper: `language=auto` |
 | **env > config** | Ścieżki modeli można nadpisać przez zmienne środowiskowe (WHISPER_MODEL_PATH, etc.) |
 | **Komunikacja błędów głosem** | verify_env.py identyfikuje brakujące modele; backend przy starcie loguje problem i informuje głosowo gdy TTS dostępny |
+
+---
+
+## 11. Suplement (2026-05) — CORS, REST z przeglądarki, skrót `ASSY_*`
+
+### 11.1 CORS — `ASSYSTENT_CORS_ORIGINS`
+
+| Wartość | Zachowanie |
+|---------|------------|
+| *(puste)* lub `*` | `Access-Control-Allow-Origin: *`, **bez** nagłówka credentiale (zgodnie z ograniczeniami przeglądarek). |
+| Lista po przecinku, np. `http://localhost:5173,http://127.0.0.1:5173` | Tylko te originy; **włączone** `Access-Control-Allow-Credentials`. |
+
+### 11.2 Prefiks konfiguracji `ASSY_*`
+
+Ładowanie: domyślne Pydantic → YAML w `content_root` (`config/config.yaml`) → nadpisania **ENV** `ASSY_<sekcja>__<pole>` (podwójne `__` dla zagnieżdżeń), np. `ASSY_LLM__API_BASE_URL`, `ASSY_MEMORY__ENABLED`. Szczegóły: `backend/config/loader.py`, model: `backend/config/schema.py`.
+
+### 11.3 Frontend / Electron (preload)
+
+| Zmienna | Zastosowanie |
+|---------|----------------|
+| `ASSYSTENT_WS_URL` / `VITE_WS_URL` | Pełny URL WebSocket (`/ws`). |
+| `ASSYSTENT_API_URL` / `VITE_API_BASE_URL` | Bazowy URL HTTP (`/api/v1/...`). |
+| `ASSYSTENT_VRM_URL` / `VITE_VRM_URL` | Opcjonalny domyślny URL modelu VRM. |
+| `ASSYSTENT_DEV` | `1` — Electron ładuje serwer Vite i DevTools. |
+
+### 11.4 `PUT /api/v1/config` (FastAPI)
+
+Częściowy merge JSON do istniejącego pliku YAML w `content_root` (wymaga zapisanego `config/config.yaml`); po sukcesie **hot-reload** (`apply_reload_configuration`). Przykład z UI: panel **Więcej** → prędkość TTS (`tts.voice_speed`).
