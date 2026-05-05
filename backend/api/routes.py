@@ -331,6 +331,44 @@ async def api_player_profile_set_active_character(game: str, body: PlayerProfile
     return {"active_character": result["active_character"], "profile": json.loads(profile.model_dump_json())}
 
 
+class LeagueHintBody(BaseModel):
+    broadcast: bool = False
+
+
+@router.post("/player-profile/games/{game}/check-league-hint")
+async def api_player_profile_check_league_hint(game: str, body: LeagueHintBody, dep: Deps):
+    from backend.services.league_hint import analyze_league_hint
+
+    out = await analyze_league_hint(dep, game)
+    if not out.get("ok"):
+        code = str(out.get("error", "error"))
+        if code == "game_not_in_profile":
+            raise HTTPException(status_code=404, detail={"code": code})
+        if code == "no_player_profile":
+            raise HTTPException(status_code=503, detail={"code": code})
+        if code == "empty_game":
+            raise HTTPException(status_code=400, detail={"code": code})
+        if code == "web_search_unavailable":
+            raise HTTPException(status_code=503, detail={"code": code, "hint": out.get("hint")})
+        if code == "search_failed":
+            raise HTTPException(status_code=502, detail={"code": code, "detail": out.get("detail")})
+        raise HTTPException(status_code=500, detail={"code": code})
+    if body.broadcast and out.get("mismatch_hint"):
+        payload = {
+            "game": out["game"],
+            "profile_league": out.get("profile_league"),
+            "mismatch_hint": True,
+            "archive_suggested": out.get("archive_suggested"),
+            "query": out.get("query"),
+            "hint": "Zweryfikuj ligę (PATCH /player-profile/games/{game}) lub archiwum (POST .../archive).",
+        }
+        for sid in dep.websocket_manager.iter_session_ids():
+            try:
+                await dep.websocket_manager.send_to_session(sid, "player_profile.league_hint", payload)
+            except Exception:
+                pass
+    return out
+
 
 
 
