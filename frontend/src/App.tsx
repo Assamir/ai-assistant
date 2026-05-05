@@ -1,10 +1,12 @@
 import React, { useCallback, useMemo, useState } from "react";
+import { readApiBaseUrl } from "./apiBase";
 import { AvatarCanvas } from "./AvatarCanvas";
 import { ConfigPanel, type ConfigTabId } from "./ConfigPanel";
 import { useAudioStreamPlayer } from "./useAudioStreamPlayer";
 import { useWebSocket, type WsFrame } from "./useWebSocket";
 
 const VRM_STORAGE_KEY = "assystent.vrmUrl";
+const API_BASE_STORAGE_KEY = "assystent.apiBaseUrl";
 
 function readInitialVrmUrl(): string {
   if (typeof window === "undefined") {
@@ -21,13 +23,31 @@ function readInitialVrmUrl(): string {
   return import.meta.env.VITE_VRM_URL?.trim() || "";
 }
 
+function readInitialApiBase(): string {
+  if (typeof window === "undefined") {
+    return "http://127.0.0.1:8000";
+  }
+  const stored = localStorage.getItem(API_BASE_STORAGE_KEY)?.trim();
+  if (stored) {
+    return stored.replace(/\/$/, "");
+  }
+  return readApiBaseUrl();
+}
+
 export function App() {
   const [log, setLog] = useState<string[]>([]);
   const [emotion, setEmotion] = useState("neutral");
   const [configTab, setConfigTab] = useState<ConfigTabId>("connection");
   const [vrmUrl, setVrmUrl] = useState(readInitialVrmUrl);
+  const [apiBase, setApiBase] = useState(readInitialApiBase);
+  const [statusJson, setStatusJson] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [busyStatus, setBusyStatus] = useState(false);
+  const [ttsVoiceSpeed, setTtsVoiceSpeed] = useState("1");
+  const [busyConfig, setBusyConfig] = useState(false);
+  const [configMessage, setConfigMessage] = useState<string | null>(null);
 
-  const { feedAudioChunk, isSpeaking, stop: stopAudio } = useAudioStreamPlayer();
+  const { feedAudioChunk, isSpeaking, mouthLevel, stop: stopAudio } = useAudioStreamPlayer();
 
   const onFrame = useCallback(
     (f: WsFrame) => {
@@ -59,6 +79,71 @@ export function App() {
     localStorage.setItem(VRM_STORAGE_KEY, u);
   }, []);
 
+  const saveApiBase = useCallback((next: string) => {
+    let u = next.trim().replace(/\/$/, "");
+    if (!u) {
+      u = readApiBaseUrl();
+    }
+    setApiBase(u);
+    localStorage.setItem(API_BASE_STORAGE_KEY, u);
+  }, []);
+
+  const fetchStatus = useCallback(async () => {
+    setBusyStatus(true);
+    setStatusError(null);
+    setConfigMessage(null);
+    try {
+      const res = await fetch(`${apiBase}/api/v1/status`);
+      const text = await res.text();
+      if (!res.ok) {
+        setStatusJson(null);
+        setStatusError(`HTTP ${res.status}: ${text.slice(0, 400)}`);
+        return;
+      }
+      try {
+        setStatusJson(JSON.stringify(JSON.parse(text), null, 2));
+      } catch {
+        setStatusJson(text);
+      }
+    } catch (e) {
+      setStatusJson(null);
+      setStatusError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusyStatus(false);
+    }
+  }, [apiBase]);
+
+  const applyTtsSpeed = useCallback(async () => {
+    const spd = Number(ttsVoiceSpeed);
+    if (!Number.isFinite(spd) || spd < 0.25 || spd > 3) {
+      setConfigMessage("Prędkość musi być liczbą 0.25–3.");
+      return;
+    }
+    setBusyConfig(true);
+    setConfigMessage(null);
+    try {
+      const res = await fetch(`${apiBase}/api/v1/config`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ patch: { tts: { voice_speed: spd } } }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail =
+          typeof data === "object" && data && "detail" in data
+            ? JSON.stringify((data as { detail: unknown }).detail)
+            : res.statusText;
+        setConfigMessage(`Błąd ${res.status}: ${detail}`);
+        return;
+      }
+      setConfigMessage("Zapisano — backend przeładowany (hot-reload).");
+    } catch (e) {
+      setConfigMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusyConfig(false);
+    }
+  }, [apiBase, ttsVoiceSpeed]);
+
   const layout = useMemo(
     () => ({
       fontFamily: "system-ui, Segoe UI, sans-serif",
@@ -77,10 +162,11 @@ export function App() {
     <main style={layout}>
       <h1 style={{ fontSize: "1.65rem", fontWeight: 600, margin: "0 0 0.25rem" }}>Assystent</h1>
       <p style={{ margin: "0 0 1.25rem", color: "#b8afc8", fontSize: 15 }}>
-        T10–T14: VRM, emocje z WS, audio WAV z multiplexu, konfiguracja, pakiet <code>electron-builder</code>.
+        Avatar VRM, lip-sync z audio, idle; REST <code>PUT /api/v1/config</code> + panel statusu.
       </p>
 
       <div
+        className="assystent-grid"
         style={{
           display: "grid",
           gridTemplateColumns: "minmax(0, 1fr) minmax(280px, 340px)",
@@ -89,10 +175,10 @@ export function App() {
         }}
       >
         <div>
-          <AvatarCanvas vrmUrl={vrmUrl} emotion={emotion} lipSync={isSpeaking} />
+          <AvatarCanvas vrmUrl={vrmUrl} emotion={emotion} lipSyncLevel={isSpeaking ? mouthLevel : 0} />
           <p style={{ margin: "0.5rem 0 0", fontSize: 12, color: "#8a8198" }}>
             Emocja (z WS): <strong style={{ color: "#d4ccec" }}>{emotion}</strong>
-            {isSpeaking ? " · odtwarzanie TTS" : ""}
+            {isSpeaking ? " · TTS (lip-sync)" : ""}
           </p>
 
           <section style={{ marginTop: "1.25rem" }}>
@@ -156,6 +242,17 @@ export function App() {
           wsStatus={status}
           vrmUrl={vrmUrl}
           onVrmSave={saveVrmUrl}
+          apiBaseUrl={apiBase}
+          onApiBaseSave={saveApiBase}
+          onFetchStatus={fetchStatus}
+          statusJson={statusJson}
+          statusError={statusError}
+          busyStatus={busyStatus}
+          ttsVoiceSpeed={ttsVoiceSpeed}
+          onTtsVoiceSpeedChange={setTtsVoiceSpeed}
+          onApplyTtsSpeed={applyTtsSpeed}
+          busyConfig={busyConfig}
+          configMessage={configMessage}
         />
       </div>
 

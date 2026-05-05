@@ -10,6 +10,7 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket
+from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.app_context import create_app_context, make_game_emitter
 from backend.api.routes import router as api_router
@@ -138,6 +139,14 @@ app = FastAPI(
     description="Local AI gaming companion with 3D avatar",
     version="0.4.0",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 

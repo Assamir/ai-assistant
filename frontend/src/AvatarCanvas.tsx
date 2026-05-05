@@ -25,11 +25,12 @@ function applyEmotion(vrm: VRM | null, emotion: string) {
 interface VrmRootProps {
   url: string;
   emotion: string;
-  lipSync: boolean;
+  lipSyncLevel: number;
 }
 
-function VrmRoot({ url, emotion, lipSync }: VrmRootProps) {
+function VrmRoot({ url, emotion, lipSyncLevel }: VrmRootProps) {
   const vrmRef = useRef<VRM | null>(null);
+  const idleBonesRef = useRef<{ bone: THREE.Object3D; rest: THREE.Quaternion }[]>([]);
 
   const gltf = useLoader(GLTFLoader, url, (loader) => {
     loader.register((parser) => new VRMLoaderPlugin(parser));
@@ -38,11 +39,22 @@ function VrmRoot({ url, emotion, lipSync }: VrmRootProps) {
   useEffect(() => {
     const raw = gltf.userData.vrm as VRM | undefined;
     vrmRef.current = raw ?? null;
+    idleBonesRef.current = [];
+    if (raw?.humanoid) {
+      const h = raw.humanoid;
+      for (const name of ["chest", "spine", "hips"] as const) {
+        const node = h.getNormalizedBoneNode(name);
+        if (node) {
+          idleBonesRef.current.push({ bone: node, rest: node.quaternion.clone() });
+        }
+      }
+    }
     if (raw) {
       applyEmotion(raw, emotion);
     }
     return () => {
       vrmRef.current = null;
+      idleBonesRef.current = [];
     };
   }, [gltf, emotion]);
 
@@ -52,11 +64,18 @@ function VrmRoot({ url, emotion, lipSync }: VrmRootProps) {
       return;
     }
     vrm.update(delta);
+    const t = state.clock.elapsedTime;
+    for (const { bone, rest } of idleBonesRef.current) {
+      bone.quaternion.copy(rest);
+      bone.rotateX(Math.sin(t * 0.95) * 0.014);
+      bone.rotateZ(Math.cos(t * 0.42) * 0.005);
+    }
     const em = vrm.expressionManager;
-    if (lipSync && em) {
-      const t = state.clock.elapsedTime;
-      const v = (Math.sin(t * 13) * 0.5 + 0.5) * 0.6;
-      em.setValue("aa", v);
+    if (em) {
+      const lip = lipSyncLevel > 0.035 ? Math.min(1, lipSyncLevel * 0.95) : 0;
+      if (lip > 0) {
+        em.setValue("aa", lip);
+      }
     }
   });
 
@@ -82,10 +101,10 @@ function AuraLight() {
 interface AvatarCanvasProps {
   vrmUrl: string;
   emotion: string;
-  lipSync: boolean;
+  lipSyncLevel: number;
 }
 
-export function AvatarCanvas({ vrmUrl, emotion, lipSync }: AvatarCanvasProps) {
+export function AvatarCanvas({ vrmUrl, emotion, lipSyncLevel }: AvatarCanvasProps) {
   const trimmed = vrmUrl.trim();
 
   return (
@@ -104,7 +123,7 @@ export function AvatarCanvas({ vrmUrl, emotion, lipSync }: AvatarCanvasProps) {
           <directionalLight position={[3, 6, 4]} intensity={1.05} castShadow />
           <AuraLight />
           <Suspense fallback={null}>
-            <VrmRoot url={trimmed} emotion={emotion} lipSync={lipSync} />
+            <VrmRoot url={trimmed} emotion={emotion} lipSyncLevel={lipSyncLevel} />
           </Suspense>
           <OrbitControls
             target={[0, 1.1, 0]}

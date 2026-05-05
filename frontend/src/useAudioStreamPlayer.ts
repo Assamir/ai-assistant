@@ -1,15 +1,37 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
- * Składa kolejne `audio_stream.chunk_base64` z WS (jeden WAV w Base64, pocięty na struny)
- * i odtwarza po krótkiej ciszy między kawałkami.
+ * Składa kolejne `audio_stream.chunk_base64` z WS (jeden WAV w Base64, pocięty na struny),
+ * odtwarza przez Web Audio API i udostępnia poziom RMS do lip-sync.
  */
 export function useAudioStreamPlayer() {
   const bufferRef = useRef("");
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const genRef = useRef(0);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const rafRef = useRef<number | null>(null);
+
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [mouthLevel, setMouthLevel] = useState(0);
+
+  const interruptPlayback = useCallback(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    const src = sourceRef.current;
+    if (src) {
+      try {
+        src.stop();
+      } catch {
+        /* already ended */
+      }
+      sourceRef.current = null;
+    }
+    setMouthLevel(0);
+    setIsSpeaking(false);
+  }, []);
 
   const stop = useCallback(() => {
     bufferRef.current = "";
@@ -18,52 +40,83 @@ export function useAudioStreamPlayer() {
       clearTimeout(flushTimerRef.current);
       flushTimerRef.current = null;
     }
-    const a = audioRef.current;
-    if (a) {
+    interruptPlayback();
+  }, [interruptPlayback]);
+
+  const playFromWavBytes = useCallback(
+    async (bytes: Uint8Array, myGen: number) => {
+      if (myGen !== genRef.current) {
+        return;
+      }
+
+      interruptPlayback();
+
+      const ctx = audioCtxRef.current ?? new AudioContext();
+      audioCtxRef.current = ctx;
+
       try {
-        a.pause();
+        await ctx.resume();
       } catch {
         /* ignore */
       }
-      const src = a.src;
-      if (src?.startsWith("blob:")) {
-        URL.revokeObjectURL(src);
-      }
-      audioRef.current = null;
-    }
-    setIsSpeaking(false);
-  }, []);
 
-  const playBlobUrl = useCallback(
-    (uri: string) => {
-      const prev = audioRef.current;
-      if (prev) {
-        try {
-          prev.pause();
-        } catch {
-          /* ignore */
-        }
-        const ps = prev.src;
-        if (ps?.startsWith("blob:")) {
-          URL.revokeObjectURL(ps);
-        }
+      let buf: AudioBuffer;
+      try {
+        const sliced = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+        buf = await ctx.decodeAudioData(sliced as ArrayBuffer);
+      } catch {
+        setIsSpeaking(false);
+        return;
       }
-      const a = new Audio(uri);
-      audioRef.current = a;
-      setIsSpeaking(true);
-      a.onended = () => {
-        URL.revokeObjectURL(uri);
-        if (audioRef.current === a) {
-          audioRef.current = null;
+
+      if (myGen !== genRef.current) {
+        return;
+      }
+
+      const source = ctx.createBufferSource();
+      source.buffer = buf;
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.72;
+      source.connect(analyser);
+      analyser.connect(ctx.destination);
+      sourceRef.current = source;
+
+      const data = new Uint8Array(analyser.fftSize);
+
+      const loop = () => {
+        if (myGen !== genRef.current || sourceRef.current !== source) {
+          return;
         }
+        analyser.getByteTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i += 1) {
+          const x = (data[i] - 128) / 128;
+          sum += x * x;
+        }
+        const rms = Math.sqrt(sum / data.length);
+        const level = Math.min(1, rms * 5.5);
+        setMouthLevel(level);
+        rafRef.current = requestAnimationFrame(loop);
+      };
+
+      source.onended = () => {
+        if (sourceRef.current === source) {
+          sourceRef.current = null;
+        }
+        if (rafRef.current !== null) {
+          cancelAnimationFrame(rafRef.current);
+          rafRef.current = null;
+        }
+        setMouthLevel(0);
         setIsSpeaking(false);
       };
-      void a.play().catch(() => {
-        URL.revokeObjectURL(uri);
-        setIsSpeaking(false);
-      });
+
+      setIsSpeaking(true);
+      source.start(0);
+      rafRef.current = requestAnimationFrame(loop);
     },
-    [],
+    [interruptPlayback],
   );
 
   const feedAudioChunk = useCallback(
@@ -74,20 +127,7 @@ export function useAudioStreamPlayer() {
           flushTimerRef.current = null;
         }
         genRef.current += 1;
-        const prev = audioRef.current;
-        if (prev) {
-          try {
-            prev.pause();
-          } catch {
-            /* ignore */
-          }
-          const ps = prev.src;
-          if (ps?.startsWith("blob:")) {
-            URL.revokeObjectURL(ps);
-          }
-          audioRef.current = null;
-          setIsSpeaking(false);
-        }
+        interruptPlayback();
       }
       const myGen = genRef.current;
       bufferRef.current += chunk;
@@ -110,18 +150,16 @@ export function useAudioStreamPlayer() {
           for (let i = 0; i < bin.length; i += 1) {
             arr[i] = bin.charCodeAt(i);
           }
-          const blob = new Blob([arr], { type: "audio/wav" });
-          const url = URL.createObjectURL(blob);
-          playBlobUrl(url);
+          void playFromWavBytes(arr, myGen);
         } catch {
-          /* ignore bogus chunks */
+          /* ignore */
         }
       }, 110);
     },
-    [playBlobUrl],
+    [playFromWavBytes, interruptPlayback],
   );
 
   useEffect(() => () => stop(), [stop]);
 
-  return { feedAudioChunk, isSpeaking, stop };
+  return { feedAudioChunk, isSpeaking, mouthLevel, stop };
 }

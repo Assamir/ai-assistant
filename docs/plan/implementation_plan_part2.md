@@ -1,11 +1,11 @@
 # Assystent — Plan Implementacji: Fazy 2–3, Testy, Modele AI
 
-> **Status:** v1.8 — 2026-05-05 (T10–T14 baseline: VRM + `emotions.json` + WS audio; ConfigPanel; `electron-builder` NSIS; stosy Three z R3F 8 / three 0.169)
+> **Status:** v1.9 — 2026-05-05 (lip-sync RMS Web Audio; idle kości; `PUT /api/v1/config` + CORS; panel API/status/TTS; test integracyjny config)
 > **Kontekst:** [Plan główny (Faza 1)](implementation_plan.md) · [TEST_PLAN](TEST_PLAN.md) · [DEFINITION_OF_DONE](DEFINITION_OF_DONE.md) · [RISK_REGISTER](RISK_REGISTER.md) · [ROADMAP](IMPLEMENTATION_ROADMAP.md)
 
 ---
 
-## Stan wdrożenia — 2026-05-05 (v1.8)
+## Stan wdrożenia — 2026-05-05 (v1.9)
 
 
 | Zakres                    | Stan        | Uwagi                                                                                                                                                                                                    |
@@ -14,19 +14,19 @@
 | **T6** Observer / gry     | 🟢 ~95%     | VLM fallback przez `probe_game_identity_from_screen` + hook w `GameObserver` (`vlm_fallback_game_detection`), `game_detections` repo (wcześniej)                                                         |
 | **T7** MCP rozszerzenia   | 🟢 ~95%     | Narzędzia MCP + cache + rate; `tool_calls` w SQLite przy WS/REST/SSE (`ToolCallsRepository`); odpowiedź JSON + `done` SSE z `session_id` / `chat_session_id`                                             |
 | **T8** Memory / profil    | 🟢 ~70%     | `SemanticRecall` + `KnowledgeIngester` + config `memory` + FIFO; **`PlayerProfileRepository`** (`data/player_profile.yaml`) + `PlayerContextSnapshotRepository` + prompt + **`GET /api/v1/player-profile`**; brak auto resetu sezonu / daily meta pełnego                   |
-| **T9–T14** Frontend       | 🟢 ~72%     | T9 jak wcześniej; **T10** `AvatarCanvas` (R3F + `@pixiv/three-vrm`, przezroczyste tło WebGL, światła „aura”); **T11** `src/emotions.json` + mapowanie na presety VRM + zdarzenie WS `emotion`; **T12** `useAudioStreamPlayer` (składanie `audio_stream`) + prosty ruch warg (`aa` przy odtwarzaniu); **T13** `ConfigPanel` (Połączenie / Avatar / Więcej); **T14** root `build` w `package.json` + skrypt `electron:dist` (NSIS). Brak: idle bone animacji, pełny analizator RMS, Setup Wizard, ikony buildera. |
+| **T9–T14** Frontend       | 🟢 ~85%     | Jak v1.8 + **lip-sync** (`AnalyserNode` / RMS → `aa`); **idle** klatka piersiowa na `chest`/`spine`/`hips`; **REST** zapis konfiguracji **`PUT /api/v1/config`** (merge + YAML + hot-reload) + **CORS** w `main.py`; panel: URL API, status JSON, **TTS voice_speed**; responsywny grid. Dalej: Setup Wizard, ikony NSIS, pełny shader aury. |
 
 
-**Kamienie M2 i M3** — **prawie**: backend Fazy 2 domknięty funkcjonalnie; **frontend Fazy 3 — baseline** (avatar + audio + konfig + pakiet Windows).
+**Kamienie M2 i M3** — **prawie**: backend + frontend Fazy 3 z API konfiguracji i klipem audio; do zamknięcia milestone: polish release (ikony, wizard, dokumentacja).
 
-> **Następny krok (po v1.8):** idle / spring bone subtle; lip-sync z `AnalyserNode`; rozszerzenie ConfigPanel + `PUT /api/v1/config`; ikony i bug bash przed releasem; dokumentacja ENV.
+> **Następny krok (po v1.9):** Setup Wizard (kroki); ikony `electron-builder`; `docs/ENV_SETUP.md`; opcjonalnie auth na `PUT /config`.
 
 ---
 
-## Pozostały zakres (po v1.8)
+## Pozostały zakres (po v1.9)
 
 - **T8 dopiski:** archiwum sezonu → `player_profile_archives`, daily meta check, komendy zmiany postaci.
-- **T10–T14 dopiski:** pełne idle / aura shader; warstwy emocji + crossfade; prawdziwy lip-sync; kreator ustawień; README/CHANGELOG/licencje pod release; ikony instalatora.
+- **T10–T14 dopiski:** aura shader / crossfade emocji; kreator ustawień (wizard); hardening CORS (origins z ENV); README/CHANGELOG; ikony instalatora.
 
 ## 6. Faza 2 — Vision, MCP, Memory (T5–T8)
 

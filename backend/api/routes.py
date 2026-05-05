@@ -14,23 +14,24 @@ import json
 
 import uuid
 
-from typing import Annotated
-
-
+from pathlib import Path
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
 
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
-
+import yaml
 
 from backend.api.app_context import AppContext, ensure_ws_db_session
+from backend.config.loader import ConfigLoader
+from backend.config.schema import ConfigSchema
 from backend.services.health import build_health_snapshot
+from backend.services.config_hot_reload import _broadcast_reload
+from backend.services.runtime_config import apply_reload_configuration
 from backend.db.repositories import MessageRepository, ToolCallsRepository
-
-
 
 router = APIRouter()
 
@@ -133,6 +134,74 @@ async def api_health(dep: Deps):
 async def api_config(dep: Deps):
 
     return {"data": json.loads(dep.config.model_dump_json())}
+
+
+
+
+class ConfigPatchBody(BaseModel):
+
+    """Częściowa aktualizacja — zagnieżdżone klucze mergują się jak przy YAML (ConfigLoader)."""
+
+    patch: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.put("/config")
+
+async def api_config_put(dep: Deps, body: ConfigPatchBody):
+
+    if not dep.resolved_config_path:
+
+        raise HTTPException(
+
+            status_code=409,
+
+            detail=(
+
+                "Brak pliku konfiguracji na dysku — utwórz config/config.yaml "
+
+                "w content_root lub ustaw ASSY_GENERAL__CONTENT_ROOT."
+
+            ),
+
+        )
+
+    path = Path(dep.resolved_config_path)
+
+    loader = ConfigLoader()
+
+    merged = loader._merge_dicts(dep.config.model_dump(), body.patch)
+
+    try:
+
+        new_cfg = ConfigSchema.model_validate(merged)
+
+    except ValidationError as exc:
+
+        raise HTTPException(status_code=422, detail={"errors": exc.errors()}) from exc
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    with path.open("w", encoding="utf-8") as fh:
+
+        yaml.safe_dump(
+
+            new_cfg.model_dump(mode="json"),
+
+            fh,
+
+            allow_unicode=True,
+
+            sort_keys=False,
+
+            default_flow_style=False,
+
+        )
+
+    await apply_reload_configuration(dep, new_cfg)
+
+    await _broadcast_reload(dep, "config")
+
+    return {"ok": True, "data": json.loads(new_cfg.model_dump_json())}
 
 
 

@@ -8,6 +8,17 @@ interface ConfigPanelProps {
   wsStatus: string;
   vrmUrl: string;
   onVrmSave: (url: string) => void;
+  apiBaseUrl: string;
+  onApiBaseSave: (url: string) => void;
+  onFetchStatus: () => Promise<void>;
+  statusJson: string | null;
+  statusError: string | null;
+  busyStatus: boolean;
+  ttsVoiceSpeed: string;
+  onTtsVoiceSpeedChange: (v: string) => void;
+  onApplyTtsSpeed: () => Promise<void>;
+  busyConfig: boolean;
+  configMessage: string | null;
 }
 
 const tabs: { id: ConfigTabId; label: string }[] = [
@@ -22,12 +33,28 @@ export function ConfigPanel({
   wsStatus,
   vrmUrl,
   onVrmSave,
+  apiBaseUrl,
+  onApiBaseSave,
+  onFetchStatus,
+  statusJson,
+  statusError,
+  busyStatus,
+  ttsVoiceSpeed,
+  onTtsVoiceSpeedChange,
+  onApplyTtsSpeed,
+  busyConfig,
+  configMessage,
 }: ConfigPanelProps) {
-  const [draft, setDraft] = useState(vrmUrl);
+  const [draftVrm, setDraftVrm] = useState(vrmUrl);
+  const [draftApi, setDraftApi] = useState(apiBaseUrl);
 
   React.useEffect(() => {
-    setDraft(vrmUrl);
+    setDraftVrm(vrmUrl);
   }, [vrmUrl]);
+
+  React.useEffect(() => {
+    setDraftApi(apiBaseUrl);
+  }, [apiBaseUrl]);
 
   const wsDisplay =
     typeof window !== "undefined" && window.assystent?.wsUrl
@@ -76,6 +103,28 @@ export function ConfigPanel({
           <p style={{ margin: "0.75rem 0 0", color: "#8a8198", fontSize: 12 }}>
             W Electron: <code>ASSYSTENT_WS_URL</code> lub <code>VITE_WS_URL</code> w preload.
           </p>
+
+          <label htmlFor="api-base" style={{ display: "block", marginTop: "1rem", marginBottom: "0.35rem" }}>
+            URL backendu (REST)
+          </label>
+          <input
+            id="api-base"
+            type="url"
+            value={draftApi}
+            onChange={(e) => setDraftApi(e.target.value)}
+            placeholder="http://127.0.0.1:8000"
+            style={inputStyle}
+          />
+          <button
+            type="button"
+            onClick={() => onApiBaseSave(draftApi.trim())}
+            style={{ ...btnPrimary, marginTop: "0.5rem" }}
+          >
+            Zapisz URL API
+          </button>
+          <p style={{ margin: "0.5rem 0 0", fontSize: 12, color: "#8a8198" }}>
+            <code>GET /api/v1/status</code>, <code>PUT /api/v1/config</code>. Klucz <code>assystent.apiBaseUrl</code>.
+          </p>
         </div>
       )}
 
@@ -87,37 +136,17 @@ export function ConfigPanel({
           <input
             id="vrm-url"
             type="url"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            value={draftVrm}
+            onChange={(e) => setDraftVrm(e.target.value)}
             placeholder="https://…/model.vrm"
-            style={{
-              width: "100%",
-              boxSizing: "border-box",
-              padding: "0.5rem 0.65rem",
-              borderRadius: 6,
-              border: "1px solid #3d3550",
-              background: "#0d0b12",
-              color: "#e8e4f0",
-              fontSize: 13,
-            }}
+            style={inputStyle}
           />
-          <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <button
-              type="button"
-              onClick={() => onVrmSave(draft.trim())}
-              style={{
-                padding: "0.45rem 1rem",
-                borderRadius: 6,
-                border: "1px solid #6b5a9e",
-                background: "#4a3d6e",
-                color: "#fff",
-                cursor: "pointer",
-              }}
-            >
+          <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+            <button type="button" onClick={() => onVrmSave(draftVrm.trim())} style={btnPrimary}>
               Zapisz
             </button>
-            <span style={{ fontSize: 12, color: "#8a8198", alignSelf: "center" }}>
-              Zapamiętane w <code>localStorage</code> (<code>assystent.vrmUrl</code>).
+            <span style={{ fontSize: 12, color: "#8a8198" }}>
+              <code>assystent.vrmUrl</code>
             </span>
           </div>
         </div>
@@ -125,12 +154,77 @@ export function ConfigPanel({
 
       {tab === "more" && (
         <div style={{ fontSize: 14, color: "#b8afc8", lineHeight: 1.55 }}>
-          <p style={{ margin: "0 0 0.5rem" }}>Audio TTS, persona i obserwator — wkrótce (REST / konfiguracja backendu).</p>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+            <button type="button" onClick={() => void onFetchStatus()} disabled={busyStatus} style={btnPrimary}>
+              {busyStatus ? "Ładowanie…" : "Pobierz status"}
+            </button>
+            <code style={{ fontSize: 12, color: "#8a8198" }}>{apiBaseUrl}/api/v1/status</code>
+          </div>
+          {statusError && (
+            <p style={{ color: "#f0a8a8", fontSize: 13, margin: "0.5rem 0 0" }}>{statusError}</p>
+          )}
+          {statusJson && (
+            <pre
+              style={{
+                marginTop: "0.75rem",
+                padding: "0.6rem",
+                background: "#0d0b12",
+                borderRadius: 8,
+                fontSize: 11,
+                maxHeight: 180,
+                overflow: "auto",
+                border: "1px solid #2a2438",
+                color: "#c8c0dc",
+              }}
+            >
+              {statusJson}
+            </pre>
+          )}
+
+          <p style={{ margin: "1rem 0 0.35rem", color: "#e8e4f0" }}>TTS — prędkość głosu</p>
           <p style={{ margin: 0, fontSize: 12, color: "#8a8198" }}>
-            Docelowo: <code>PUT /api/v1/config</code> oraz przełączniki w tej zakładce.
+            Wymaga zapisanej <code>config/config.yaml</code> w <code>content_root</code>.
           </p>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "0.5rem", alignItems: "center" }}>
+            <input
+              type="number"
+              step="0.05"
+              min="0.25"
+              max="3"
+              value={ttsVoiceSpeed}
+              onChange={(e) => onTtsVoiceSpeedChange(e.target.value)}
+              style={{ ...inputStyle, maxWidth: 120 }}
+            />
+            <button type="button" onClick={() => void onApplyTtsSpeed()} disabled={busyConfig} style={btnPrimary}>
+              {busyConfig ? "Wysyłanie…" : "Zastosuj"}
+            </button>
+          </div>
+          {configMessage && (
+            <p style={{ margin: "0.5rem 0 0", fontSize: 13, color: "#a8e0c8" }}>{configMessage}</p>
+          )}
         </div>
       )}
     </section>
   );
 }
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  padding: "0.5rem 0.65rem",
+  borderRadius: 6,
+  border: "1px solid #3d3550",
+  background: "#0d0b12",
+  color: "#e8e4f0",
+  fontSize: 13,
+};
+
+const btnPrimary: React.CSSProperties = {
+  padding: "0.45rem 1rem",
+  borderRadius: 6,
+  border: "1px solid #6b5a9e",
+  background: "#4a3d6e",
+  color: "#fff",
+  cursor: "pointer",
+  fontSize: 13,
+};
