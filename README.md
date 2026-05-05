@@ -6,8 +6,12 @@ Szczegóły środowiska, modeli i pierwszego uruchomienia: **[docs/ENV_SETUP.md]
 
 ## Szybki start (dev)
 
-1. **Python:** venv, `pip install -r requirements.txt`, uruchom backend (np. `uvicorn` z modułem aplikacji zgodnie z repo).
-2. **Frontend:** w katalogu `frontend`: `npm install`, `npm run dev` (Vite). Pełna instrukcja w `docs/ENV_SETUP.md` §7–8.
+1. **Python:** jednorazowo `powershell -ExecutionPolicy Bypass -File scripts\setup.ps1` (venv `.venv` + `pip install -r requirements.txt`).
+2. **Frontend:** w `frontend`: `npm ci` lub `npm install` (przy pierwszym starcie `scripts\start-dev.bat` zrobi `npm ci` sam, gdy brak `node_modules`).
+3. **Uruchomienie jednym kliknięciem (Windows):** `scripts\start-dev.bat` — otwiera 3 okna: backend `uvicorn` (:8000), Vite (:5173), Electron z `ASSYSTENT_DEV=1` (DevTools). Najpierw uruchom LM Studio / serwer LLM zgodnie z [docs/ENV_SETUP.md](docs/ENV_SETUP.md) §8.1.
+4. Alternatywnie ręcznie: `uvicorn` z katalogu repo (po `activate`) oraz w `frontend`: `npm run dev` i w drugim terminalu `set ASSYSTENT_DEV=1` + `npm run electron`.
+
+Pełna instrukcja: [docs/ENV_SETUP.md](docs/ENV_SETUP.md) §7–8.
 
 ## Release (Windows)
 

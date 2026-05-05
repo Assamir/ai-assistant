@@ -1,6 +1,6 @@
 # ENV_SETUP.md — Środowisko Deweloperskie Assystent
 
-> **Status:** v1.2
+> **Status:** v1.3
 > **Data:** 2026-05-05
 > **Cel:** Kompletny manual konfiguracji środowiska deweloperskiego. Osoba na świeżym Windows 11 powinna skończyć w < 2h.
 > **Źródło decyzji:** DECISIONS_LOG.md (v1.1) — nie podważaj wartości z tego pliku.
@@ -756,6 +756,14 @@ Krok 3  →  Frontend         (Electron)
 > **Nigdy nie odwracaj kolejności.** Frontend przy starcie odpytuje backend o status;
 > backend przy starcie odpytuje LM Studio. Oba muszą być gotowe wcześniej.
 
+### 8.2a Windows — jednym kliknięciem (`scripts\start-dev.bat`)
+
+Po jednorazowym `.\scripts\setup.ps1` (venv w `.venv`) oraz uruchomieniu **LM Studio** możesz odpalić środowisko dev z Eksploratora lub `cmd`:
+
+1. Uruchom `**scripts\start-dev.bat`** (działa z dowolnego katalogu — skrypt przechodzi do rootu repo).
+2. Skrypt otwiera **trzy** okna konsoli: `uvicorn … --reload` (port 8000), `npm run dev` / Vite (5173), Electron z `ASSYSTENT_DEV=1` (DevTools, ładuje `http://localhost:5173`). Przy pierwszym uruchomieniu, jeśli brak `frontend\node_modules`, wykona `npm ci`.
+3. Zamknięcie danego okna zatrzymuje tylko ten proces. Jeśli Electron pokazuje pusty ekran, odczekaj na Vite lub uruchom ponownie tylko okno Electron (Vite nadal działa).
+
 ### 8.2 Start backend
 
 ```powershell
@@ -800,12 +808,22 @@ curl -X POST http://127.0.0.1:8000/api/v1/voice/synthesize `
   --output test_response.wav
 ```
 
-### 8.4 Start frontend
+### 8.4 Start frontend (ręcznie, zamiast `start-dev.bat`)
+
+Dwa terminale w `frontend\` (najpierw Vite, potem Electron):
 
 ```powershell
 cd c:\code\_repos\antigravity\assystent\frontend
-npm run electron:dev
+npm run dev
 ```
+
+```powershell
+cd c:\code\_repos\antigravity\assystent\frontend
+$env:ASSYSTENT_DEV = "1"
+npm run electron
+```
+
+W `**cmd.exe`:** `set ASSYSTENT_DEV=1` przed `npm run electron`.
 
 **Weryfikacja:**
 
@@ -1047,6 +1065,6 @@ Częściowy merge JSON do istniejącego pliku YAML w `content_root` (wymaga zapi
 
 ### 11.5 Ochrona zapisu konfiguracji — `ASSYSTENT_CONFIG_PUT_TOKEN`
 
-Jeśli ustawione (niepusty string), każde `**PUT /api/v1/config`** musi przekazać ten sam sekret w nagłówku `**X-Config-Put-Token**` albo `**Authorization: Bearer <token>**` (stała długość porównania, `hmac.compare_digest`). Gdy zmienna nie jest ustawiona, endpoint zachowuje się jak wcześniej (tylko sieć lokalna / zaufana).
+Jeśli ustawione (niepusty string), każde `**PUT /api/v1/config`** musi przekazać ten sam sekret w nagłówku `**X-Config-Put-Token`** albo `**Authorization: Bearer <token>`** (stała długość porównania, `hmac.compare_digest`). Gdy zmienna nie jest ustawiona, endpoint zachowuje się jak wcześniej (tylko sieć lokalna / zaufana).
 
 Frontend: opcjonalnie `VITE_CONFIG_PUT_TOKEN`, preload `ASSYSTENT_CONFIG_PUT_TOKEN` → `window.assystent.configPutToken`, albo ręcznie `localStorage.setItem('assystent.configPutToken', '…')`.

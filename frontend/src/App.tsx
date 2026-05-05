@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { configPutHeaders, readApiBaseUrl } from "./apiBase";
+import { configPutHeaders, normalizeApiBaseUrl, readApiBaseUrl } from "./apiBase";
 import { AvatarCanvas } from "./AvatarCanvas";
 import { ConfigPanel, type ConfigTabId } from "./ConfigPanel";
 import { SetupWizard, SETUP_WIZARD_STORAGE_KEY, hasSetupWizardDismissed } from "./SetupWizard";
@@ -30,7 +30,7 @@ function readInitialApiBase(): string {
   }
   const stored = localStorage.getItem(API_BASE_STORAGE_KEY)?.trim();
   if (stored) {
-    return stored.replace(/\/$/, "");
+    return normalizeApiBaseUrl(stored);
   }
   return readApiBaseUrl();
 }
@@ -163,12 +163,23 @@ export function App() {
   }, []);
 
   const saveApiBase = useCallback((next: string) => {
-    let u = next.trim().replace(/\/$/, "");
-    if (!u) {
-      u = readApiBaseUrl();
-    }
+    const t = next.trim();
+    const u = t ? normalizeApiBaseUrl(t) : readApiBaseUrl();
     setApiBase(u);
     localStorage.setItem(API_BASE_STORAGE_KEY, u);
+  }, []);
+
+  /** Jednorazowa naprawa złego `localStorage` (np. file://…) po aktualizacji klienta. */
+  useEffect(() => {
+    const raw = localStorage.getItem(API_BASE_STORAGE_KEY)?.trim();
+    if (!raw) {
+      return;
+    }
+    const fixed = normalizeApiBaseUrl(raw);
+    if (fixed !== raw) {
+      localStorage.setItem(API_BASE_STORAGE_KEY, fixed);
+      setApiBase(fixed);
+    }
   }, []);
 
   const fetchStatus = useCallback(async () => {

@@ -20,6 +20,10 @@ function defaultWsUrl(): string {
   if (env) {
     return env;
   }
+  if (typeof window !== "undefined" && window.location.protocol === "file:") {
+    const host = window.location.hostname || "127.0.0.1";
+    return `ws://${host}:8000/ws`;
+  }
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
   const host = window.location.hostname || "127.0.0.1";
   const port = window.location.port;
