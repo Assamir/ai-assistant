@@ -26,24 +26,28 @@
 
 ### 1.1 Sprzęt
 
-| Komponent | Minimum | Zalecane (docelowe) |
-|-----------|---------|---------------------|
-| GPU | NVIDIA GTX 1080 Ti (11 GB VRAM) | NVIDIA RTX 5090 (32 GB VRAM) |
-| RAM | 16 GB | 32 GB+ |
-| Dysk | 50 GB wolnego miejsca (SSD) | 200 GB NVMe |
-| CPU | 4 rdzenie, 3 GHz | 8+ rdzeni |
-| OS | Windows 10 64-bit (build 19041+) | Windows 11 64-bit |
+
+| Komponent | Minimum                          | Zalecane (docelowe)          |
+| --------- | -------------------------------- | ---------------------------- |
+| GPU       | NVIDIA GTX 1080 Ti (11 GB VRAM)  | NVIDIA RTX 5090 (32 GB VRAM) |
+| RAM       | 16 GB                            | 32 GB+                       |
+| Dysk      | 50 GB wolnego miejsca (SSD)      | 200 GB NVMe                  |
+| CPU       | 4 rdzenie, 3 GHz                 | 8+ rdzeni                    |
+| OS        | Windows 10 64-bit (build 19041+) | Windows 11 64-bit            |
+
 
 ### 1.2 Budżet VRAM
 
-| Komponent | VRAM (est.) | Uwagi |
-|-----------|-------------|-------|
-| LM Studio — Gemma 4 E4B (Q4_K_M) | ~5–6 GB | Zależne od kwantyzacji |
-| Faster-Whisper medium | ~1.5 GB | CTranslate2, int8 |
-| Moondream2 | ~2 GB | int8 quantized |
-| EasyOCR (CUDA) | ~0.5 GB | Tylko gdy OCR aktywny |
-| Three.js / Electron GPU | ~0.3 GB | Frontend renderer |
-| **Łącznie (wszystkie aktywne)** | **~10–11 GB** | Bezpieczne na 11 GB+; na RTX 5090 trivial |
+
+| Komponent                        | VRAM (est.)   | Uwagi                                     |
+| -------------------------------- | ------------- | ----------------------------------------- |
+| LM Studio — Gemma 4 E4B (Q4_K_M) | ~5–6 GB       | Zależne od kwantyzacji                    |
+| Faster-Whisper medium            | ~1.5 GB       | CTranslate2, int8                         |
+| Moondream2                       | ~2 GB         | int8 quantized                            |
+| EasyOCR (CUDA)                   | ~0.5 GB       | Tylko gdy OCR aktywny                     |
+| Three.js / Electron GPU          | ~0.3 GB       | Frontend renderer                         |
+| **Łącznie (wszystkie aktywne)**  | **~10–11 GB** | Bezpieczne na 11 GB+; na RTX 5090 trivial |
+
 
 > **Uwaga Minimum:** Na GPU z 11 GB VRAM należy wyłączyć OCR i VLM gdy uruchomione inne procesy GPU (gry).
 > Na RTX 5090 (32 GB) — wszystkie moduły jednocześnie bez żadnych ograniczeń.
@@ -65,14 +69,16 @@ nvidia-smi
 
 ### 2.1 Tabela zależności
 
-| Narzędzie | Wersja | Alternatywa | Link oficjalny | Uwagi |
-|-----------|--------|-------------|----------------|-------|
-| Python | 3.11.x | 3.10.x, 3.12.x | python.org/downloads | **3.11 zalecane** — max kompatybilność |
-| Node.js | 22 LTS | 20 LTS | nodejs.org | Frontend Electron |
-| Git | 2.40+ | — | git-scm.com | |
-| LM Studio | latest | Ollama (ograniczone FC) | lmstudio.ai | Wymaga function calling |
-| NVIDIA Driver | 560+ | — | nvidia.com/drivers | CUDA 12.x included |
-| Visual Studio Build Tools | 2022 | VS Community | visualstudio.microsoft.com | Wymagane przez niektóre pip packages |
+
+| Narzędzie                 | Wersja | Alternatywa             | Link oficjalny             | Uwagi                                  |
+| ------------------------- | ------ | ----------------------- | -------------------------- | -------------------------------------- |
+| Python                    | 3.11.x | 3.10.x, 3.12.x          | python.org/downloads       | **3.11 zalecane** — max kompatybilność |
+| Node.js                   | 22 LTS | 20 LTS                  | nodejs.org                 | Frontend Electron                      |
+| Git                       | 2.40+  | —                       | git-scm.com                |                                        |
+| LM Studio                 | latest | Ollama (ograniczone FC) | lmstudio.ai                | Wymaga function calling                |
+| NVIDIA Driver             | 560+   | —                       | nvidia.com/drivers         | CUDA 12.x included                     |
+| Visual Studio Build Tools | 2022   | VS Community            | visualstudio.microsoft.com | Wymagane przez niektóre pip packages   |
+
 
 ### 2.2 Instalacja Python
 
@@ -113,10 +119,12 @@ npm --version
 
 ### 3.1 Dwa rooty
 
-| Root | Ścieżka | Zawartość |
-|------|---------|-----------|
-| **Code root** | `c:\code\_repos\antigravity\assystent\` | Kod źródłowy, venv, testy |
-| **Content root** | `c:\ai\asystent\` | Dane, modele, config, dokumenty — sandbox |
+
+| Root             | Ścieżka                                 | Zawartość                                 |
+| ---------------- | --------------------------------------- | ----------------------------------------- |
+| **Code root**    | `c:\code\_repos\antigravity\assystent\` | Kod źródłowy, venv, testy                 |
+| **Content root** | `c:\ai\asystent\`                       | Dane, modele, config, dokumenty — sandbox |
+
 
 > **Reguła Sandbox (NF-S-04):** Backend nigdy nie pisze poza `c:\ai\asystent\`. Obie ścieżki są stałe i nienegocjowalne.
 
@@ -330,7 +338,7 @@ Do codziennego backendu **nie musisz** dodawać tego do PATH (wystarczy `python 
 python -c "import torch; print(torch.__version__); print('cuda', torch.cuda.is_available())"
 ```
 
-Jeśli jest **`+cpu`** lub `cuda False`, a masz GPU NVIDIA — zainstaluj build z CUDA według [Get Started (PyTorch)](https://pytorch.org/get-started/locally/) (osobna komenda z `--index-url`). Backendowy moduł `Moondream2VLM` (`backend/ai/moondream_vlm.py`) używa `device: auto|cuda|cpu|mps` z `config.yaml`.
+Jeśli w wersji Torch widzisz sufiks **`+cpu`** lub `cuda False`, a masz GPU NVIDIA — zainstaluj build z CUDA według [Get Started (PyTorch)](https://pytorch.org/get-started/locally/) (osobna komenda z `--index-url`). Backendowy moduł `Moondream2VLM` (`backend/ai/moondream_vlm.py`) używa `device: auto|cuda|cpu|mps` z `config.yaml`.
 
 **setuptools.** Pakiet **torch** często wymusza **`setuptools<82`** — pip może **obniżyć** wersję setuptools. To oczekiwane; przy konfliktach z innymi projektami na tej samej instalacji Pythona użyj **osobnego venv** wyłącznie pod Assystenta.
 
@@ -354,13 +362,15 @@ Pierwsza inferencja pobierze wagi z Hugging Face (duży transfer).
 
 ### 5.1 Faster-Whisper medium (STT)
 
-| Parametr | Wartość |
-|----------|---------|
-| Rozmiar | ~1.5 GB |
-| VRAM | ~1.5 GB (int8) / ~3 GB (float16) |
-| Źródło | Hugging Face: `Systran/faster-whisper-medium` |
-| Ścieżka docelowa | `c:\ai\asystent\models\whisper\` |
-| Alternatywa | `faster-whisper-small` (~240 MB, mniej dokładny) |
+
+| Parametr         | Wartość                                          |
+| ---------------- | ------------------------------------------------ |
+| Rozmiar          | ~1.5 GB                                          |
+| VRAM             | ~1.5 GB (int8) / ~3 GB (float16)                 |
+| Źródło           | Hugging Face: `Systran/faster-whisper-medium`    |
+| Ścieżka docelowa | `c:\ai\asystent\models\whisper\`                 |
+| Alternatywa      | `faster-whisper-small` (~240 MB, mniej dokładny) |
+
 
 ```python
 # scripts/download_models.py — fragment
@@ -375,6 +385,7 @@ print("Faster-Whisper medium: OK")
 ```
 
 **Weryfikacja:**
+
 ```python
 from faster_whisper import WhisperModel
 model = WhisperModel(r"c:\ai\asystent\models\whisper", device="cuda", compute_type="int8")
@@ -384,13 +395,15 @@ print("STT: OK")
 
 ### 5.2 openWakeWord (wakeword detector)
 
-| Parametr | Wartość |
-|----------|---------|
-| Rozmiar | ~50–200 MB (zależnie od modeli) |
-| VRAM | CPU only |
-| Źródło | pip + auto-download przy imporcie |
+
+| Parametr               | Wartość                             |
+| ---------------------- | ----------------------------------- |
+| Rozmiar                | ~50–200 MB (zależnie od modeli)     |
+| VRAM                   | CPU only                            |
+| Źródło                 | pip + auto-download przy imporcie   |
 | Imiona (lista finalna) | Aria, Mira, Zara, Nova, Stella, Eve |
-| Alternatywa fallback | prebuilt "Hey Jarvis" model |
+| Alternatywa fallback   | prebuilt "Hey Jarvis" model         |
+
 
 ```python
 # Auto-download gotowych modeli przy pierwszym uruchomieniu
@@ -410,15 +423,18 @@ print("openWakeWord: OK")
 
 ### 5.3 Piper TTS (binary + głos PL żeński)
 
-| Parametr | Wartość |
-|----------|---------|
-| Binary rozmiar | ~15 MB |
-| Model głosu | ~30–100 MB (zależnie od jakości) |
-| VRAM | CPU only |
-| Ścieżka | `c:\ai\asystent\models\piper\` |
-| Alternatywa | XTTSv2 (wyższa jakość, ~2 GB, ~3 GB VRAM) |
+
+| Parametr       | Wartość                                   |
+| -------------- | ----------------------------------------- |
+| Binary rozmiar | ~15 MB                                    |
+| Model głosu    | ~30–100 MB (zależnie od jakości)          |
+| VRAM           | CPU only                                  |
+| Ścieżka        | `c:\ai\asystent\models\piper\`            |
+| Alternatywa    | XTTSv2 (wyższa jakość, ~2 GB, ~3 GB VRAM) |
+
 
 **Krok 1 — Pobierz Piper binary:**
+
 ```powershell
 # Z https://github.com/rhasspy/piper/releases (latest release)
 # Pobierz: piper_windows_amd64.zip (~15 MB)
@@ -432,13 +448,15 @@ Expand-Archive piper_windows_amd64.zip -DestinationPath "c:\ai\asystent\models\p
 
 Dostępne głosy PL w repozytorium (`C:\code\_repos\antigravity\piper-voices\pl\pl_PL\`):
 
-| Głos | Plik | Płeć | Jakość | Licencja |
-|------|------|------|--------|----------|
-| **gosia** ✅ | `pl_PL-gosia-medium.onnx` | Żeński | medium | CC0 |
-| bass | `pl_PL-bass-high.onnx` | Męski | high | Apache 2.0 |
-| darkman | `pl_PL-darkman-medium.onnx` | Męski | medium | CC0 |
-| mc_speech | `pl_PL-mc_speech-medium.onnx` | nieznana | medium | CC0 |
-| mls_6892 | `pl_PL-mls_6892-low.onnx` | nieznana | low | CC BY 4.0 |
+
+| Głos        | Plik                          | Płeć     | Jakość | Licencja   |
+| ----------- | ----------------------------- | -------- | ------ | ---------- |
+| **gosia** ✅ | `pl_PL-gosia-medium.onnx`     | Żeński   | medium | CC0        |
+| bass        | `pl_PL-bass-high.onnx`        | Męski    | high   | Apache 2.0 |
+| darkman     | `pl_PL-darkman-medium.onnx`   | Męski    | medium | CC0        |
+| mc_speech   | `pl_PL-mc_speech-medium.onnx` | nieznana | medium | CC0        |
+| mls_6892    | `pl_PL-mls_6892-low.onnx`     | nieznana | low    | CC BY 4.0  |
+
 
 **Domyślny: `gosia/medium`** — jedyny potwierdzony żeński głos PL.
 
@@ -458,12 +476,14 @@ ls $dst
 ```
 
 **Config entry (config.yaml):**
+
 ```yaml
 models:
   piper_voice_path: "C:\\ai\\asystent\\models\\piper\\gosia\\pl_PL-gosia-medium.onnx"
 ```
 
 **Weryfikacja:**
+
 ```powershell
 echo "Witaj, jestem gotowa do pomocy." | `
     & "C:\ai\asystent\models\piper\piper.exe" `
@@ -475,12 +495,14 @@ echo "Witaj, jestem gotowa do pomocy." | `
 
 ### 5.4 sentence-transformers (pamięć semantyczna)
 
-| Parametr | Wartość |
-|----------|---------|
-| Model | `paraphrase-multilingual-MiniLM-L12-v2` |
-| Rozmiar | ~120 MB |
-| VRAM | CPU / GPU (auto) |
-| Alternatywa | `all-MiniLM-L6-v2` (tylko EN, szybszy) |
+
+| Parametr    | Wartość                                 |
+| ----------- | --------------------------------------- |
+| Model       | `paraphrase-multilingual-MiniLM-L12-v2` |
+| Rozmiar     | ~120 MB                                 |
+| VRAM        | CPU / GPU (auto)                        |
+| Alternatywa | `all-MiniLM-L6-v2` (tylko EN, szybszy)  |
+
 
 ```python
 from sentence_transformers import SentenceTransformer
@@ -496,13 +518,15 @@ print("sentence-transformers: OK")
 
 ### 5.5 Moondream2 (VLM — analiza screenów)
 
-| Parametr | Wartość |
-|----------|---------|
-| Model | `vikhyatk/moondream2` |
-| Rozmiar | ~1.9 GB |
-| VRAM | ~2 GB (int8) |
-| Ścieżka | `c:\ai\asystent\models\moondream` |
-| Alternatywa | LLaVA 7B (~4 GB, wyższa jakość) |
+
+| Parametr    | Wartość                           |
+| ----------- | --------------------------------- |
+| Model       | `vikhyatk/moondream2`             |
+| Rozmiar     | ~1.9 GB                           |
+| VRAM        | ~2 GB (int8)                      |
+| Ścieżka     | `c:\ai\asystent\models\moondream` |
+| Alternatywa | LLaVA 7B (~4 GB, wyższa jakość)   |
+
 
 ```python
 from huggingface_hub import snapshot_download
@@ -516,6 +540,7 @@ print("Moondream2: OK")
 ```
 
 **Weryfikacja (HF lub katalog lokalny — ten sam wzorzec co backend):**
+
 ```python
 from pathlib import Path
 
@@ -541,11 +566,13 @@ print("Moondream2:", cap.get("caption", cap))
 
 ### 5.6 EasyOCR (auto-download)
 
-| Parametr | Wartość |
-|----------|---------|
+
+| Parametr              | Wartość                  |
+| --------------------- | ------------------------ |
 | Rozmiar auto-download | ~150 MB (PL + EN modele) |
-| VRAM | ~0.5 GB (CUDA) |
-| Języki | `pl`, `en` |
+| VRAM                  | ~0.5 GB (CUDA)           |
+| Języki                | `pl`, `en`               |
+
 
 ```python
 import easyocr
@@ -560,10 +587,12 @@ print("EasyOCR: OK —", result[:2])
 
 ### 5.7 Modele VRM (awatar 3D)
 
-| Slot | Plik | Opis |
-|------|------|------|
-| Primary | `models/avatar/primary.vrm` | Główny awatar (żeński, anime, CC0/CC-BY) |
+
+| Slot     | Plik                         | Opis                                          |
+| -------- | ---------------------------- | --------------------------------------------- |
+| Primary  | `models/avatar/primary.vrm`  | Główny awatar (żeński, anime, CC0/CC-BY)      |
 | Fallback | `models/avatar/fallback.vrm` | Zapasowy (inny kolor/fryzura, ten sam zestaw) |
+
 
 **Procedura wyboru i pobierania:**
 
@@ -610,14 +639,16 @@ print("EasyOCR: OK —", result[:2])
 
 **Ustawienia serwera (zakładka "Local Server"):**
 
-| Ustawienie | Wartość |
-|------------|---------|
-| Host | `127.0.0.1` |
-| Port | `1234` |
-| Enable CORS | ✅ |
-| Allow tool use / function calling | ✅ |
-| Context length | `8192` (minimum) / `16384` (zalecane) |
-| GPU layers | `all` (pełna VRAM offload) |
+
+| Ustawienie                        | Wartość                               |
+| --------------------------------- | ------------------------------------- |
+| Host                              | `127.0.0.1`                           |
+| Port                              | `1234`                                |
+| Enable CORS                       | ✅                                     |
+| Allow tool use / function calling | ✅                                     |
+| Context length                    | `8192` (minimum) / `16384` (zalecane) |
+| GPU layers                        | `all` (pełna VRAM offload)            |
+
 
 ### 6.2 Weryfikacja
 
@@ -635,12 +666,14 @@ curl -s http://127.0.0.1:1234/v1/chat/completions `
 
 ### 6.3 Alternatywne modele (gdy Gemma 4 E4B niedostępny lub za wolny)
 
-| Model | Rozmiar | VRAM | Uwagi |
-|-------|---------|------|-------|
-| Gemma 2 2B Q4_K_M | ~1.5 GB | ~2 GB | Szybszy, mniej dokładny |
-| Llama 3.2 3B Q4_K_M | ~2 GB | ~2.5 GB | Dobra alternatywa |
-| Qwen 2.5 7B Q4_K_M | ~4.5 GB | ~5 GB | Dobry w PL |
-| Mistral 7B Q4_K_M | ~4 GB | ~5 GB | Sprawdzony, EN-first |
+
+| Model               | Rozmiar | VRAM    | Uwagi                   |
+| ------------------- | ------- | ------- | ----------------------- |
+| Gemma 2 2B Q4_K_M   | ~1.5 GB | ~2 GB   | Szybszy, mniej dokładny |
+| Llama 3.2 3B Q4_K_M | ~2 GB   | ~2.5 GB | Dobra alternatywa       |
+| Qwen 2.5 7B Q4_K_M  | ~4.5 GB | ~5 GB   | Dobry w PL              |
+| Mistral 7B Q4_K_M   | ~4 GB   | ~5 GB   | Sprawdzony, EN-first    |
+
 
 > Wymóg dla każdego modelu: **function calling / tool use musi działać w LM Studio**.
 > Zweryfikuj przed wyborem — nie wszystkie modele mają poprawne FC templates.
@@ -677,17 +710,17 @@ npm list three @pixiv/three-vrm electron react
 ```json
 {
   "dependencies": {
-    "electron": "^33.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "three": "^0.171.0",
-    "@pixiv/three-vrm": "^3.1.0"
+    "electron": "^31.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.169.0",
+    "@pixiv/three-vrm": "^3.3.1"
   },
   "devDependencies": {
-    "electron-builder": "^25.1.8",
-    "vite": "^6.0.0",
-    "@vitejs/plugin-react": "^4.3.0",
-    "typescript": "^5.7.0"
+    "electron-builder": "^26.8.1",
+    "vite": "^5.4.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.5.0"
   }
 }
 ```
@@ -702,6 +735,11 @@ npm run build
 npm run electron:dev
 # Avatar window powinien się otworzyć (nawet bez połączenia z backendem)
 ```
+
+### 7.4 Pakiet Windows (`electron-builder`)
+
+- Ikona aplikacji / instalatora: repo trzyma **`frontend/resources/icon.png`**; ścieżka jest ustawiona w `frontend/package.json` → **`build.icon`**. Nie umieszczaj ikony pod `frontend/build/`, ponieważ w korzeniu repozytorium `.gitignore` ignoruje dowolny katalog **`build/`**.
+- Instalator NSIS (Windows): po `npm install` uruchom **`npm run electron:dist`** (łączy `vite build` z `electron-builder --win`). Artefakty trafiają do **`frontend/release/`**. Zmiany w changelogu release: **`CHANGELOG.md`** w korzeniu repo.
 
 ---
 
@@ -770,6 +808,7 @@ npm run electron:dev
 ```
 
 **Weryfikacja:**
+
 - Okno avatara otwiera się (transparent, frameless, zawsze na wierzchu)
 - Awatar VRM ładuje się i animuje (idle breathing)
 - Status w logu: `WebSocket: connected to ws://127.0.0.1:8000/ws`
@@ -784,6 +823,7 @@ npm run electron:dev
 **Objawy:** `RuntimeError: CUDA out of memory` przy ładowaniu modelu
 
 **Rozwiązania:**
+
 ```powershell
 # 1. Sprawdź zajętość VRAM
 nvidia-smi
@@ -802,6 +842,7 @@ nvidia-smi
 **Objawy:** TTS endpoint zwraca 200 ale plik WAV jest pusty lub cichy
 
 **Rozwiązania:**
+
 ```powershell
 # 1. Test bezpośredni binary
 echo "test" | & "c:\ai\asystent\models\piper\piper.exe" `
@@ -819,6 +860,7 @@ ls "c:\ai\asystent\models\piper\"
 **Objawy:** `GET /api/v1/audio/devices` nie zwraca mikrofonu lub STT nie reaguje
 
 **Rozwiązania:**
+
 ```powershell
 # 1. Sprawdź urządzenia audio w systemie
 python -c "
@@ -838,6 +880,7 @@ print(sd.query_devices())
 **Objawy:** Backend loguje `Connection refused: http://127.0.0.1:1234`
 
 **Rozwiązania:**
+
 ```powershell
 # Znajdź co zajmuje port
 netstat -ano | findstr ":1234"
@@ -854,6 +897,7 @@ taskkill /PID {pid} /F
 **Objawy:** `ImportError: DLL load failed` lub `Access denied` przy capture ekranu
 
 **Rozwiązania:**
+
 ```powershell
 # 1. Dodaj wyjątek antywirusowy dla katalogu .venv:
 # C:\code\_repos\antigravity\assystent\.venv\Lib\site-packages\dxcam\
@@ -936,28 +980,30 @@ python scripts/verify_env.py
 
 Przed pierwszym uruchomieniem backendu, upewnij się:
 
-- [ ] `python scripts/verify_env.py` → ≥ 13/14 OK
-- [ ] LM Studio uruchomiony, model załadowany, serwer na porcie 1234
-- [ ] `c:\ai\asystent\models\avatar\primary.vrm` istnieje
-- [ ] `c:\ai\asystent\models\piper\{model}.onnx` istnieje
-- [ ] `c:\ai\asystent\LICENSES.md` uzupełniony (atrybucje VRM)
-- [ ] `c:\ai\asystent\config\config.yaml` skopiowany z `backend/config/config.default.yaml`
-- [ ] Mikrofon widoczny w systemie Windows (Settings → Sound)
-- [ ] Antywirus nie blokuje `.venv\Lib\site-packages\dxcam\`
+- `python scripts/verify_env.py` → ≥ 13/14 OK
+- LM Studio uruchomiony, model załadowany, serwer na porcie 1234
+- `c:\ai\asystent\models\avatar\primary.vrm` istnieje
+- `c:\ai\asystent\models\piper\{model}.onnx` istnieje
+- `c:\ai\asystent\LICENSES.md` uzupełniony (atrybucje VRM)
+- `c:\ai\asystent\config\config.yaml` skopiowany z `backend/config/config.default.yaml`
+- Mikrofon widoczny w systemie Windows (Settings → Sound)
+- Antywirus nie blokuje `.venv\Lib\site-packages\dxcam\`
 
 ---
 
 ## Reguły naczelne uwzględnione w tym dokumencie
 
-| Reguła | Zastosowanie |
-|--------|-------------|
-| **Offline-first** | Wszystkie modele AI lokalne; brak wymagania internetu do startu |
-| **Sandbox twardy** | Content root `c:\ai\asystent\` izolowany od code root; EasyOCR cache poza content root jest akceptowalny (nie dane użytkownika) |
-| **Lokalność danych** | Żaden model nie wysyła danych do chmury; HF download jednorazowy |
-| **Modularność** | Każdy komponent AI weryfikowany osobno (verify_env.py per-komponent) |
-| **Polski domyślny** | Piper: głos PL żeński; EasyOCR: `["pl", "en"]`; Whisper: `language=auto` |
-| **env > config** | Ścieżki modeli można nadpisać przez zmienne środowiskowe (WHISPER_MODEL_PATH, etc.) |
-| **Komunikacja błędów głosem** | verify_env.py identyfikuje brakujące modele; backend przy starcie loguje problem i informuje głosowo gdy TTS dostępny |
+
+| Reguła                        | Zastosowanie                                                                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| **Offline-first**             | Wszystkie modele AI lokalne; brak wymagania internetu do startu                                                                 |
+| **Sandbox twardy**            | Content root `c:\ai\asystent\` izolowany od code root; EasyOCR cache poza content root jest akceptowalny (nie dane użytkownika) |
+| **Lokalność danych**          | Żaden model nie wysyła danych do chmury; HF download jednorazowy                                                                |
+| **Modularność**               | Każdy komponent AI weryfikowany osobno (verify_env.py per-komponent)                                                            |
+| **Polski domyślny**           | Piper: głos PL żeński; EasyOCR: `["pl", "en"]`; Whisper: `language=auto`                                                        |
+| **env > config**              | Ścieżki modeli można nadpisać przez zmienne środowiskowe (WHISPER_MODEL_PATH, etc.)                                             |
+| **Komunikacja błędów głosem** | verify_env.py identyfikuje brakujące modele; backend przy starcie loguje problem i informuje głosowo gdy TTS dostępny           |
+
 
 ---
 
@@ -965,10 +1011,12 @@ Przed pierwszym uruchomieniem backendu, upewnij się:
 
 ### 11.1 CORS — `ASSYSTENT_CORS_ORIGINS`
 
-| Wartość | Zachowanie |
-|---------|------------|
-| *(puste)* lub `*` | `Access-Control-Allow-Origin: *`, **bez** nagłówka credentiale (zgodnie z ograniczeniami przeglądarek). |
-| Lista po przecinku, np. `http://localhost:5173,http://127.0.0.1:5173` | Tylko te originy; **włączone** `Access-Control-Allow-Credentials`. |
+
+| Wartość                                                               | Zachowanie                                                                                              |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| *(puste)* lub `*`                                                     | `Access-Control-Allow-Origin: *`, **bez** nagłówka credentiale (zgodnie z ograniczeniami przeglądarek). |
+| Lista po przecinku, np. `http://localhost:5173,http://127.0.0.1:5173` | Tylko te originy; **włączone** `Access-Control-Allow-Credentials`.                                      |
+
 
 ### 11.2 Prefiks konfiguracji `ASSY_*`
 
@@ -976,12 +1024,14 @@ Przed pierwszym uruchomieniem backendu, upewnij się:
 
 ### 11.3 Frontend / Electron (preload)
 
-| Zmienna | Zastosowanie |
-|---------|----------------|
-| `ASSYSTENT_WS_URL` / `VITE_WS_URL` | Pełny URL WebSocket (`/ws`). |
-| `ASSYSTENT_API_URL` / `VITE_API_BASE_URL` | Bazowy URL HTTP (`/api/v1/...`). |
-| `ASSYSTENT_VRM_URL` / `VITE_VRM_URL` | Opcjonalny domyślny URL modelu VRM. |
-| `ASSYSTENT_DEV` | `1` — Electron ładuje serwer Vite i DevTools. |
+
+| Zmienna                                   | Zastosowanie                                  |
+| ----------------------------------------- | --------------------------------------------- |
+| `ASSYSTENT_WS_URL` / `VITE_WS_URL`        | Pełny URL WebSocket (`/ws`).                  |
+| `ASSYSTENT_API_URL` / `VITE_API_BASE_URL` | Bazowy URL HTTP (`/api/v1/...`).              |
+| `ASSYSTENT_VRM_URL` / `VITE_VRM_URL`      | Opcjonalny domyślny URL modelu VRM.           |
+| `ASSYSTENT_DEV`                           | `1` — Electron ładuje serwer Vite i DevTools. |
+
 
 ### 11.4 `PUT /api/v1/config` (FastAPI)
 

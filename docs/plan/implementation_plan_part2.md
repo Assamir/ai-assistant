@@ -1,11 +1,11 @@
 # Assystent — Plan Implementacji: Fazy 2–3, Testy, Modele AI
 
-> **Status:** v1.11 — 2026-05-06 (opcjonalny token `ASSYSTENT_CONFIG_PUT_TOKEN` dla `PUT /api/v1/config`; frontend nagłówek; roadmap v1.2)
+> **Status:** v1.12 — 2026-05-05 (`frontend/resources/icon.png` + `build.icon` dla electron-builder / NSIS; `CHANGELOG.md`; test `tests/unit/test_release_assets.py`; roadmap v1.3)
 > **Kontekst:** [Plan główny (Faza 1)](implementation_plan.md) · [ENV_SETUP](../ENV_SETUP.md) · [TEST_PLAN](TEST_PLAN.md) · [DEFINITION_OF_DONE](DEFINITION_OF_DONE.md) · [RISK_REGISTER](RISK_REGISTER.md) · [ROADMAP](IMPLEMENTATION_ROADMAP.md)
 
 ---
 
-## Stan wdrożenia — 2026-05-06 (v1.11)
+## Stan wdrożenia — 2026-05-05 (v1.12)
 
 
 | Zakres                    | Stan    | Uwagi                                                                                                                                                                                                                                                                                        |
@@ -14,19 +14,19 @@
 | **T6** Observer / gry     | 🟢 ~95% | VLM fallback przez `probe_game_identity_from_screen` + hook w `GameObserver` (`vlm_fallback_game_detection`), `game_detections` repo (wcześniej)                                                                                                                                             |
 | **T7** MCP rozszerzenia   | 🟢 ~95% | Narzędzia MCP + cache + rate; `tool_calls` w SQLite przy WS/REST/SSE (`ToolCallsRepository`); odpowiedź JSON + `done` SSE z `session_id` / `chat_session_id`                                                                                                                                 |
 | **T8** Memory / profil    | 🟢 ~70% | `SemanticRecall` + `KnowledgeIngester` + config `memory` + FIFO; **`PlayerProfileRepository`** (`data/player_profile.yaml`) + `PlayerContextSnapshotRepository` + prompt + **`GET /api/v1/player-profile`**; brak auto resetu sezonu / daily meta pełnego |
-| **T9–T14** Frontend       | 🟢 ~90% | v1.10 + **`ASSYSTENT_CONFIG_PUT_TOKEN`** / `X-Config-Put-Token` przy zapisie konfiguracji z UI; preload `configPutToken`. Dalej: ikona NSIS w repo, crossfade emocji, pełniejszy auth. |
+| **T9–T14** Frontend       | 🟢 ~92% | v1.11 + ikona **`frontend/resources/icon.png`** (`build.icon`), **`CHANGELOG.md`**. Dalej: crossfade emocji / aura, pełniejszy auth. |
 
 
-**Kamienie M2 i M3** — **prawie**: backend + frontend Fazy 3 z API konfiguracji i klipem audio; do zamknięcia milestone: polish release (ikony, wizard, dokumentacja).
+**Kamienie M2 i M3** — **prawie**: backend + frontend Fazy 3 z API konfiguracji i klipem audio; do zamknięcia milestone: polish release (wizard smoke, dokumentacja produktowa).
 
-> **Następny krok (po v1.11):** ikona `build/icon.png`; crossfade emocji / aura; T8 archiwum sezonu; pełny model auth (JWT / sesja) jeśli backend poza LAN.
+> **Następny krok (po v1.12):** crossfade emocji / aura; T8 archiwum sezonu; pełny model auth (JWT / sesja) jeśli backend poza LAN.
 
 ---
 
 ## Pozostały zakres (po v1.11)
 
 - **T8 dopiski:** archiwum sezonu → `player_profile_archives`, daily meta check, komendy zmiany postaci.
-- **T10–T14 dopiski:** warstwy emocji + aura; README/CHANGELOG; ikona instalatora w repozytorium.
+- **T10–T14 dopiski:** warstwy emocji + aura; README dla release (polityka produktu); ikona ✅ (`frontend/resources/icon.png`, poza `.gitignore` dla `build/`).
 
 ## 6. Faza 2 — Vision, MCP, Memory (T5–T8)
 

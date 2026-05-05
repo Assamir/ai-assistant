@@ -13,6 +13,7 @@
   "build": {
     "appId": "com.assystent.app",
     "productName": "Assystent",
+    "icon": "resources/icon.png",
     "directories": {
       "output": "release"
     },
