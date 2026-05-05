@@ -1,11 +1,11 @@
 # Assystent — Plan Implementacji: Fazy 2–3, Testy, Modele AI
 
-> **Status:** v1.15 — 2026-05-05 (T8: **daily meta check** — `DailyCheckRepository`, `POST/GET /api/v1/daily-checks`, `daily_meta_check.py`, WS `daily_check.complete`, opcjonalny start przy boot `mcp.daily_check_on_startup`; roadmap v1.6)
+> **Status:** v1.16 — 2026-05-05 (T8: daily check → plik w `knowledge/daily_checks/` + `knowledge_file_path` + opcjonalny ingest Chroma; roadmap v1.7)
 > **Kontekst:** [Plan główny (Faza 1)](implementation_plan.md) · [ENV_SETUP](../ENV_SETUP.md) · [TEST_PLAN](TEST_PLAN.md) · [DEFINITION_OF_DONE](DEFINITION_OF_DONE.md) · [RISK_REGISTER](RISK_REGISTER.md) · [ROADMAP](IMPLEMENTATION_ROADMAP.md)
 
 ---
 
-## Stan wdrożenia — 2026-05-05 (v1.15)
+## Stan wdrożenia — 2026-05-05 (v1.16)
 
 
 | Zakres                    | Stan    | Uwagi                                                                                                                                                                                                                                                                                        |
@@ -13,19 +13,19 @@
 | **T5** Screen / VLM / OCR | 🟢 ~80% | Crop z `GameProfile.screen_regions` (`apply_profile_crop_to_png` w `ObserverLoop`); pozostałe integracje/regresje VLM                                                                                                                                                                        |
 | **T6** Observer / gry     | 🟢 ~95% | VLM fallback przez `probe_game_identity_from_screen` + hook w `GameObserver` (`vlm_fallback_game_detection`), `game_detections` repo (wcześniej)                                                                                                                                             |
 | **T7** MCP rozszerzenia   | 🟢 ~95% | Narzędzia MCP + cache + rate; `tool_calls` w SQLite przy WS/REST/SSE (`ToolCallsRepository`); odpowiedź JSON + `done` SSE z `session_id` / `chat_session_id`                                                                                                                                 |
-| **T8** Memory / profil    | 🟢 ~85% | Archiwum + **daily meta**: `DailyCheckRepository`, **`POST/GET /api/v1/daily-checks`**, `web_search` (DDG) gdy MCP włączone, `last_meta_check` w YAML, WS **`daily_check.complete`**, start w tle **`mcp.daily_check_on_startup`**. **Poza:** ingest do pliku `knowledge/` z checka, auto-trigger archiwum przy nowej lidze, komendy zmiany postaci. |
+| **T8** Memory / profil    | 🟢 ~88% | Jak v1.15 + **zapis notatek daily check** do `{knowledge_dir}/daily_checks/*.md`, **`knowledge_file_path`** w DB, **ingest** do KB przy włączonej pamięci semantycznej. **Poza:** auto archiwum przy nowej lidze, komendy zmiany postaci. |
 | **T9–T14** Frontend       | 🟢 ~93% | v1.12 + crossfade wag ekspresji (~0.42s) przy zmianie emocji z WS; **`emotionBlend.ts`**; **`AuraLights`** (hemisphere + dwa point); ikona NSIS + **`CHANGELOG.md`**. Dalej: spring bones subtelniejsze / shader aura; pełniejszy auth. |
 
 
 **Kamienie M2 i M3** — **prawie**: backend + frontend Fazy 3 z API konfiguracji i klipem audio; do zamknięcia milestone: polish release (wizard smoke, dokumentacja produktowa).
 
-> **Następny krok (po v1.15):** T8 ingest wiedzy z daily check do `knowledge/`; auto archiwum / dialog przy nowej lidze; komendy zmiany postaci; frontend (shader/spring) i auth.
+> **Następny krok (po v1.16):** T8 auto archiwum / dialog przy nowej lidze; komendy zmiany postaci; frontend (shader/spring) i auth.
 
 ---
 
-## Pozostały zakres (po v1.15)
+## Pozostały zakres (po v1.16)
 
-- **T8 dopiski:** zapis wyników checka do `knowledge/` (+ `knowledge_file_path`), auto-trigger archiwum przy nowej lidze, komendy zmiany postaci.
+- **T8 dopiski:** auto-trigger archiwum przy nowej lidze (observer / web), komendy zmiany postaci.
 - **T10–T14 dopiski:** README dla release (polityka produktu); ikona ✅; crossfade emocji + podstawowa aura świetlna ✅ (`AvatarCanvas`); opcjonalnie shader aura / spring bones.
 
 ## 6. Faza 2 — Vision, MCP, Memory (T5–T8)

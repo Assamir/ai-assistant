@@ -55,12 +55,16 @@ async def test_daily_checks_run_and_list(monkeypatch, tmp_path):
             assert body.get("skipped") is False
             assert body.get("check_id") >= 1
             assert "Balance patch" in body.get("summary", "")
+            kfp = body.get("knowledge_file_path")
+            assert kfp and "knowledge/daily_checks" in kfp.replace("\\", "/")
+            assert (root / kfp).is_file()
 
             listed = await ac.get("/api/v1/daily-checks", params={"game": "poe2"})
             assert listed.status_code == 200
             checks = listed.json()["checks"]
             assert len(checks) >= 1
             assert checks[0]["has_changes"] is True
+            assert checks[0].get("knowledge_file_path")
 
             res2 = await ac.post("/api/v1/daily-checks/run", json={"game": "poe2", "force": False})
             assert res2.status_code == 200

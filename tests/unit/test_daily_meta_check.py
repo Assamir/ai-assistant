@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from backend.db.migration_runner import MigrationRunner
 from backend.db.repositories import DailyCheckRepository
-from backend.services.daily_meta_check import _build_search_query, _summarize_search
+from backend.services.daily_meta_check import (
+    _build_search_query,
+    _summarize_search,
+    write_daily_check_knowledge_note,
+)
 
 
 def test_build_search_query_inserts_league():
@@ -32,6 +38,30 @@ def test_summarize_search_error():
     text, has = _summarize_search({"ok": False, "error": "timeout"})
     assert "timeout" in text
     assert has is False
+
+
+def test_write_daily_check_knowledge_note_creates_file(tmp_path):
+    root = Path(tmp_path)
+    rel = write_daily_check_knowledge_note(
+        root,
+        knowledge_dir="knowledge",
+        game_id="poe2",
+        summary="Note body",
+        query="q test",
+    )
+    assert rel is not None
+    assert rel.startswith("knowledge/daily_checks/")
+    assert rel.endswith(".md")
+    full = (root / rel).resolve()
+    assert full.is_file()
+    text = full.read_text(encoding="utf-8")
+    assert "Note body" in text
+    assert "daily_check" in text
+
+
+def test_write_daily_check_rejects_traversal(tmp_path):
+    root = Path(tmp_path)
+    assert write_daily_check_knowledge_note(root, knowledge_dir="../etc", game_id="x", summary="s", query="q") is None
 
 
 @pytest.mark.asyncio
