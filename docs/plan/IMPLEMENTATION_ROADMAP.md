@@ -1,6 +1,6 @@
 # DOK-16: IMPLEMENTATION_ROADMAP.md — Roadmapa Tygodniowa
 
-> **Status:** v1.5 — 2026-05-05 (archiwum profilu gry: `POST/GET` archives API; wcześniej: avatar crossfade + ikona NSIS)
+> **Status:** v1.6 — 2026-05-05 (daily meta check API + `daily_checks`; wcześniej: archiwum profilu, avatar, ikona NSIS)
 > **14 tygodni × 5 dni × ~6h = ~420h pracy**
 > **Szczegóły zadań:** [implementation_plan.md](implementation_plan.md) + [implementation_plan_part2.md](implementation_plan_part2.md)
 
@@ -8,13 +8,13 @@
 
 ## Stan implementacji — 2026-05-05
 
-Stan spójny z [implementation_plan_part2.md](implementation_plan_part2.md) (v1.14). W repozytorium jest **`frontend/`** (Electron, Vite, React, VRM, WebSocket, Setup Wizard).
+Stan spójny z [implementation_plan_part2.md](implementation_plan_part2.md) (v1.15). W repozytorium jest **`frontend/`** (Electron, Vite, React, VRM, WebSocket, Setup Wizard).
 
 
 | Faza                        | Tygodnie | Stan w repo | Komentarz                                                                                                                                                                                                                                                                                                                          |
 | --------------------------- | -------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **1** — Backend Core        | T1–T4    | **~90%**    | FastAPI `0.4.x`: T1–T3 jak wcześniej + T4 — `recover_stale_sessions`, `SessionWatchdog` (CB→`system_state`, hibernacja→WS), hot-reload `config.yaml` + `personas/`, `build_health_snapshot`, DB w `{content_root}/data/assystent.db`, rozwiązywanie YAML z `config/config.yaml`. **Poza:** pełny UI PTT w Electron, FPS w grze.     |
-| **2** — Vision, MCP, Memory | T5–T8    | **~82%**    | Jak wcześniej; **archiwum wpisu profilu** (`player_profile_archives`) przez **`POST /api/v1/player-profile/games/{game}/archive`** + lista **`GET .../player-profile/archives`**. **Poza:** daily meta check, auto-trigger przy nowej lidze, komendy zmiany postaci (część poza API).                                                                                                              |
+| **2** — Vision, MCP, Memory | T5–T8    | **~85%**    | MCP + **daily meta check** (`daily_checks`, REST, opcjonalny `web_search`, profil `last_meta_check`); archiwum YAML gry; semantic memory + profil. **Poza:** knowledge ingest z checka, auto liga→archiwum, komendy postaci.                                                                                                              |
 | **3** — Frontend + Avatar   | T9–T14   | **~92%**    | Electron + tray + hotkeys, Vite/React, `useWebSocket`, avatar VRM (R3F), lip-sync RMS, idle, **`emotionBlend` crossfade** (~0.42s), **`AuraLights`**, `PUT /api/v1/config` + token opcjonalny, CORS z ENV, Setup Wizard, ikona **`frontend/resources/icon.png`**. **Poza:** shader aura / subtelniejsze spring bones, README release (polityka), auth poza tokenem PUT.                                                                       |
 
 

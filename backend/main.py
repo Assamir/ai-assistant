@@ -101,6 +101,23 @@ async def lifespan(app: FastAPI):
     if ctx.observer_loop is not None:
         await ctx.observer_loop.start()
 
+    async def _startup_daily_checks() -> None:
+        if not ctx.config.mcp.daily_check_on_startup:
+            return
+        store = ctx.player_profile_store
+        if store is None:
+            return
+        from backend.services.daily_meta_check import run_daily_meta_check_for_game
+
+        prof = store.load()
+        for gid in list(prof.games.keys()):
+            try:
+                await run_daily_meta_check_for_game(ctx, gid, force=False, broadcast=True)
+            except Exception as exc:  # pragma: no cover
+                logger.warning("Daily meta check failed for %s: %s", gid, exc)
+
+    asyncio.create_task(_startup_daily_checks())
+
     try:
         yield
     finally:

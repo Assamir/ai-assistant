@@ -339,6 +339,95 @@ class PlayerProfileArchiveRepository:
             return [dict(r) for r in rows]
 
 
+class DailyCheckRepository:
+    """Tabela ``daily_checks`` — śledzenie codziennego meta check (PRD §6.2)."""
+
+    def __init__(self, db_path: str):
+        self.db_path = db_path
+
+    async def insert_row(
+        self,
+        game: str,
+        *,
+        result_summary: Optional[str] = None,
+        knowledge_file_path: Optional[str] = None,
+        has_changes: bool = False,
+        user_notified: bool = False,
+    ) -> int:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            await db.execute(
+                """
+                INSERT INTO daily_checks (
+                    game, checked_at, result_summary, knowledge_file_path, has_changes, user_notified
+                )
+                VALUES (?, unixepoch(), ?, ?, ?, ?)
+                """,
+                (
+                    game,
+                    result_summary,
+                    knowledge_file_path,
+                    1 if has_changes else 0,
+                    1 if user_notified else 0,
+                ),
+            )
+            await db.commit()
+            cur = await db.execute("SELECT last_insert_rowid()")
+            row = await cur.fetchone()
+            return int(row[0])
+
+    async def latest_checked_at(self, game: str) -> Optional[int]:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            cur = await db.execute(
+                """
+                SELECT checked_at FROM daily_checks
+                WHERE game = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (game,),
+            )
+            row = await cur.fetchone()
+            return int(row[0]) if row else None
+
+    async def list_recent(
+        self,
+        *,
+        game: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        cap = max(1, min(int(limit), 200))
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            db.row_factory = aiosqlite.Row
+            if game and str(game).strip():
+                cursor = await db.execute(
+                    """
+                    SELECT id, game, checked_at, result_summary, knowledge_file_path,
+                           has_changes, user_notified
+                    FROM daily_checks
+                    WHERE game = ?
+                    ORDER BY id DESC
+                    LIMIT ?
+                    """,
+                    (str(game).strip(), cap),
+                )
+            else:
+                cursor = await db.execute(
+                    """
+                    SELECT id, game, checked_at, result_summary, knowledge_file_path,
+                           has_changes, user_notified
+                    FROM daily_checks
+                    ORDER BY id DESC
+                    LIMIT ?
+                    """,
+                    (cap,),
+                )
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+
+
 class GameDetectionRepository:
     """Wiersze `game_detections` — sesja czatu SQLite (`sessions.id`)."""
 

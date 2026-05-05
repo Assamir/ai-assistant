@@ -274,6 +274,17 @@ class MCPConfig(BaseModel):
         default=False,
         description="Gdy httpx+ekstrakcja zwraca pusty tekst — próba renderu przez Playwright (wymaga playwright).",
     )
+    daily_check_on_startup: bool = Field(
+        default=False,
+        description="Przy starcie backendu uruchom daily meta check dla każdej gry z profilu (w tle).",
+    )
+    daily_check_interval_hours: int = Field(
+        default=24,
+        ge=1,
+        le=168,
+        description="Minimalny odstęp między checkami dla tej samej gry (gdy force=false).",
+    )
+
 
 class ConfigSchema(BaseModel):
     general: GeneralConfig = GeneralConfig()

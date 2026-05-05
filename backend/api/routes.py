@@ -35,7 +35,7 @@ from backend.config.schema import ConfigSchema
 from backend.services.health import build_health_snapshot
 from backend.services.config_hot_reload import _broadcast_reload
 from backend.services.runtime_config import apply_reload_configuration
-from backend.db.repositories import MessageRepository, ToolCallsRepository
+from backend.db.repositories import DailyCheckRepository, MessageRepository, ToolCallsRepository
 
 router = APIRouter()
 
@@ -313,6 +313,36 @@ async def api_player_profile_archives(dep: Deps, game: str | None = None, limit:
             item["yaml_snapshot"] = snap
         out.append(item)
     return {"archives": out}
+
+
+class DailyCheckRunBody(BaseModel):
+    game: str = Field(..., min_length=1, max_length=64)
+    force: bool = False
+
+
+@router.post("/daily-checks/run")
+async def api_daily_checks_run(body: DailyCheckRunBody, dep: Deps):
+    from backend.services.daily_meta_check import run_daily_meta_check_for_game
+
+    out = await run_daily_meta_check_for_game(dep, body.game, force=body.force, broadcast=True)
+    if not out.get("ok"):
+        code = str(out.get("error", "error"))
+        if code == "game_not_in_profile":
+            raise HTTPException(status_code=404, detail={"code": code})
+        if code == "no_player_profile":
+            raise HTTPException(status_code=503, detail={"code": code})
+        raise HTTPException(status_code=400, detail={"code": code})
+    return out
+
+
+@router.get("/daily-checks")
+async def api_daily_checks_list(dep: Deps, game: str | None = None, limit: int = 50):
+    repo = DailyCheckRepository(dep.db_path)
+    rows = await repo.list_recent(game=game, limit=limit)
+    for r in rows:
+        r["has_changes"] = bool(r.get("has_changes"))
+        r["user_notified"] = bool(r.get("user_notified"))
+    return {"checks": rows}
 
 
 @router.get('/tools')
