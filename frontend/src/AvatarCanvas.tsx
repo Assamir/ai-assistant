@@ -142,7 +142,7 @@ function VrmRoot({ url, emotion, lipSyncLevel }: VrmRootProps) {
   );
 }
 
-/** Paleta świateł point/hemi — płynnie interpolowana przy zmianie `emotion` (bez shadera na materiale VRM). */
+/** Bazowe palety (rodziny) — interpolowane w `AuraLights`. */
 const AURA_PALETTE: Record<
   string,
   { hemisphereSky: string; key: string; fill: string }
@@ -155,6 +155,33 @@ const AURA_PALETTE: Record<
   thinking: { hemisphereSky: "#d8e4ff", key: "#c4c8ff", fill: "#7ec8dc" },
   surprised: { hemisphereSky: "#fff0d8", key: "#ffdc9a", fill: "#9ae0ff" },
 };
+
+/** Każdy klucz z `emotions.json` → rodzina palety (`normalizeEmotionKey` zwraca klucz z mapy emocji). */
+const AURA_FAMILY_BY_EMOTION: Record<string, keyof typeof AURA_PALETTE> = {
+  neutral: "neutral",
+  happy: "happy",
+  amused: "happy",
+  proud: "happy",
+  sarcastic: "happy",
+  sympathetic: "sad",
+  sad: "sad",
+  disappointed: "sad",
+  nostalgic: "sad",
+  scared: "sad",
+  angry: "angry",
+  disgusted: "angry",
+  excited: "excited",
+  surprised: "surprised",
+  nervous: "surprised",
+  confused: "thinking",
+  thinking: "thinking",
+};
+
+function auraPaletteForEmotion(emotion: string) {
+  const nk = normalizeEmotionKey(emotion);
+  const fam = AURA_FAMILY_BY_EMOTION[nk] ?? "neutral";
+  return AURA_PALETTE[fam] ?? AURA_PALETTE.neutral;
+}
 
 const _auraTargetKey = new THREE.Color();
 const _auraTargetFill = new THREE.Color();
@@ -171,8 +198,7 @@ function AuraLights({ emotion }: { emotion: string }) {
 
   useFrame(({ clock }, delta) => {
     const t = clock.elapsedTime;
-    const nk = normalizeEmotionKey(emotion);
-    const pal = AURA_PALETTE[nk] ?? AURA_PALETTE.neutral;
+    const pal = auraPaletteForEmotion(emotion);
     const dk = Math.min(1, delta * 2.6);
     _auraTargetKey.set(pal.key);
     _auraTargetFill.set(pal.fill);

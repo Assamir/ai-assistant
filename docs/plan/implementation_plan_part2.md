@@ -1,11 +1,11 @@
 # Assystent — Plan Implementacji: Fazy 2–3, Testy, Modele AI
 
-> **Status:** v1.19 — 2026-05-05 (T8: auto `check-league-hint` przy `game_detected` + flaga `observer`; frontend WS profilu ligi; roadmap v1.10)
+> **Status:** v1.20 — 2026-05-05 (Aura: pełna mapa emocji z `emotions.json`; README release; roadmap v1.11)
 > **Kontekst:** [Plan główny (Faza 1)](implementation_plan.md) · [ENV_SETUP](../ENV_SETUP.md) · [TEST_PLAN](TEST_PLAN.md) · [DEFINITION_OF_DONE](DEFINITION_OF_DONE.md) · [RISK_REGISTER](RISK_REGISTER.md) · [ROADMAP](IMPLEMENTATION_ROADMAP.md)
 
 ---
 
-## Stan wdrożenia — 2026-05-05 (v1.19)
+## Stan wdrożenia — 2026-05-05 (v1.20)
 
 
 | Zakres                    | Stan    | Uwagi                                                                                                                                                                                                                                   |
@@ -14,19 +14,19 @@
 | **T6** Observer / gry     | 🟢 ~95% | VLM fallback przez `probe_game_identity_from_screen` + hook w `GameObserver` (`vlm_fallback_game_detection`), `game_detections` repo (wcześniej)                                                                                        |
 | **T7** MCP rozszerzenia   | 🟢 ~95% | Narzędzia MCP + cache + rate; `tool_calls` w SQLite przy WS/REST/SSE (`ToolCallsRepository`); odpowiedź JSON + `done` SSE z `session_id` / `chat_session_id`                                                                            |
 | **T8** Memory / profil    | 🟢 ~95% | v1.19: check-league-hint + auto po `game_detected` (`observer.auto_league_hint_on_game_detected` / `ASSY_OBSERVER__...`); WS `player_profile.league_hint`; frontend: baner + badge przy `league_hint` / `league_changed`.                |
-| **T9–T14** Frontend       | 🟢 ~94% | Crossfade (~0.42s), AuraLights (puls + **kolory wg emocji**), wizard, ikona NSIS; WS profilu (baner ligi). Idle: **sprężynowe** kołysanie tułowia. Dalej: shader na materiale VRM / spring bone VRM; README release; auth.                  |
+| **T9–T14** Frontend       | 🟢 ~95% | Crossfade, AuraLights (pełna mapa 17 emocji → rodziny palet), idle sprężynowe, wizard, ikona NSIS, WS profilu. **README** (release) ✅. Dalej: shader na materiale VRM / spring bone VRM; auth.                                            |
 
 
 **Kamienie M2 i M3** — **prawie**: backend + frontend Fazy 3 z API konfiguracji i klipem audio; do zamknięcia milestone: polish release (wizard smoke, dokumentacja produktowa).
 
-> **Następny krok (po v1.19):** shader aura / subtelniejsze spring bones (T10–T11); README produktowy (release); ew. twardszy auth (po uzgodnieniu).
+> **Następny krok (po v1.20):** shader rim / MToon na VRM (T10) lub prawdziwe spring bones; **T8** komendy głosowe → REST; ew. twardszy auth.
 
 ---
 
-## Pozostały zakres (po v1.19)
+## Pozostały zakres (po v1.20)
 
 - **T8 dopiski:** komendy głosowe mapowane na istniejące REST (np. check-league-hint).
-- **T10–T14 dopiski:** README dla release (polityka produktu); ikona ✅; crossfade emocji + podstawowa aura świetlna ✅ (`AvatarCanvas`); opcjonalnie shader aura / spring bones.
+- **T10–T14 dopiski:** ikona ✅; crossfade + aura świetlna ✅; **README release** ✅; opcjonalnie shader aura na siatce / spring bones VRM.
 
 ## 6. Faza 2 — Vision, MCP, Memory (T5–T8)
 
