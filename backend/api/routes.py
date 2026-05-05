@@ -19,7 +19,7 @@ import os
 import uuid
 
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
 
@@ -271,6 +271,48 @@ async def api_player_profile(dep: Deps):
 
 
 
+
+
+class PlayerProfileArchiveCreateBody(BaseModel):
+    season: str = Field(..., min_length=1, max_length=512)
+    reason: Literal["season_reset", "manual", "backup"]
+
+
+@router.post("/player-profile/games/{game}/archive")
+async def api_player_profile_archive_game(game: str, body: PlayerProfileArchiveCreateBody, dep: Deps):
+    store = dep.player_profile_store
+    if store is None:
+        raise HTTPException(status_code=503, detail={"code": "PLAYER_PROFILE_UNAVAILABLE"})
+    aid = await store.archive_game_entry(
+        game_id=game,
+        season=body.season,
+        reason=body.reason,
+    )
+    if aid is None:
+        raise HTTPException(status_code=404, detail={"code": "GAME_NOT_IN_PROFILE"})
+    return {"archive_id": aid}
+
+
+@router.get("/player-profile/archives")
+async def api_player_profile_archives(dep: Deps, game: str | None = None, limit: int = 50):
+    store = dep.player_profile_store
+    if store is None:
+        return {"archives": []}
+    rows = await store.list_archives(game=game, limit=limit)
+    out = []
+    for r in rows:
+        item = {
+            "id": r["id"],
+            "game": r["game"],
+            "season": r["season"],
+            "reason": r["reason"],
+            "archive_date": r["archive_date"],
+        }
+        snap = r.get("yaml_snapshot")
+        if snap is not None:
+            item["yaml_snapshot"] = snap
+        out.append(item)
+    return {"archives": out}
 
 
 @router.get('/tools')

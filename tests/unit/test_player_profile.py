@@ -64,3 +64,41 @@ async def test_snapshot_insert(migrated_db_path):
         league="S2",
     )
     assert sid >= 1
+
+
+@pytest.mark.asyncio
+async def test_archive_game_entry_inserts_row(tmp_path):
+    path = tmp_path / "player_profile.yaml"
+    db_path = str(tmp_path / "arc.db")
+    MigrationRunner(db_path).run_migrations()
+    repo = PlayerProfileRepository(str(path), db_path)
+    p = PlayerProfile(
+        games={
+            "poe2": GameEntry(
+                active_character="Hero",
+                league="S2",
+                characters=[
+                    Character(name="Hero", char_class="Witch", build="RF", level=50),
+                ],
+            )
+        }
+    )
+    repo.save(p)
+    aid = await repo.archive_game_entry(game_id="poe2", season="S2", reason="season_reset")
+    assert aid == 1
+    rows = await repo.list_archives(game="poe2")
+    assert len(rows) == 1
+    assert rows[0]["season"] == "S2"
+    assert rows[0]["reason"] == "season_reset"
+    assert "Hero" in rows[0]["yaml_snapshot"]
+
+
+@pytest.mark.asyncio
+async def test_archive_unknown_game_returns_none(tmp_path):
+    path = tmp_path / "empty.yaml"
+    db_path = str(tmp_path / "e.db")
+    MigrationRunner(db_path).run_migrations()
+    repo = PlayerProfileRepository(str(path), db_path)
+    repo.save(PlayerProfile())
+    aid = await repo.archive_game_entry(game_id="nope", season="S1", reason="manual")
+    assert aid is None

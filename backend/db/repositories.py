@@ -8,6 +8,7 @@ from backend.db.connection import apply_pragmas_async
 
 DetectionMethod = Literal["process", "vlm", "manual"]
 SnapshotTrigger = Literal["session_start", "character_change", "game_detected"]
+ArchiveReason = Literal["season_reset", "manual", "backup"]
 
 
 class SessionRepository:
@@ -274,6 +275,68 @@ class PlayerContextSnapshotRepository:
             cur = await db.execute("SELECT last_insert_rowid()")
             row = await cur.fetchone()
             return int(row[0])
+
+
+class PlayerProfileArchiveRepository:
+    """INSERT / SELECT dla ``player_profile_archives`` (reset sezonu, ręcznie, backup)."""
+
+    def __init__(self, db_path: str):
+        self.db_path = db_path
+
+    async def insert(
+        self,
+        game: str,
+        season: str,
+        yaml_snapshot: str,
+        reason: ArchiveReason,
+    ) -> int:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            await db.execute(
+                """
+                INSERT INTO player_profile_archives (game, season, yaml_snapshot, reason, archive_date)
+                VALUES (?, ?, ?, ?, unixepoch())
+                """,
+                (game, season, yaml_snapshot, reason),
+            )
+            await db.commit()
+            cur = await db.execute("SELECT last_insert_rowid()")
+            row = await cur.fetchone()
+            return int(row[0])
+
+    async def list_recent(
+        self,
+        *,
+        game: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        cap = max(1, min(int(limit), 200))
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            db.row_factory = aiosqlite.Row
+            if game and str(game).strip():
+                cursor = await db.execute(
+                    """
+                    SELECT id, game, season, reason, archive_date, yaml_snapshot
+                    FROM player_profile_archives
+                    WHERE game = ?
+                    ORDER BY id DESC
+                    LIMIT ?
+                    """,
+                    (str(game).strip(), cap),
+                )
+            else:
+                cursor = await db.execute(
+                    """
+                    SELECT id, game, season, reason, archive_date, yaml_snapshot
+                    FROM player_profile_archives
+                    ORDER BY id DESC
+                    LIMIT ?
+                    """,
+                    (cap,),
+                )
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
 
 
 class GameDetectionRepository:

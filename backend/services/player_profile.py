@@ -4,12 +4,17 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from backend.db.repositories import PlayerContextSnapshotRepository, SnapshotTrigger
+from backend.db.repositories import (
+    ArchiveReason,
+    PlayerContextSnapshotRepository,
+    PlayerProfileArchiveRepository,
+    SnapshotTrigger,
+)
 
 try:
     from yaml import CSafeDumper as _SafeDumper
@@ -156,10 +161,47 @@ class PlayerProfileRepository:
             league=entry.league or None,
         )
 
+    async def archive_game_entry(
+        self,
+        *,
+        game_id: str,
+        season: str,
+        reason: ArchiveReason,
+    ) -> Optional[int]:
+        """Zapisuje snapshot wpisu gry do ``player_profile_archives``. Nie modyfikuje YAML profilu."""
+        gid = str(game_id).strip()
+        season_clean = str(season).strip()
+        if not gid or not season_clean:
+            return None
+        profile = self.load()
+        entry = profile.games.get(gid)
+        if entry is None:
+            return None
+        data = entry.model_dump(mode="json", by_alias=True, exclude_none=False)
+        text = yaml.dump(
+            data,
+            Dumper=_SafeDumper,
+            allow_unicode=True,
+            default_flow_style=False,
+            sort_keys=False,
+        )
+        repo = PlayerProfileArchiveRepository(self._db_path)
+        return await repo.insert(gid, season_clean, text, reason)
+
+    async def list_archives(
+        self,
+        *,
+        game: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        repo = PlayerProfileArchiveRepository(self._db_path)
+        return await repo.list_recent(game=game, limit=limit)
+
 
 __all__ = [
     "Character",
     "GameEntry",
     "PlayerProfile",
     "PlayerProfileRepository",
+    "ArchiveReason",
 ]

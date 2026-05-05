@@ -1,11 +1,11 @@
 # Assystent — Plan Implementacji: Fazy 2–3, Testy, Modele AI
 
-> **Status:** v1.13 — 2026-05-05 (crossfade emocji VRM + „aura” światła w `AvatarCanvas`; `emotionBlend.ts`; test kontraktu `tests/unit/test_emotion_blend_contract.py`; roadmap v1.4)
+> **Status:** v1.14 — 2026-05-05 (T8: **`PlayerProfileArchiveRepository`** + `POST/GET` archive profilu gry; tabela `player_profile_archives` w użyciu; roadmap v1.5)
 > **Kontekst:** [Plan główny (Faza 1)](implementation_plan.md) · [ENV_SETUP](../ENV_SETUP.md) · [TEST_PLAN](TEST_PLAN.md) · [DEFINITION_OF_DONE](DEFINITION_OF_DONE.md) · [RISK_REGISTER](RISK_REGISTER.md) · [ROADMAP](IMPLEMENTATION_ROADMAP.md)
 
 ---
 
-## Stan wdrożenia — 2026-05-05 (v1.13)
+## Stan wdrożenia — 2026-05-05 (v1.14)
 
 
 | Zakres                    | Stan    | Uwagi                                                                                                                                                                                                                                                                                        |
@@ -13,19 +13,19 @@
 | **T5** Screen / VLM / OCR | 🟢 ~80% | Crop z `GameProfile.screen_regions` (`apply_profile_crop_to_png` w `ObserverLoop`); pozostałe integracje/regresje VLM                                                                                                                                                                        |
 | **T6** Observer / gry     | 🟢 ~95% | VLM fallback przez `probe_game_identity_from_screen` + hook w `GameObserver` (`vlm_fallback_game_detection`), `game_detections` repo (wcześniej)                                                                                                                                             |
 | **T7** MCP rozszerzenia   | 🟢 ~95% | Narzędzia MCP + cache + rate; `tool_calls` w SQLite przy WS/REST/SSE (`ToolCallsRepository`); odpowiedź JSON + `done` SSE z `session_id` / `chat_session_id`                                                                                                                                 |
-| **T8** Memory / profil    | 🟢 ~70% | `SemanticRecall` + `KnowledgeIngester` + config `memory` + FIFO; **`PlayerProfileRepository`** (`data/player_profile.yaml`) + `PlayerContextSnapshotRepository` + prompt + **`GET /api/v1/player-profile`**; brak auto resetu sezonu / daily meta pełnego |
+| **T8** Memory / profil    | 🟢 ~78% | Jak wcześniej + **`PlayerProfileArchiveRepository`** (`player_profile_archives`); **`POST /api/v1/player-profile/games/{game}/archive`** + **`GET /api/v1/player-profile/archives`**; snapshot wpisu gry (YAML) bez auto-czyszczenia profilu. **Poza:** automatyczny reset sezonu / wiring z observerem, daily meta check pełny. |
 | **T9–T14** Frontend       | 🟢 ~93% | v1.12 + crossfade wag ekspresji (~0.42s) przy zmianie emocji z WS; **`emotionBlend.ts`**; **`AuraLights`** (hemisphere + dwa point); ikona NSIS + **`CHANGELOG.md`**. Dalej: spring bones subtelniejsze / shader aura; pełniejszy auth. |
 
 
 **Kamienie M2 i M3** — **prawie**: backend + frontend Fazy 3 z API konfiguracji i klipem audio; do zamknięcia milestone: polish release (wizard smoke, dokumentacja produktowa).
 
-> **Następny krok (po v1.13):** T8 archiwum sezonu; spring bones / shader aura (warstwa wizualna); pełny model auth (JWT / sesja) jeśli backend poza LAN.
+> **Następny krok (po v1.14):** T8 daily meta + opcjonalny auto-trigger archiwum przy wykryciu nowej ligi; spring bones / shader aura; auth JWT/sesja jeśli backend poza LAN.
 
 ---
 
-## Pozostały zakres (po v1.13)
+## Pozostały zakres (po v1.14)
 
-- **T8 dopiski:** archiwum sezonu → `player_profile_archives`, daily meta check, komendy zmiany postaci.
+- **T8 dopiski:** daily meta check, komendy zmiany postaci, ewentualnie auto-trigger archiwum przy nowej lidze (obecnie **ręczne/API** `POST .../archive`).
 - **T10–T14 dopiski:** README dla release (polityka produktu); ikona ✅; crossfade emocji + podstawowa aura świetlna ✅ (`AvatarCanvas`); opcjonalnie shader aura / spring bones.
 
 ## 6. Faza 2 — Vision, MCP, Memory (T5–T8)
