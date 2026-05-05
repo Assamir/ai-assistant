@@ -5,22 +5,15 @@ import React, { Suspense, useEffect, useRef } from "react";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import * as THREE from "three";
 
-import emotionWeights from "./emotions.json";
+import {
+  blendRecords,
+  easeOutCubic,
+  normalizeEmotionKey,
+  recordsNearlyEqual,
+  resolveWeights,
+} from "./emotionBlend";
 
-const emotionMap = emotionWeights as Record<string, Record<string, number>>;
-
-function applyEmotion(vrm: VRM | null, emotion: string) {
-  const manager = vrm?.expressionManager;
-  if (!manager) {
-    return;
-  }
-  const key = emotion.toLowerCase();
-  const weights = emotionMap[key] ?? emotionMap.neutral;
-  manager.resetValues();
-  for (const [name, w] of Object.entries(weights)) {
-    manager.setValue(name, w);
-  }
-}
+const EMOTION_CROSSFADE_SEC = 0.42;
 
 interface VrmRootProps {
   url: string;
@@ -31,6 +24,15 @@ interface VrmRootProps {
 function VrmRoot({ url, emotion, lipSyncLevel }: VrmRootProps) {
   const vrmRef = useRef<VRM | null>(null);
   const idleBonesRef = useRef<{ bone: THREE.Object3D; rest: THREE.Quaternion }[]>([]);
+
+  const latestEmotionRef = useRef(emotion);
+  latestEmotionRef.current = emotion;
+
+  const targetKeyRef = useRef(normalizeEmotionKey(emotion));
+  const blendRef = useRef(1);
+  const startSnapRef = useRef(resolveWeights(emotion));
+  const endSnapRef = useRef(resolveWeights(emotion));
+  const lastRenderedRef = useRef(resolveWeights(emotion));
 
   const gltf = useLoader(GLTFLoader, url, (loader) => {
     loader.register((parser) => new VRMLoaderPlugin(parser));
@@ -50,13 +52,38 @@ function VrmRoot({ url, emotion, lipSyncLevel }: VrmRootProps) {
       }
     }
     if (raw) {
-      applyEmotion(raw, emotion);
+      const snap = resolveWeights(latestEmotionRef.current);
+      targetKeyRef.current = normalizeEmotionKey(latestEmotionRef.current);
+      startSnapRef.current = snap;
+      endSnapRef.current = snap;
+      lastRenderedRef.current = snap;
+      blendRef.current = 1;
     }
     return () => {
       vrmRef.current = null;
       idleBonesRef.current = [];
     };
-  }, [gltf, emotion]);
+  }, [gltf]);
+
+  useEffect(() => {
+    const next = normalizeEmotionKey(emotion);
+    const endGoal = resolveWeights(next);
+    if (next === targetKeyRef.current && blendRef.current >= 1) {
+      return;
+    }
+    if (recordsNearlyEqual(lastRenderedRef.current, endGoal)) {
+      targetKeyRef.current = next;
+      startSnapRef.current = endGoal;
+      endSnapRef.current = endGoal;
+      lastRenderedRef.current = endGoal;
+      blendRef.current = 1;
+      return;
+    }
+    startSnapRef.current = { ...lastRenderedRef.current };
+    endSnapRef.current = endGoal;
+    targetKeyRef.current = next;
+    blendRef.current = 0;
+  }, [emotion]);
 
   useFrame((state, delta) => {
     const vrm = vrmRef.current;
@@ -71,11 +98,25 @@ function VrmRoot({ url, emotion, lipSyncLevel }: VrmRootProps) {
       bone.rotateZ(Math.cos(t * 0.42) * 0.005);
     }
     const em = vrm.expressionManager;
-    if (em) {
-      const lip = lipSyncLevel > 0.035 ? Math.min(1, lipSyncLevel * 0.95) : 0;
-      if (lip > 0) {
-        em.setValue("aa", lip);
-      }
+    if (!em) {
+      return;
+    }
+
+    const rate = EMOTION_CROSSFADE_SEC > 1e-4 ? 1 / EMOTION_CROSSFADE_SEC : 1e6;
+    blendRef.current = Math.min(1, blendRef.current + delta * rate);
+    const u = easeOutCubic(blendRef.current);
+    const blended = blendRecords(startSnapRef.current, endSnapRef.current, u);
+
+    em.resetValues();
+    for (const [name, w] of Object.entries(blended)) {
+      em.setValue(name, w);
+    }
+
+    lastRenderedRef.current = blended;
+
+    const lip = lipSyncLevel > 0.035 ? Math.min(1, lipSyncLevel * 0.95) : 0;
+    if (lip > 0) {
+      em.setValue("aa", lip);
     }
   });
 
@@ -87,15 +128,27 @@ function VrmRoot({ url, emotion, lipSyncLevel }: VrmRootProps) {
   );
 }
 
-function AuraLight() {
-  const ref = useRef<THREE.PointLight>(null);
+function AuraLights() {
+  const keyRef = useRef<THREE.PointLight>(null);
+  const fillRef = useRef<THREE.PointLight>(null);
   useFrame(({ clock }) => {
-    const L = ref.current;
-    if (L) {
-      L.intensity = 0.35 + Math.sin(clock.elapsedTime * 0.8) * 0.08;
+    const t = clock.elapsedTime;
+    const key = keyRef.current;
+    const fill = fillRef.current;
+    if (key) {
+      key.intensity = 0.38 + Math.sin(t * 0.85) * 0.09;
+    }
+    if (fill) {
+      fill.intensity = 0.13 + Math.cos(t * 1.12) * 0.048;
     }
   });
-  return <pointLight ref={ref} position={[0.8, 1.6, 1.2]} color="#c4b5fd" distance={6} />;
+  return (
+    <>
+      <hemisphereLight args={["#dbe8ff", "#120824", 0.32]} />
+      <pointLight ref={keyRef} position={[0.85, 1.68, 1.18]} color="#d8c8ff" distance={7} decay={2} />
+      <pointLight ref={fillRef} position={[-1.42, 1.38, 0.92]} color="#5eead4" distance={5.8} decay={2} />
+    </>
+  );
 }
 
 interface AvatarCanvasProps {
@@ -119,9 +172,9 @@ export function AvatarCanvas({ vrmUrl, emotion, lipSyncLevel }: AvatarCanvasProp
           }}
           style={{ width: "100%", height: "100%" }}
         >
-          <ambientLight intensity={0.55} />
-          <directionalLight position={[3, 6, 4]} intensity={1.05} castShadow />
-          <AuraLight />
+          <ambientLight intensity={0.52} />
+          <directionalLight position={[3, 6, 4]} intensity={1} castShadow />
+          <AuraLights />
           <Suspense fallback={null}>
             <VrmRoot url={trimmed} emotion={emotion} lipSyncLevel={lipSyncLevel} />
           </Suspense>

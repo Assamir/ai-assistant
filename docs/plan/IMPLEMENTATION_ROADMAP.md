@@ -1,6 +1,6 @@
 # DOK-16: IMPLEMENTATION_ROADMAP.md — Roadmapa Tygodniowa
 
-> **Status:** v1.3 — 2026-05-05 (ikona NSIS/electron-builder w repo: `frontend/resources/icon.png`; `CHANGELOG.md`)
+> **Status:** v1.4 — 2026-05-05 (crossfade emocji VRM + aura świetlna w `AvatarCanvas`; ikona NSIS wcześniej)
 > **14 tygodni × 5 dni × ~6h = ~420h pracy**
 > **Szczegóły zadań:** [implementation_plan.md](implementation_plan.md) + [implementation_plan_part2.md](implementation_plan_part2.md)
 
@@ -8,17 +8,17 @@
 
 ## Stan implementacji — 2026-05-05
 
-Stan spójny z [implementation_plan_part2.md](implementation_plan_part2.md) (v1.12). W repozytorium jest **`frontend/`** (Electron, Vite, React, VRM, WebSocket, Setup Wizard).
+Stan spójny z [implementation_plan_part2.md](implementation_plan_part2.md) (v1.13). W repozytorium jest **`frontend/`** (Electron, Vite, React, VRM, WebSocket, Setup Wizard).
 
 
 | Faza                        | Tygodnie | Stan w repo | Komentarz                                                                                                                                                                                                                                                                                                                          |
 | --------------------------- | -------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **1** — Backend Core        | T1–T4    | **~90%**    | FastAPI `0.4.x`: T1–T3 jak wcześniej + T4 — `recover_stale_sessions`, `SessionWatchdog` (CB→`system_state`, hibernacja→WS), hot-reload `config.yaml` + `personas/`, `build_health_snapshot`, DB w `{content_root}/data/assystent.db`, rozwiązywanie YAML z `config/config.yaml`. **Poza:** pełny UI PTT w Electron, FPS w grze.     |
 | **2** — Vision, MCP, Memory | T5–T8    | **~80%**    | Capture, VLM/OCR, Observer loop, MCP (`web_search`, scraper, cache), semantic memory + ingester, profil gracza YAML — **wdrożone** (szczegóły i % — tabela w part2). **Poza:** pełny archiw sezonu profilu, daily meta.                                                                                                              |
-| **3** — Frontend + Avatar   | T9–T14   | **~90%**    | Electron + tray + hotkeys, Vite/React, `useWebSocket`, avatar VRM (R3F), lip-sync RMS, idle, `PUT /api/v1/config` + opcjonalny token, CORS z ENV, Setup Wizard, panel status/TTS, **`frontend/resources/icon.png`** (`build.icon`). **Poza:** crossfade emocji / aura, README release (polityka), auth poza tokenem PUT.                                                                       |
+| **3** — Frontend + Avatar   | T9–T14   | **~92%**    | Electron + tray + hotkeys, Vite/React, `useWebSocket`, avatar VRM (R3F), lip-sync RMS, idle, **`emotionBlend` crossfade** (~0.42s), **`AuraLights`**, `PUT /api/v1/config` + token opcjonalny, CORS z ENV, Setup Wizard, ikona **`frontend/resources/icon.png`**. **Poza:** shader aura / subtelniejsze spring bones, README release (polityka), auth poza tokenem PUT.                                                                       |
 
 
-**Wniosek:** M1 zaawansowany; M2/M3 per part2 — domknięcie release: polish dokumentacji produktowej (README), opcjonalnie twardszy model auth; ikona instalatora ✅.
+**Wniosek:** M1 zaawansowany; M2/M3 per part2 — domknięcie release: README produktowy, opcjonalnie twardszy model auth; ikona instalatora ✅; crossfade emocji / podstawowa aura ✅.
 
 ---
 
