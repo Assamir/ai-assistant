@@ -10,7 +10,11 @@ from __future__ import annotations
 
 
 
+import hmac
+
 import json
+
+import os
 
 import uuid
 
@@ -34,6 +38,47 @@ from backend.services.runtime_config import apply_reload_configuration
 from backend.db.repositories import MessageRepository, ToolCallsRepository
 
 router = APIRouter()
+
+
+
+
+def _require_config_put_token(request: Request) -> None:
+
+    expected = os.environ.get("ASSYSTENT_CONFIG_PUT_TOKEN", "").strip()
+
+    if not expected:
+
+        return
+
+    header = request.headers.get("x-config-put-token", "").strip()
+
+    auth = request.headers.get("authorization", "")
+
+    bearer = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+
+    token = header or bearer
+
+    if len(token) != len(expected) or not hmac.compare_digest(
+
+        token.encode("utf-8"),
+
+        expected.encode("utf-8"),
+
+    ):
+
+        raise HTTPException(
+
+            status_code=401,
+
+            detail=(
+
+                "Brak lub nieprawidłowy token zapisu konfiguracji "
+
+                "(nagłówek X-Config-Put-Token albo Authorization: Bearer)."
+
+            ),
+
+        )
 
 
 
@@ -147,7 +192,9 @@ class ConfigPatchBody(BaseModel):
 
 @router.put("/config")
 
-async def api_config_put(dep: Deps, body: ConfigPatchBody):
+async def api_config_put(request: Request, dep: Deps, body: ConfigPatchBody):
+
+    _require_config_put_token(request)
 
     if not dep.resolved_config_path:
 

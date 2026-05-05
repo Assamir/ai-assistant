@@ -1,24 +1,24 @@
 # DOK-16: IMPLEMENTATION_ROADMAP.md — Roadmapa Tygodniowa
 
-> **Status:** v1.1 — 2026-05-04 (zaktualizowano stan wdrożenia w repo)
+> **Status:** v1.2 — 2026-05-06 (Fazy 2–3 w repo; `frontend/` + token `PUT /config`)
 > **14 tygodni × 5 dni × ~6h = ~420h pracy**
 > **Szczegóły zadań:** [implementation_plan.md](implementation_plan.md) + [implementation_plan_part2.md](implementation_plan_part2.md)
 
 ---
 
-## Stan implementacji — 2026-05-04
+## Stan implementacji — 2026-05-06
 
-Stan ustalony na podstawie kodu w repozytorium (`backend/`, `tests/`, `scripts/`). Frontend Electron/React w planie **nie jest** jeszcze obecny w drzewie projektu.
+Stan spójny z [implementation_plan_part2.md](implementation_plan_part2.md) (v1.11). W repozytorium jest **`frontend/`** (Electron, Vite, React, VRM, WebSocket, Setup Wizard).
 
 
 | Faza                        | Tygodnie | Stan w repo | Komentarz                                                                                                                                                                                                                                                                                                                          |
 | --------------------------- | -------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **1** — Backend Core        | T1–T4    | **~90%**    | FastAPI `0.4.x`: T1–T3 jak wcześniej + T4 — `recover_stale_sessions`, `SessionWatchdog` (CB→`system_state`, hibernacja→WS), hot-reload `config.yaml` + `personas/`, `build_health_snapshot`, DB w `{content_root}/data/assystent.db`, rozwiązywanie YAML z `config/config.yaml`. **Poza:** openWakeWord, FPS w grze, pełny UI PTT. |
-| **2** — Vision, MCP, Memory | T5–T8    | **~5%**     | Tabela MCP `mcp_cache` istnieje w SQL; **brak** modułów capture/VLM/OCR, ChromaDB (zakomentowany w `requirements.txt`), `web_search` / scraper / `MCPCache` w kodzie. `GameObserver` — tylko pętla psutil + mapowanie znanych `.exe` (bez profili gier YAML, bez pętli observer→VLM→komentarz).                                    |
-| **3** — Frontend + Avatar   | T9–T14   | **0%**      | Brak aplikacji Electron/Vite/React w repo.                                                                                                                                                                                                                                                                                         |
+| **1** — Backend Core        | T1–T4    | **~90%**    | FastAPI `0.4.x`: T1–T3 jak wcześniej + T4 — `recover_stale_sessions`, `SessionWatchdog` (CB→`system_state`, hibernacja→WS), hot-reload `config.yaml` + `personas/`, `build_health_snapshot`, DB w `{content_root}/data/assystent.db`, rozwiązywanie YAML z `config/config.yaml`. **Poza:** pełny UI PTT w Electron, FPS w grze.     |
+| **2** — Vision, MCP, Memory | T5–T8    | **~80%**    | Capture, VLM/OCR, Observer loop, MCP (`web_search`, scraper, cache), semantic memory + ingester, profil gracza YAML — **wdrożone** (szczegóły i % — tabela w part2). **Poza:** pełny archiw sezonu profilu, daily meta.                                                                                                              |
+| **3** — Frontend + Avatar   | T9–T14   | **~88%**    | Electron + tray + hotkeys, Vite/React, `useWebSocket`, avatar VRM (R3F), lip-sync RMS, idle, `PUT /api/v1/config` + opcjonalny token, CORS z ENV, Setup Wizard, panel status/TTS. **Poza:** ikona instalatora w repo, crossfade emocji, auth poza tokenem PUT.                                                                       |
 
 
-**Wniosek:** backend Fazy 1 jest wdrożony (M1 częściowo: brak Electron/UI i pomiaru FPS w grze; reszta T4 w repo).
+**Wniosek:** M1 zaawansowany; M2/M3 per part2 — domknięcie release: ikony NSIS, polish dokumentacji, opcjonalnie twardszy model auth.
 
 ---
 

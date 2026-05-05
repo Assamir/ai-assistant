@@ -20,6 +20,7 @@ async def test_put_config_persists_and_updates_context(monkeypatch, tmp_path):
         encoding="utf-8",
     )
     monkeypatch.setenv("ASSY_GENERAL__CONTENT_ROOT", str(root))
+    monkeypatch.delenv("ASSYSTENT_CONFIG_PUT_TOKEN", raising=False)
 
     from backend.api.app_context import create_app_context
 
@@ -53,6 +54,7 @@ async def test_put_config_422_on_invalid_patch(monkeypatch, tmp_path):
     cfg_path = root / "config" / "config.yaml"
     cfg_path.write_text(yaml.safe_dump({"log_level": "INFO"}), encoding="utf-8")
     monkeypatch.setenv("ASSY_GENERAL__CONTENT_ROOT", str(root))
+    monkeypatch.delenv("ASSYSTENT_CONFIG_PUT_TOKEN", raising=False)
 
     from backend.api.app_context import create_app_context
 
@@ -66,6 +68,46 @@ async def test_put_config_422_on_invalid_patch(monkeypatch, tmp_path):
                 json={"patch": {"llm": {"temperature": "not-a-float"}}},
             )
             assert res.status_code == 422
+    finally:
+        await ctx.llm_client.aclose()
+        app.state.ctx = None
+
+
+@pytest.mark.asyncio
+async def test_put_config_401_without_token_when_required(monkeypatch, tmp_path):
+    root = tmp_path / "content3"
+    root.mkdir()
+    (root / "config").mkdir()
+    cfg_path = root / "config" / "config.yaml"
+    cfg_path.write_text(yaml.safe_dump({"llm": {"temperature": 0.5}}), encoding="utf-8")
+    monkeypatch.setenv("ASSY_GENERAL__CONTENT_ROOT", str(root))
+    monkeypatch.setenv("ASSYSTENT_CONFIG_PUT_TOKEN", "sekret-testowy")
+
+    from backend.api.app_context import create_app_context
+
+    ctx = create_app_context()
+    app.state.ctx = ctx
+    transport = ASGITransport(app=app)
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            res = await ac.put(
+                "/api/v1/config",
+                json={"patch": {"llm": {"temperature": 0.11}}},
+            )
+            assert res.status_code == 401
+            ok = await ac.put(
+                "/api/v1/config",
+                json={"patch": {"llm": {"temperature": 0.11}}},
+                headers={"X-Config-Put-Token": "sekret-testowy"},
+            )
+            assert ok.status_code == 200
+            bearer = await ac.put(
+                "/api/v1/config",
+                json={"patch": {"llm": {"temperature": 0.12}}},
+                headers={"Authorization": "Bearer sekret-testowy"},
+            )
+            assert bearer.status_code == 200
+            assert app.state.ctx.config.llm.temperature == pytest.approx(0.12)
     finally:
         await ctx.llm_client.aclose()
         app.state.ctx = None

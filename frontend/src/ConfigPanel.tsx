@@ -183,7 +183,9 @@ export function ConfigPanel({
 
           <p style={{ margin: "1rem 0 0.35rem", color: "#e8e4f0" }}>TTS — prędkość głosu</p>
           <p style={{ margin: 0, fontSize: 12, color: "#8a8198" }}>
-            Wymaga zapisanej <code>config/config.yaml</code> w <code>content_root</code>.
+            Wymaga zapisanej <code>config/config.yaml</code> w <code>content_root</code>. Gdy backend ma{" "}
+            <code>ASSYSTENT_CONFIG_PUT_TOKEN</code>, ustaw ten sam sekret w <code>VITE_CONFIG_PUT_TOKEN</code>, preloadzie
+            lub <code>localStorage[&quot;assystent.configPutToken&quot;]</code>.
           </p>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "0.5rem", alignItems: "center" }}>
             <input

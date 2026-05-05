@@ -14,3 +14,20 @@ export function readApiBaseUrl(): string {
   }
   return "http://127.0.0.1:8000";
 }
+
+/** Nagłówki dla `PUT /api/v1/config` gdy backend ma `ASSYSTENT_CONFIG_PUT_TOKEN`. */
+export function configPutHeaders(): Record<string, string> {
+  const fromEnv = import.meta.env.VITE_CONFIG_PUT_TOKEN?.trim();
+  const fromBridge =
+    typeof window !== "undefined" ? window.assystent?.configPutToken?.trim() : undefined;
+  const fromStorage =
+    typeof window !== "undefined"
+      ? localStorage.getItem("assystent.configPutToken")?.trim()
+      : undefined;
+  const token = (fromEnv || fromBridge || fromStorage || "") as string;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) {
+    headers["X-Config-Put-Token"] = token;
+  }
+  return headers;
+}

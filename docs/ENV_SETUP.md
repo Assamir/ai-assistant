@@ -986,3 +986,9 @@ Przed pierwszym uruchomieniem backendu, upewnij się:
 ### 11.4 `PUT /api/v1/config` (FastAPI)
 
 Częściowy merge JSON do istniejącego pliku YAML w `content_root` (wymaga zapisanego `config/config.yaml`); po sukcesie **hot-reload** (`apply_reload_configuration`). Przykład z UI: panel **Więcej** → prędkość TTS (`tts.voice_speed`).
+
+### 11.5 Ochrona zapisu konfiguracji — `ASSYSTENT_CONFIG_PUT_TOKEN`
+
+Jeśli ustawione (niepusty string), każde **`PUT /api/v1/config`** musi przekazać ten sam sekret w nagłówku **`X-Config-Put-Token`** albo **`Authorization: Bearer <token>`** (stała długość porównania, `hmac.compare_digest`). Gdy zmienna nie jest ustawiona, endpoint zachowuje się jak wcześniej (tylko sieć lokalna / zaufana).
+
+Frontend: opcjonalnie `VITE_CONFIG_PUT_TOKEN`, preload `ASSYSTENT_CONFIG_PUT_TOKEN` → `window.assystent.configPutToken`, albo ręcznie `localStorage.setItem('assystent.configPutToken', '…')`.

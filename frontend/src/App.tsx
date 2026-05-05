@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { readApiBaseUrl } from "./apiBase";
+import { configPutHeaders, readApiBaseUrl } from "./apiBase";
 import { AvatarCanvas } from "./AvatarCanvas";
 import { ConfigPanel, type ConfigTabId } from "./ConfigPanel";
 import { SetupWizard, SETUP_WIZARD_STORAGE_KEY, hasSetupWizardDismissed } from "./SetupWizard";
@@ -128,7 +128,7 @@ export function App() {
     try {
       const res = await fetch(`${apiBase}/api/v1/config`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: configPutHeaders(),
         body: JSON.stringify({ patch: { tts: { voice_speed: spd } } }),
       });
       const data = await res.json().catch(() => ({}));
