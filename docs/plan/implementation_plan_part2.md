@@ -1,31 +1,31 @@
 # Assystent — Plan Implementacji: Fazy 2–3, Testy, Modele AI
 
-> **Status:** v1.18 — 2026-05-05 (T8: **`POST check-league-hint`** + heurystyka ligi vs `web_search`; WS `player_profile.league_hint`; roadmap v1.9)
+> **Status:** v1.19 — 2026-05-05 (T8: auto `check-league-hint` przy `game_detected` + flaga `observer`; frontend WS profilu ligi; roadmap v1.10)
 > **Kontekst:** [Plan główny (Faza 1)](implementation_plan.md) · [ENV_SETUP](../ENV_SETUP.md) · [TEST_PLAN](TEST_PLAN.md) · [DEFINITION_OF_DONE](DEFINITION_OF_DONE.md) · [RISK_REGISTER](RISK_REGISTER.md) · [ROADMAP](IMPLEMENTATION_ROADMAP.md)
 
 ---
 
-## Stan wdrożenia — 2026-05-05 (v1.18)
+## Stan wdrożenia — 2026-05-05 (v1.19)
 
 
-| Zakres                    | Stan    | Uwagi                                                                                                                                                                                                                                                                                        |
-| ------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **T5** Screen / VLM / OCR | 🟢 ~80% | Crop z `GameProfile.screen_regions` (`apply_profile_crop_to_png` w `ObserverLoop`); pozostałe integracje/regresje VLM                                                                                                                                                                        |
-| **T6** Observer / gry     | 🟢 ~95% | VLM fallback przez `probe_game_identity_from_screen` + hook w `GameObserver` (`vlm_fallback_game_detection`), `game_detections` repo (wcześniej)                                                                                                                                             |
-| **T7** MCP rozszerzenia   | 🟢 ~95% | Narzędzia MCP + cache + rate; `tool_calls` w SQLite przy WS/REST/SSE (`ToolCallsRepository`); odpowiedź JSON + `done` SSE z `session_id` / `chat_session_id`                                                                                                                                 |
-| **T8** Memory / profil    | 🟢 ~92% | v1.17 + **`POST .../check-league-hint`** (`league_hint.py`, DDG, heurystyka podstringu), WS **`player_profile.league_hint`**. **Poza:** opcjonalne wywołanie przy `game_detected` (flaga konfiguracyjna), UI frontowe. |
-| **T9–T14** Frontend       | 🟢 ~93% | v1.12 + crossfade wag ekspresji (~0.42s) przy zmianie emocji z WS; **`emotionBlend.ts`**; **`AuraLights`** (hemisphere + dwa point); ikona NSIS + **`CHANGELOG.md`**. Dalej: spring bones subtelniejsze / shader aura; pełniejszy auth. |
+| Zakres                    | Stan    | Uwagi                                                                                                                                                                                                                                   |
+| ------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **T5** Screen / VLM / OCR | 🟢 ~80% | Crop z `GameProfile.screen_regions` (`apply_profile_crop_to_png` w `ObserverLoop`); pozostałe integracje/regresje VLM                                                                                                                   |
+| **T6** Observer / gry     | 🟢 ~95% | VLM fallback przez `probe_game_identity_from_screen` + hook w `GameObserver` (`vlm_fallback_game_detection`), `game_detections` repo (wcześniej)                                                                                        |
+| **T7** MCP rozszerzenia   | 🟢 ~95% | Narzędzia MCP + cache + rate; `tool_calls` w SQLite przy WS/REST/SSE (`ToolCallsRepository`); odpowiedź JSON + `done` SSE z `session_id` / `chat_session_id`                                                                            |
+| **T8** Memory / profil    | 🟢 ~95% | v1.19: check-league-hint + auto po `game_detected` (`observer.auto_league_hint_on_game_detected` / `ASSY_OBSERVER__...`); WS `player_profile.league_hint`; frontend: baner + badge przy `league_hint` / `league_changed`.                |
+| **T9–T14** Frontend       | 🟢 ~94% | Crossfade (~0.42s), AuraLights (puls + **kolory wg emocji**), wizard, ikona NSIS; WS profilu (baner ligi). Idle: **sprężynowe** kołysanie tułowia. Dalej: shader na materiale VRM / spring bone VRM; README release; auth.                  |
 
 
 **Kamienie M2 i M3** — **prawie**: backend + frontend Fazy 3 z API konfiguracji i klipem audio; do zamknięcia milestone: polish release (wizard smoke, dokumentacja produktowa).
 
-> **Następny krok (po v1.18):** opcjonalny **auto-hint** przy wykryciu gry (`game_detected` + ENV); frontend obsługa WS profilu; shader/spring i auth.
+> **Następny krok (po v1.19):** shader aura / subtelniejsze spring bones (T10–T11); README produktowy (release); ew. twardszy auth (po uzgodnieniu).
 
 ---
 
-## Pozostały zakres (po v1.18)
+## Pozostały zakres (po v1.19)
 
-- **T8 dopiski:** tło: `check-league-hint` po `game_detected` (konfigurowalnie); komendy głosowe mapowane na istniejące REST.
+- **T8 dopiski:** komendy głosowe mapowane na istniejące REST (np. check-league-hint).
 - **T10–T14 dopiski:** README dla release (polityka produktu); ikona ✅; crossfade emocji + podstawowa aura świetlna ✅ (`AvatarCanvas`); opcjonalnie shader aura / spring bones.
 
 ## 6. Faza 2 — Vision, MCP, Memory (T5–T8)

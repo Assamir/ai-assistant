@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is inspired 
 
 ### Added
 
+- **T8 / Auto league hint:** `observer.auto_league_hint_on_game_detected` (YAML) lub `ASSY_OBSERVER__AUTO_LEAGUE_HINT_ON_GAME_DETECTED` — po `game_detected` z znanym `game_id` uruchamia `check-league-hint`; przy `mismatch_hint` broadcast WS `player_profile.league_hint` (jak REST `broadcast: true`). Dokumentacja ENV: `docs/ENV_SETUP.md` §11.2.
+- **Frontend:** baner + badge „Liga” (karta Połączenie) dla WS `player_profile.league_hint` oraz `player_profile.league_changed`.
 - Desktop packaging: `electron-builder` Windows (NSIS) uses `frontend/resources/icon.png` as the application icon (`frontend/package.json` → `build.icon`).
 - Avatar UX: crossfade (~0.42s, ease-out) between VRM expression weights when the WebSocket `emotion` changes; richer scene lighting (`hemisphereLight` + dual pulsing fill/key `pointLight`s).
 - **T8 / Player profile:** `POST /api/v1/player-profile/games/{game}/archive` — writes the current YAML slice for that game to SQLite `player_profile_archives` (`season`, `reason` ∈ `season_reset` | `manual` | `backup`); does **not** clear live `player_profile.yaml` (see PRD / api-plan). `GET /api/v1/player-profile/archives` lists rows (optional `game`, `limit`).
@@ -15,4 +17,5 @@ All notable changes to this project are documented here. The format is inspired 
 
 ### Changed
 
+- Avatar: wygładzone (exponential) kołysanie tułowia przy idle + mniejsza amplituda; `AuraLights` płynnie zmienia barwy świateł wg emocji (mapa dla wybranych kluczy z `emotions.json`; reszta → paleta neutral).
 - Refactored emotion weight math into `frontend/src/emotionBlend.ts` (shared helpers for normalization and blending).

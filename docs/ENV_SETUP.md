@@ -1,7 +1,7 @@
 # ENV_SETUP.md — Środowisko Deweloperskie Assystent
 
-> **Status:** v1.1
-> **Data:** 2026-05-04
+> **Status:** v1.2
+> **Data:** 2026-05-05
 > **Cel:** Kompletny manual konfiguracji środowiska deweloperskiego. Osoba na świeżym Windows 11 powinna skończyć w < 2h.
 > **Źródło decyzji:** DECISIONS_LOG.md (v1.1) — nie podważaj wartości z tego pliku.
 
@@ -324,7 +324,7 @@ python -c "import fastapi, faster_whisper, chromadb, easyocr, dxcam; print('OK')
 
 ### 4.4 Torch, transformers, PATH i konflikty wersji (Windows)
 
-**Ten sam interpreter co backend.** Uruchamiaj backend (`uvicorn`, testy) tym Pythonem, którym instalowałeś pakiety — najlepiej **venv z repo** (`python -m venv .venv`, potem `.\scripts\setup.ps1`). Instalacja „user” (`Defaulting to user installation`) też działa, byle **`python` w terminalu** to był ten sam plik wykonywalny (`where python`).
+**Ten sam interpreter co backend.** Uruchamiaj backend (`uvicorn`, testy) tym Pythonem, którym instalowałeś pakiety — najlepiej **venv z repo** (`python -m venv .venv`, potem `.\scripts\setup.ps1`). Instalacja „user” (`Defaulting to user installation`) też działa, byle `**python` w terminalu** to był ten sam plik wykonywalny (`where python`).
 
 **PATH i skrypty CLI.** Pip ostrzega, że `torchrun.exe`, `accelerate.exe`, `transformers.exe` trafiły np. do:
 
@@ -338,9 +338,9 @@ Do codziennego backendu **nie musisz** dodawać tego do PATH (wystarczy `python 
 python -c "import torch; print(torch.__version__); print('cuda', torch.cuda.is_available())"
 ```
 
-Jeśli w wersji Torch widzisz sufiks **`+cpu`** lub `cuda False`, a masz GPU NVIDIA — zainstaluj build z CUDA według [Get Started (PyTorch)](https://pytorch.org/get-started/locally/) (osobna komenda z `--index-url`). Backendowy moduł `Moondream2VLM` (`backend/ai/moondream_vlm.py`) używa `device: auto|cuda|cpu|mps` z `config.yaml`.
+Jeśli w wersji Torch widzisz sufiks `**+cpu**` lub `cuda False`, a masz GPU NVIDIA — zainstaluj build z CUDA według [Get Started (PyTorch)](https://pytorch.org/get-started/locally/) (osobna komenda z `--index-url`). Backendowy moduł `Moondream2VLM` (`backend/ai/moondream_vlm.py`) używa `device: auto|cuda|cpu|mps` z `config.yaml`.
 
-**setuptools.** Pakiet **torch** często wymusza **`setuptools<82`** — pip może **obniżyć** wersję setuptools. To oczekiwane; przy konfliktach z innymi projektami na tej samej instalacji Pythona użyj **osobnego venv** wyłącznie pod Assystenta.
+**setuptools.** Pakiet **torch** często wymusza `**setuptools<82`** — pip może **obniżyć** wersję setuptools. To oczekiwane; przy konfliktach z innymi projektami na tej samej instalacji Pythona użyj **osobnego venv** wyłącznie pod Assystenta.
 
 **tokenizers.** **transformers** pinuje kompatybilną wersję **tokenizers** — nie podnoś jej ręcznie „na sztywno”, dopóki upstream tego nie wymaga.
 
@@ -738,8 +738,8 @@ npm run electron:dev
 
 ### 7.4 Pakiet Windows (`electron-builder`)
 
-- Ikona aplikacji / instalatora: repo trzyma **`frontend/resources/icon.png`**; ścieżka jest ustawiona w `frontend/package.json` → **`build.icon`**. Nie umieszczaj ikony pod `frontend/build/`, ponieważ w korzeniu repozytorium `.gitignore` ignoruje dowolny katalog **`build/`**.
-- Instalator NSIS (Windows): po `npm install` uruchom **`npm run electron:dist`** (łączy `vite build` z `electron-builder --win`). Artefakty trafiają do **`frontend/release/`**. Zmiany w changelogu release: **`CHANGELOG.md`** w korzeniu repo.
+- Ikona aplikacji / instalatora: repo trzyma `**frontend/resources/icon.png**`; ścieżka jest ustawiona w `frontend/package.json` → `**build.icon**`. Nie umieszczaj ikony pod `frontend/build/`, ponieważ w korzeniu repozytorium `.gitignore` ignoruje dowolny katalog `**build/**`.
+- Instalator NSIS (Windows): po `npm install` uruchom `**npm run electron:dist**` (łączy `vite build` z `electron-builder --win`). Artefakty trafiają do `**frontend/release/**`. Zmiany w changelogu release: `**CHANGELOG.md**` w korzeniu repo.
 
 ---
 
@@ -1022,6 +1022,14 @@ Przed pierwszym uruchomieniem backendu, upewnij się:
 
 Ładowanie: domyślne Pydantic → YAML w `content_root` (`config/config.yaml`) → nadpisania **ENV** `ASSY_<sekcja>__<pole>` (podwójne `__` dla zagnieżdżeń), np. `ASSY_LLM__API_BASE_URL`, `ASSY_MEMORY__ENABLED`. Szczegóły: `backend/config/loader.py`, model: `backend/config/schema.py`.
 
+**Observer — auto sprawdzenie ligi przy wykryciu gry (T8):**
+
+
+| ENV                                                | Wartość      | Skutek                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| -------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ASSY_OBSERVER__AUTO_LEAGUE_HINT_ON_GAME_DETECTED` | `1` / `true` | Po zdarzeniu `game_detected`, gdy backend zna `**game_id`** profilu (klucz w `player_profile.yaml`), uruchamiany jest `check-league-hint`; przy rozbieżności z wynikiem `web_search` nadawane jest WS `player_profile.league_hint`. W YAML: `observer.auto_league_hint_on_game_detected: true`. Wymaga włączonego MCP z narzędziem `web_search`; gdy MCP wyłączone lub brak dopasowania profilu, nic się nie dzieje (bez błędu w UI). |
+
+
 ### 11.3 Frontend / Electron (preload)
 
 
@@ -1039,6 +1047,6 @@ Częściowy merge JSON do istniejącego pliku YAML w `content_root` (wymaga zapi
 
 ### 11.5 Ochrona zapisu konfiguracji — `ASSYSTENT_CONFIG_PUT_TOKEN`
 
-Jeśli ustawione (niepusty string), każde **`PUT /api/v1/config`** musi przekazać ten sam sekret w nagłówku **`X-Config-Put-Token`** albo **`Authorization: Bearer <token>`** (stała długość porównania, `hmac.compare_digest`). Gdy zmienna nie jest ustawiona, endpoint zachowuje się jak wcześniej (tylko sieć lokalna / zaufana).
+Jeśli ustawione (niepusty string), każde `**PUT /api/v1/config`** musi przekazać ten sam sekret w nagłówku `**X-Config-Put-Token**` albo `**Authorization: Bearer <token>**` (stała długość porównania, `hmac.compare_digest`). Gdy zmienna nie jest ustawiona, endpoint zachowuje się jak wcześniej (tylko sieć lokalna / zaufana).
 
 Frontend: opcjonalnie `VITE_CONFIG_PUT_TOKEN`, preload `ASSYSTENT_CONFIG_PUT_TOKEN` → `window.assystent.configPutToken`, albo ręcznie `localStorage.setItem('assystent.configPutToken', '…')`.

@@ -21,9 +21,16 @@ interface VrmRootProps {
   lipSyncLevel: number;
 }
 
+/** Wygładzone „sprężynowe” odchylenie tułowia od rest pose (mniej sztywny niż surowy sin/cos na klatkę). */
+const IDLE_SWAY_SPRING = 9;
+/** ~30% ciszej niż poprzednie stałe obrótki przy rest (subtelniejszy idle). */
+const IDLE_SWAY_AMP_X = 0.01;
+const IDLE_SWAY_AMP_Z = 0.0035;
+
 function VrmRoot({ url, emotion, lipSyncLevel }: VrmRootProps) {
   const vrmRef = useRef<VRM | null>(null);
   const idleBonesRef = useRef<{ bone: THREE.Object3D; rest: THREE.Quaternion }[]>([]);
+  const idleSwayRef = useRef({ x: 0, z: 0 });
 
   const latestEmotionRef = useRef(emotion);
   latestEmotionRef.current = emotion;
@@ -62,6 +69,7 @@ function VrmRoot({ url, emotion, lipSyncLevel }: VrmRootProps) {
     return () => {
       vrmRef.current = null;
       idleBonesRef.current = [];
+      idleSwayRef.current = { x: 0, z: 0 };
     };
   }, [gltf]);
 
@@ -92,10 +100,16 @@ function VrmRoot({ url, emotion, lipSyncLevel }: VrmRootProps) {
     }
     vrm.update(delta);
     const t = state.clock.elapsedTime;
+    const sway = idleSwayRef.current;
+    const targetX = Math.sin(t * 0.95) * IDLE_SWAY_AMP_X;
+    const targetZ = Math.cos(t * 0.42) * IDLE_SWAY_AMP_Z;
+    const k = 1 - Math.exp(-delta * IDLE_SWAY_SPRING);
+    sway.x += (targetX - sway.x) * k;
+    sway.z += (targetZ - sway.z) * k;
     for (const { bone, rest } of idleBonesRef.current) {
       bone.quaternion.copy(rest);
-      bone.rotateX(Math.sin(t * 0.95) * 0.014);
-      bone.rotateZ(Math.cos(t * 0.42) * 0.005);
+      bone.rotateX(sway.x);
+      bone.rotateZ(sway.z);
     }
     const em = vrm.expressionManager;
     if (!em) {
@@ -128,25 +142,65 @@ function VrmRoot({ url, emotion, lipSyncLevel }: VrmRootProps) {
   );
 }
 
-function AuraLights() {
+/** Paleta świateł point/hemi — płynnie interpolowana przy zmianie `emotion` (bez shadera na materiale VRM). */
+const AURA_PALETTE: Record<
+  string,
+  { hemisphereSky: string; key: string; fill: string }
+> = {
+  neutral: { hemisphereSky: "#dbe8ff", key: "#d8c8ff", fill: "#5eead4" },
+  happy: { hemisphereSky: "#ffeccd", key: "#ffe8aa", fill: "#7bdcff" },
+  sad: { hemisphereSky: "#c8d4ff", key: "#aab8ff", fill: "#6a7bc4" },
+  angry: { hemisphereSky: "#ffd4cf", key: "#ffb398", fill: "#ff7368" },
+  excited: { hemisphereSky: "#ffe8bf", key: "#ffd078", fill: "#8aecbc" },
+  thinking: { hemisphereSky: "#d8e4ff", key: "#c4c8ff", fill: "#7ec8dc" },
+  surprised: { hemisphereSky: "#fff0d8", key: "#ffdc9a", fill: "#9ae0ff" },
+};
+
+const _auraTargetKey = new THREE.Color();
+const _auraTargetFill = new THREE.Color();
+const _auraTargetSky = new THREE.Color();
+
+function AuraLights({ emotion }: { emotion: string }) {
   const keyRef = useRef<THREE.PointLight>(null);
   const fillRef = useRef<THREE.PointLight>(null);
-  useFrame(({ clock }) => {
+  const hemiRef = useRef<THREE.HemisphereLight>(null);
+
+  const keyCur = useRef(new THREE.Color(AURA_PALETTE.neutral.key));
+  const fillCur = useRef(new THREE.Color(AURA_PALETTE.neutral.fill));
+  const skyCur = useRef(new THREE.Color(AURA_PALETTE.neutral.hemisphereSky));
+
+  useFrame(({ clock }, delta) => {
     const t = clock.elapsedTime;
+    const nk = normalizeEmotionKey(emotion);
+    const pal = AURA_PALETTE[nk] ?? AURA_PALETTE.neutral;
+    const dk = Math.min(1, delta * 2.6);
+    _auraTargetKey.set(pal.key);
+    _auraTargetFill.set(pal.fill);
+    _auraTargetSky.set(pal.hemisphereSky);
+    keyCur.current.lerp(_auraTargetKey, dk);
+    fillCur.current.lerp(_auraTargetFill, dk);
+    skyCur.current.lerp(_auraTargetSky, dk);
+
     const key = keyRef.current;
     const fill = fillRef.current;
+    const hemi = hemiRef.current;
     if (key) {
-      key.intensity = 0.38 + Math.sin(t * 0.85) * 0.09;
+      key.color.copy(keyCur.current);
+      key.intensity = 0.36 + Math.sin(t * 0.85) * 0.07;
     }
     if (fill) {
-      fill.intensity = 0.13 + Math.cos(t * 1.12) * 0.048;
+      fill.color.copy(fillCur.current);
+      fill.intensity = 0.12 + Math.cos(t * 1.12) * 0.04;
+    }
+    if (hemi) {
+      hemi.color.copy(skyCur.current);
     }
   });
   return (
     <>
-      <hemisphereLight args={["#dbe8ff", "#120824", 0.32]} />
-      <pointLight ref={keyRef} position={[0.85, 1.68, 1.18]} color="#d8c8ff" distance={7} decay={2} />
-      <pointLight ref={fillRef} position={[-1.42, 1.38, 0.92]} color="#5eead4" distance={5.8} decay={2} />
+      <hemisphereLight ref={hemiRef} args={[AURA_PALETTE.neutral.hemisphereSky, "#120824", 0.31]} />
+      <pointLight ref={keyRef} position={[0.85, 1.68, 1.18]} color={AURA_PALETTE.neutral.key} distance={7} decay={2} />
+      <pointLight ref={fillRef} position={[-1.42, 1.38, 0.92]} color={AURA_PALETTE.neutral.fill} distance={5.8} decay={2} />
     </>
   );
 }
@@ -174,7 +228,7 @@ export function AvatarCanvas({ vrmUrl, emotion, lipSyncLevel }: AvatarCanvasProp
         >
           <ambientLight intensity={0.52} />
           <directionalLight position={[3, 6, 4]} intensity={1} castShadow />
-          <AuraLights />
+          <AuraLights emotion={emotion} />
           <Suspense fallback={null}>
             <VrmRoot url={trimmed} emotion={emotion} lipSyncLevel={lipSyncLevel} />
           </Suspense>

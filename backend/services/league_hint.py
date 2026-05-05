@@ -93,4 +93,29 @@ async def analyze_league_hint(ctx: AppContext, game_id: str) -> dict[str, Any]:
     }
 
 
-__all__ = ["analyze_league_hint", "league_mismatch_heuristic", "_hint_search_query", "_search_blob"]
+async def broadcast_player_profile_league_hint_ws(ctx: AppContext, out: Dict[str, Any]) -> None:
+    """Broadcast `player_profile.league_hint` gdy wynik analizy wskazuje rozbieżność (jak REST `broadcast: true`)."""
+    if not out.get("ok") or not out.get("mismatch_hint"):
+        return
+    payload = {
+        "game": out["game"],
+        "profile_league": out.get("profile_league"),
+        "mismatch_hint": True,
+        "archive_suggested": out.get("archive_suggested"),
+        "query": out.get("query"),
+        "hint": "Zweryfikuj ligę (PATCH /player-profile/games/{game}) lub archiwum (POST .../archive).",
+    }
+    for sid in ctx.websocket_manager.iter_session_ids():
+        try:
+            await ctx.websocket_manager.send_to_session(sid, "player_profile.league_hint", payload)
+        except Exception:
+            pass
+
+
+__all__ = [
+    "analyze_league_hint",
+    "broadcast_player_profile_league_hint_ws",
+    "league_mismatch_heuristic",
+    "_hint_search_query",
+    "_search_blob",
+]

@@ -401,7 +401,28 @@ def make_game_emitter(ctx: AppContext):
             await record_game_detection_on_game_emit(ctx, payload)
         for sid in list(ctx.websocket_manager._by_session.keys()):
             await ctx.websocket_manager.send_to_session(sid, event_name, dict(payload))
+        if event_name == "game_detected":
+            await _maybe_auto_league_hint_after_game_detected(ctx, payload)
     return _emit
+
+
+async def _maybe_auto_league_hint_after_game_detected(ctx: AppContext, payload: Mapping[str, Any]) -> None:
+    """Opcjonalny `check-league-hint` po wykryciu gry — `observer.auto_league_hint_on_game_detected` lub `ASSY_OBSERVER__AUTO_LEAGUE_HINT_ON_GAME_DETECTED`."""
+    if not payload.get("active"):
+        return
+    raw_gid = payload.get("game_id")
+    if not isinstance(raw_gid, str) or not raw_gid.strip():
+        return
+    if not ctx.config.observer.auto_league_hint_on_game_detected:
+        return
+    from backend.services.league_hint import analyze_league_hint, broadcast_player_profile_league_hint_ws
+
+    try:
+        out = await analyze_league_hint(ctx, raw_gid.strip())
+    except Exception:
+        _logger.debug("Auto league hint after game_detected failed", exc_info=True)
+        return
+    await broadcast_player_profile_league_hint_ws(ctx, out)
 
 
 __all__ = [

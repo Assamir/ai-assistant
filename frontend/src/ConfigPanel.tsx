@@ -6,6 +6,8 @@ interface ConfigPanelProps {
   tab: ConfigTabId;
   onTab: (t: ConfigTabId) => void;
   wsStatus: string;
+  /** Świeci, gdy ostatnio przyszedł WS dot. profilu (liga); baner przy avatarze — przypomnienie na karcie „Połączenie”. */
+  profileWsActive?: boolean;
   vrmUrl: string;
   onVrmSave: (url: string) => void;
   apiBaseUrl: string;
@@ -31,6 +33,7 @@ export function ConfigPanel({
   tab,
   onTab,
   wsStatus,
+  profileWsActive = false,
   vrmUrl,
   onVrmSave,
   apiBaseUrl,
@@ -96,6 +99,28 @@ export function ConfigPanel({
         <div style={{ fontSize: 14, lineHeight: 1.55 }}>
           <p style={{ margin: "0 0 0.5rem" }}>
             WebSocket: <strong>{wsStatus}</strong>
+            {profileWsActive ? (
+              <span
+                title="Powiadomienie profilu (liga) jest widoczne przy avatarze."
+                style={{
+                  marginLeft: "0.4rem",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minWidth: "1.1rem",
+                  height: "1.1rem",
+                  padding: "0 0.3rem",
+                  borderRadius: 4,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  background: "#5c4a26",
+                  color: "#ffe6a8",
+                  verticalAlign: "middle",
+                }}
+              >
+                Liga
+              </span>
+            ) : null}
           </p>
           <p style={{ margin: 0, color: "#b8afc8", wordBreak: "break-all" }}>
             <code style={{ fontSize: 12 }}>{wsDisplay}</code>

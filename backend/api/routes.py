@@ -337,7 +337,7 @@ class LeagueHintBody(BaseModel):
 
 @router.post("/player-profile/games/{game}/check-league-hint")
 async def api_player_profile_check_league_hint(game: str, body: LeagueHintBody, dep: Deps):
-    from backend.services.league_hint import analyze_league_hint
+    from backend.services.league_hint import analyze_league_hint, broadcast_player_profile_league_hint_ws
 
     out = await analyze_league_hint(dep, game)
     if not out.get("ok"):
@@ -353,20 +353,8 @@ async def api_player_profile_check_league_hint(game: str, body: LeagueHintBody, 
         if code == "search_failed":
             raise HTTPException(status_code=502, detail={"code": code, "detail": out.get("detail")})
         raise HTTPException(status_code=500, detail={"code": code})
-    if body.broadcast and out.get("mismatch_hint"):
-        payload = {
-            "game": out["game"],
-            "profile_league": out.get("profile_league"),
-            "mismatch_hint": True,
-            "archive_suggested": out.get("archive_suggested"),
-            "query": out.get("query"),
-            "hint": "Zweryfikuj ligę (PATCH /player-profile/games/{game}) lub archiwum (POST .../archive).",
-        }
-        for sid in dep.websocket_manager.iter_session_ids():
-            try:
-                await dep.websocket_manager.send_to_session(sid, "player_profile.league_hint", payload)
-            except Exception:
-                pass
+    if body.broadcast:
+        await broadcast_player_profile_league_hint_ws(dep, out)
     return out
 
 

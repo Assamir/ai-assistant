@@ -214,6 +214,13 @@ class ObserverConfig(BaseModel):
         le=3600,
         description="Minimalny odstęp między próbami fallbacku VLM (GameObserver).",
     )
+    auto_league_hint_on_game_detected: bool = Field(
+        default=False,
+        description=(
+            "Gdy True — po emisji `game_detected` (aktywna gra, znany `game_id` profilu) "
+            "uruchom `check-league-hint`; przy rozbieżności broadcast WS `player_profile.league_hint`."
+        ),
+    )
 
 
 class MonitorInfo(BaseModel):

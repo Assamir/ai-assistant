@@ -1,6 +1,6 @@
 # DOK-16: IMPLEMENTATION_ROADMAP.md — Roadmapa Tygodniowa
 
-> **Status:** v1.9 — 2026-05-05 (REST `check-league-hint` + WS league_hint)
+> **Status:** v1.10 — 2026-05-05 (auto league hint przy `game_detected` + UI WS profilu)
 > **14 tygodni × 5 dni × ~6h = ~420h pracy**
 > **Szczegóły zadań:** [implementation_plan.md](implementation_plan.md) + [implementation_plan_part2.md](implementation_plan_part2.md)
 
@@ -8,14 +8,14 @@
 
 ## Stan implementacji — 2026-05-05
 
-Stan spójny z [implementation_plan_part2.md](implementation_plan_part2.md) (v1.18). W repozytorium jest **`frontend/`** (Electron, Vite, React, VRM, WebSocket, Setup Wizard).
+Stan spójny z [implementation_plan_part2.md](implementation_plan_part2.md) (v1.19). W repozytorium jest `**frontend/`** (Electron, Vite, React, VRM, WebSocket, Setup Wizard).
 
 
-| Faza                        | Tygodnie | Stan w repo | Komentarz                                                                                                                                                                                                                                                                                                                          |
-| --------------------------- | -------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **1** — Backend Core        | T1–T4    | **~90%**    | FastAPI `0.4.x`: T1–T3 jak wcześniej + T4 — `recover_stale_sessions`, `SessionWatchdog` (CB→`system_state`, hibernacja→WS), hot-reload `config.yaml` + `personas/`, `build_health_snapshot`, DB w `{content_root}/data/assystent.db`, rozwiązywanie YAML z `config/config.yaml`. **Poza:** pełny UI PTT w Electron, FPS w grze.     |
-| **2** — Vision, MCP, Memory | T5–T8    | **~89%**    | Profil + **check-league-hint** (web). **Poza:** auto-hint przy detekcji gry, UI.                                                                                                              |
-| **3** — Frontend + Avatar   | T9–T14   | **~92%**    | Electron + tray + hotkeys, Vite/React, `useWebSocket`, avatar VRM (R3F), lip-sync RMS, idle, **`emotionBlend` crossfade** (~0.42s), **`AuraLights`**, `PUT /api/v1/config` + token opcjonalny, CORS z ENV, Setup Wizard, ikona **`frontend/resources/icon.png`**. **Poza:** shader aura / subtelniejsze spring bones, README release (polityka), auth poza tokenem PUT.                                                                       |
+| Faza                        | Tygodnie | Stan w repo | Komentarz                                                                                                                                                                                                                                                                                                                                                               |
+| --------------------------- | -------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1** — Backend Core        | T1–T4    | **~90%**    | FastAPI `0.4.x`: T1–T3 jak wcześniej + T4 — `recover_stale_sessions`, `SessionWatchdog` (CB→`system_state`, hibernacja→WS), hot-reload `config.yaml` + `personas/`, `build_health_snapshot`, DB w `{content_root}/data/assystent.db`, rozwiązywanie YAML z `config/config.yaml`. **Poza:** pełny UI PTT w Electron, FPS w grze.                                         |
+| **2** — Vision, MCP, Memory | T5–T8    | **~92%**    | Profil + check-league-hint + auto-hint przy `game_detected` (flaga `observer`). **Poza:** głos → REST.                                                                                                                                                                                                                                                                  |
+| **3** — Frontend + Avatar   | T9–T14   | **~93%**    | Electron + tray + hotkeys, Vite/React, `useWebSocket`, avatar VRM (R3F), lip-sync RMS, idle, crossfade emocji (~0.42s), AuraLights, WS profilu ligi (baner + badge), `PUT /api/v1/config` + token opcjonalny, Setup Wizard, ikona NSIS. **Poza:** shader aura / spring bones, README release, auth poza tokenem PUT.                                                      |
 
 
 **Wniosek:** M1 zaawansowany; M2/M3 per part2 — README produktowy / auth opcjonalnie; ikona ✅; crossfade / aura frontend ✅; archiwum profilu (API) ✅.

@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
-from typing import List, Tuple
 from unittest.mock import AsyncMock, patch
 
 import pytest
+import yaml
 from httpx import ASGITransport, AsyncClient
 
-from backend.api.app_context import AppContext, make_game_emitter
+from backend.api.app_context import AppContext, WebSocketManager, make_game_emitter
 from backend.main import app
 
 
@@ -117,6 +116,77 @@ async def test_status_observer_current_game_reflects_state(http_client):
     r = await ac.get("/api/v1/status")
     body = r.json()
     assert body["observer"]["current_game"] == "Path of Exile 2"
+
+
+@pytest.mark.asyncio
+async def test_auto_league_hint_on_game_detected_broadcasts_ws(monkeypatch, tmp_path):
+    """Gdy `observer.auto_league_hint_on_game_detected`, po `game_detected` z `game_id` wysyła `player_profile.league_hint` przy mismatch."""
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / "config").mkdir()
+    (root / "config" / "config.yaml").write_text(
+        yaml.safe_dump({"log_level": "INFO", "mcp": {"enabled": True}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ASSY_GENERAL__CONTENT_ROOT", str(root))
+    (root / "data").mkdir(parents=True, exist_ok=True)
+    (root / "data" / "player_profile.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "games": {
+                    "poe2": {
+                        "league": "OldLeagueX",
+                        "active_character": "H",
+                        "characters": [{"name": "H", "class": "W"}],
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    from backend.api.app_context import create_app_context
+
+    ctx = create_app_context()
+    ctx.config.observer.auto_league_hint_on_game_detected = True
+
+    sent: list[tuple[str, dict]] = []
+
+    async def capture_send(_self, sid: str, event: str, payload: dict) -> None:
+        sent.append((event, payload))
+
+    monkeypatch.setattr(WebSocketManager, "send_to_session", capture_send)
+
+    ctx.websocket_manager._by_session["sess1"] = []
+
+    async def fake_invoke(name: str, arguments=None, **kwargs):
+        if name == "web_search":
+            return {
+                "ok": True,
+                "heading": "PoE2",
+                "abstract": "Totally different season name here",
+                "related_texts": [],
+            }
+        return {"ok": False}
+
+    monkeypatch.setattr(ctx.tool_registry, "invoke", fake_invoke)
+
+    emitter = make_game_emitter(ctx)
+    await emitter(
+        "game_detected",
+        {"game": "Path of Exile 2", "game_id": "poe2", "active": True},
+    )
+
+    try:
+        assert any(e == "game_detected" for e, _ in sent)
+        hint_frames = [(e, p) for e, p in sent if e == "player_profile.league_hint"]
+        assert len(hint_frames) == 1
+        _evt, payload = hint_frames[0]
+        assert payload.get("mismatch_hint") is True
+        assert payload.get("game") == "poe2"
+        assert payload.get("profile_league") == "OldLeagueX"
+    finally:
+        await ctx.llm_client.aclose()
 
 
 # ─── Orchestrator prompt includes observer_context ────────────────────────────

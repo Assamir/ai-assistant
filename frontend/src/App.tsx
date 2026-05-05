@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { configPutHeaders, readApiBaseUrl } from "./apiBase";
 import { AvatarCanvas } from "./AvatarCanvas";
 import { ConfigPanel, type ConfigTabId } from "./ConfigPanel";
@@ -35,6 +35,54 @@ function readInitialApiBase(): string {
   return readApiBaseUrl();
 }
 
+const btnSecondary: React.CSSProperties = {
+  padding: "0.4rem 0.85rem",
+  borderRadius: 6,
+  border: "1px solid #4a3f62",
+  background: "#231d2e",
+  color: "#e8e4f0",
+  cursor: "pointer",
+  fontSize: 13,
+};
+
+const btnMuted: React.CSSProperties = {
+  ...btnSecondary,
+  borderColor: "#3d3550",
+  color: "#b8afc8",
+};
+
+interface ProfileBannerState {
+  title: string;
+  detail: string;
+}
+
+function strPayload(v: unknown): string | undefined {
+  return typeof v === "string" && v.trim() ? v : undefined;
+}
+
+function bannerFromProfileWsFrame(f: WsFrame): ProfileBannerState | null {
+  if (f.event === "player_profile.league_hint") {
+    const game = strPayload(f.payload.game) ?? "gra";
+    const league = strPayload(f.payload.profile_league);
+    const detail =
+      league !== undefined
+        ? `Zapisana liga w profilu (${league}) może nie zgadzać się z bieżącym sezonem (${game}). Sprawdź PATCH profilu lub archiwum sezonu.`
+        : `Możliwa rozbieżność ligi — gra: ${game}. Sprawdź profil lub archiwum sezonu.`;
+    return { title: "Sugestia: weryfikacja ligi", detail };
+  }
+  if (f.event === "player_profile.league_changed") {
+    const game = strPayload(f.payload.game) ?? "gra";
+    const prev = strPayload(f.payload.previous_league);
+    const next = strPayload(f.payload.league);
+    const detail =
+      prev !== undefined && next !== undefined
+        ? `Zmieniono ligę dla ${game}: ${prev} → ${next}. Rozważ archiwum poprzedniego sezonu (POST .../archive).`
+        : `Zaktualizowano ligę w profilu (${game}). Rozważ archiwum sezonu, jeśli to reset.`;
+    return { title: "Profil: zmiana ligi", detail };
+  }
+  return null;
+}
+
 export function App() {
   const [log, setLog] = useState<string[]>([]);
   const [emotion, setEmotion] = useState("neutral");
@@ -50,6 +98,24 @@ export function App() {
   const [showWizard, setShowWizard] = useState(
     () => typeof window !== "undefined" && !hasSetupWizardDismissed(),
   );
+  const [profileBanner, setProfileBanner] = useState<ProfileBannerState | null>(null);
+  const profileBannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const dismissProfileBanner = useCallback(() => {
+    if (profileBannerTimer.current !== null) {
+      clearTimeout(profileBannerTimer.current);
+      profileBannerTimer.current = null;
+    }
+    setProfileBanner(null);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (profileBannerTimer.current !== null) {
+        clearTimeout(profileBannerTimer.current);
+      }
+    };
+  }, []);
 
   const { feedAudioChunk, isSpeaking, mouthLevel, stop: stopAudio } = useAudioStreamPlayer();
 
@@ -60,6 +126,19 @@ export function App() {
       }
       if (f.event === "audio_stream" && typeof f.payload.chunk_base64 === "string") {
         feedAudioChunk(f.payload.chunk_base64);
+      }
+      if (
+        (f.event === "player_profile.league_hint" && f.payload.mismatch_hint === true) ||
+        f.event === "player_profile.league_changed"
+      ) {
+        const b = bannerFromProfileWsFrame(f);
+        if (b) {
+          setProfileBanner(b);
+          if (profileBannerTimer.current !== null) {
+            clearTimeout(profileBannerTimer.current);
+          }
+          profileBannerTimer.current = setTimeout(() => setProfileBanner(null), 16_000);
+        }
       }
       setLog((prev) => [
         ...prev.slice(-40),
@@ -169,6 +248,31 @@ export function App() {
         Avatar VRM, lip-sync z audio, idle; REST <code>PUT /api/v1/config</code> + panel statusu.
       </p>
 
+      {profileBanner ? (
+        <aside
+          style={{
+            marginBottom: "1rem",
+            padding: "0.75rem 1rem",
+            borderRadius: 8,
+            border: "1px solid #6b5b3e",
+            background: "rgba(212, 168, 90, 0.12)",
+            color: "#f0e6d4",
+            fontSize: 14,
+            lineHeight: 1.45,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "start" }}>
+            <div>
+              <strong style={{ color: "#f5d799" }}>{profileBanner.title}</strong>
+              <div style={{ marginTop: "0.35rem" }}>{profileBanner.detail}</div>
+            </div>
+            <button type="button" onClick={dismissProfileBanner} style={btnMuted}>
+              Zamknij
+            </button>
+          </div>
+        </aside>
+      ) : null}
+
       <div
         className="assystent-grid"
         style={{
@@ -244,6 +348,7 @@ export function App() {
           tab={configTab}
           onTab={setConfigTab}
           wsStatus={status}
+          profileWsActive={profileBanner !== null}
           vrmUrl={vrmUrl}
           onVrmSave={saveVrmUrl}
           apiBaseUrl={apiBase}
@@ -285,19 +390,3 @@ export function App() {
     </main>
   );
 }
-
-const btnSecondary: React.CSSProperties = {
-  padding: "0.4rem 0.85rem",
-  borderRadius: 6,
-  border: "1px solid #4a3f62",
-  background: "#231d2e",
-  color: "#e8e4f0",
-  cursor: "pointer",
-  fontSize: 13,
-};
-
-const btnMuted: React.CSSProperties = {
-  ...btnSecondary,
-  borderColor: "#3d3550",
-  color: "#b8afc8",
-};
