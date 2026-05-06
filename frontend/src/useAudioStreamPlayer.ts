@@ -15,6 +15,8 @@ export function useAudioStreamPlayer() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [mouthLevel, setMouthLevel] = useState(0);
 
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
+
   const interruptPlayback = useCallback(() => {
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
@@ -40,8 +42,20 @@ export function useAudioStreamPlayer() {
       clearTimeout(flushTimerRef.current);
       flushTimerRef.current = null;
     }
+    setPlaybackError(null);
     interruptPlayback();
   }, [interruptPlayback]);
+
+  const prime = useCallback(async () => {
+    const ctx = audioCtxRef.current ?? new AudioContext({ latencyHint: "playback" });
+    audioCtxRef.current = ctx;
+    try {
+      await ctx.resume();
+      setPlaybackError(null);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const playFromWavBytes = useCallback(
     async (bytes: Uint8Array, myGen: number) => {
@@ -51,7 +65,7 @@ export function useAudioStreamPlayer() {
 
       interruptPlayback();
 
-      const ctx = audioCtxRef.current ?? new AudioContext();
+      const ctx = audioCtxRef.current ?? new AudioContext({ latencyHint: "playback" });
       audioCtxRef.current = ctx;
 
       try {
@@ -62,24 +76,39 @@ export function useAudioStreamPlayer() {
 
       let buf: AudioBuffer;
       try {
-        const sliced = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-        buf = await ctx.decodeAudioData(sliced as ArrayBuffer);
+        const copy = new Uint8Array(bytes.byteLength);
+        copy.set(bytes);
+        buf = await ctx.decodeAudioData(copy.buffer.slice(copy.byteOffset, copy.byteOffset + copy.byteLength));
       } catch {
         setIsSpeaking(false);
+        setPlaybackError(
+          "Nie udało się zdekodować audio z TTS (WAV). Otwórz DevTools lub sprawdź, czy silnik TTS jest skonfigurowany w backendzie.",
+        );
         return;
       }
+
+      setPlaybackError(null);
 
       if (myGen !== genRef.current) {
         return;
       }
 
+      try {
+        await ctx.resume();
+      } catch {
+        /* ignore */
+      }
+
       const source = ctx.createBufferSource();
       source.buffer = buf;
+      const gain = ctx.createGain();
+      gain.gain.value = 1;
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 512;
       analyser.smoothingTimeConstant = 0.72;
       source.connect(analyser);
-      analyser.connect(ctx.destination);
+      analyser.connect(gain);
+      gain.connect(ctx.destination);
       sourceRef.current = source;
 
       const data = new Uint8Array(analyser.fftSize);
@@ -152,14 +181,14 @@ export function useAudioStreamPlayer() {
           }
           void playFromWavBytes(arr, myGen);
         } catch {
-          /* ignore */
+          setPlaybackError("Nieprawidłowe Base64 ze strumienia audio_stream — zerwano strumień?");
         }
-      }, 110);
+      }, 260);
     },
     [playFromWavBytes, interruptPlayback],
   );
 
   useEffect(() => () => stop(), [stop]);
 
-  return { feedAudioChunk, isSpeaking, mouthLevel, stop };
+  return { feedAudioChunk, isSpeaking, mouthLevel, stop, prime, playbackError };
 }

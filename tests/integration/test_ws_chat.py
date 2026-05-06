@@ -100,7 +100,7 @@ def test_ptt_start_ducks_and_listens():
 
 
 def test_chat_text_returns_emotion_and_text_overlay():
-    """chat_text → visual_state(thinking), emotion, text_overlay, visual_state(idle)."""
+    """chat_text → visual_state(thinking), emotion, assistant_reply_text + text_overlay (bez TTS), visual_state(idle)."""
     fake = CommandExecutionResult(success=True, message="Witaj!", emotion="happy")
     with TestClient(app) as client:
         ctx = app.state.ctx
@@ -109,12 +109,13 @@ def test_chat_text_returns_emotion_and_text_overlay():
             with client.websocket_connect("/ws") as ws:
                 ws.receive_text()
                 ws.send_json({"event": "chat_text", "payload": {"text": "Cześć!"}})
-                events = _recv(ws, 4)
+                events = _recv(ws, 5)
 
     names = [e["event"] for e in events]
     assert names[0] == "visual_state"
     assert events[0]["payload"]["state"] == "thinking"
     assert "emotion" in names
+    assert "assistant_reply_text" in names
     assert "text_overlay" in names
     assert names[-1] == "visual_state"
     assert events[-1]["payload"]["state"] == "idle"
@@ -130,7 +131,7 @@ def test_chat_text_emotion_matches_verdict():
             with client.websocket_connect("/ws") as ws:
                 ws.receive_text()
                 ws.send_json({"event": "chat_text", "payload": {"text": "Jak leci?"}})
-                events = _recv(ws, 4)
+                events = _recv(ws, 5)
 
     emo_evt = next(e for e in events if e["event"] == "emotion")
     assert emo_evt["payload"]["emotion"] == "excited"
@@ -166,7 +167,7 @@ def test_chat_text_appends_to_conversation():
                 init = json.loads(ws.receive_text())
                 sid_holder.append(init["payload"]["session_id"])
                 ws.send_json({"event": "chat_text", "payload": {"text": "Hej!"}})
-                _recv(ws, 4)
+                _recv(ws, 5)
 
     sid = sid_holder[0]
     hist = ctx.conversation.tail(sid)
@@ -179,7 +180,7 @@ def test_chat_text_appends_to_conversation():
 
 
 def test_ptt_end_with_audio_sends_reply():
-    """ptt_end + base64 audio → STT → emotion + text_overlay."""
+    """ptt_end + base64 audio → STT → stt_result, emotion + assystenta (tekst)."""
     fake = CommandExecutionResult(success=True, message="Słyszę cię!", emotion="neutral")
     audio_b64 = base64.standard_b64encode(_wav()).decode()
 
@@ -191,18 +192,21 @@ def test_ptt_end_with_audio_sends_reply():
             with client.websocket_connect("/ws") as ws:
                 ws.receive_text()
                 ws.send_json({"event": "ptt_end", "payload": {"audio": audio_b64}})
-                # visual_state(thinking), audio_duck, emotion, text_overlay, visual_state(idle)
-                events = _recv(ws, 5)
+                events = _recv(ws, 7)
 
     names = [e["event"] for e in events]
+    assert "stt_result" in names
+    sr = next(e for e in events if e["event"] == "stt_result")
+    assert sr["payload"]["text"] == "hej asystencie"
     assert "emotion" in names
+    assert "assistant_reply_text" in names
     assert "text_overlay" in names
-    to = next(e for e in events if e["event"] == "text_overlay")
-    assert to["payload"]["text"] == "Słyszę cię!"
+    reply = next(e for e in events if e["event"] == "assistant_reply_text")
+    assert reply["payload"]["text"] == "Słyszę cię!"
 
 
 def test_ptt_end_without_audio_skips_reply():
-    """ptt_end bez pola audio → orchestrator nie wywoływany, 3 zdarzenia."""
+    """ptt_end bez pola audio → orchestrator nie wywoływany; stt_result (pusty tekst)."""
     mock_hum = AsyncMock()
     with TestClient(app) as client:
         ctx = app.state.ctx
@@ -211,13 +215,15 @@ def test_ptt_end_without_audio_skips_reply():
             with client.websocket_connect("/ws") as ws:
                 ws.receive_text()
                 ws.send_json({"event": "ptt_end", "payload": {}})
-                # visual_state(thinking), audio_duck, visual_state(idle) — bez process_text
-                events = _recv(ws, 3)
+                events = _recv(ws, 4)
 
     assert mock_hum.call_count == 0
-    names = {e["event"] for e in events}
+    names = [e["event"] for e in events]
     assert "visual_state" in names
     assert "audio_duck" in names
+    stt = next(e for e in events if e["event"] == "stt_result")
+    assert stt["payload"].get("text") == ""
+    assert stt["payload"].get("hint") == "no_audio_payload"
 
 
 def test_ptt_end_unwinds_volume_to_1():
@@ -233,7 +239,7 @@ def test_ptt_end_unwinds_volume_to_1():
             with client.websocket_connect("/ws") as ws:
                 ws.receive_text()
                 ws.send_json({"event": "ptt_end", "payload": {"audio": audio_b64, "ramp_ms": 120}})
-                events = _recv(ws, 5)
+                events = _recv(ws, 7)
 
     duck = next(e for e in events if e["event"] == "audio_duck")
     assert duck["payload"]["target_volume"] == pytest.approx(1.0)

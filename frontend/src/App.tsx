@@ -7,6 +7,14 @@ import { useAudioStreamPlayer } from "./useAudioStreamPlayer";
 import { usePttRecorder } from "./usePttRecorder";
 import { useWebSocket, type WsFrame } from "./useWebSocket";
 import { bundledVrmRelativeUrl, DEFAULT_BUNDLED_VRM_FILENAME } from "./vrmBundledCatalog";
+import {
+  bundledPiperVoiceById,
+  DEFAULT_PIPER_VOICE_ID,
+  PIPER_EXECUTABLE_LS,
+  PIPER_RESOURCES_ROOT_LS,
+  PIPER_VOICE_ID_LS,
+} from "./piperVoicesCatalog";
+import { joinResourcesPath } from "./piperVoicesPaths";
 
 const VRM_STORAGE_KEY = "assystent.vrmUrl";
 const API_BASE_STORAGE_KEY = "assystent.apiBaseUrl";
@@ -85,6 +93,39 @@ function bannerFromProfileWsFrame(f: WsFrame): ProfileBannerState | null {
   return null;
 }
 
+function sttHintMessage(hint: string | null): string | null {
+  if (!hint) {
+    return null;
+  }
+  if (hint === "no_audio_payload") {
+    return "Nie doszła próbka audio (ptt_end bez pola audio).";
+  }
+  if (hint === "stt_unconfigured") {
+    return "Backend bez STT — ustaw silnik rozpoznawania mowy w konfiguracji.";
+  }
+  return hint;
+}
+
+function ttsDiagFromStatusJson(data: unknown): {
+  checked: boolean;
+  available: boolean;
+  resolvedYaml: string | null;
+} {
+  const d = data as {
+    health?: {
+      components?: { tts?: { available?: boolean } };
+      config?: { resolved_yaml?: string | null };
+    };
+  };
+  const ok = d.health?.components?.tts?.available === true;
+  const ry = d.health?.config?.resolved_yaml;
+  return {
+    checked: true,
+    available: ok,
+    resolvedYaml: typeof ry === "string" ? ry : null,
+  };
+}
+
 export function App() {
   const [log, setLog] = useState<string[]>([]);
   const [emotion, setEmotion] = useState("neutral");
@@ -97,6 +138,17 @@ export function App() {
   const [ttsVoiceSpeed, setTtsVoiceSpeed] = useState("1");
   const [busyConfig, setBusyConfig] = useState(false);
   const [configMessage, setConfigMessage] = useState<string | null>(null);
+  const [piperResourcesRootDraft, setPiperResourcesRootDraft] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem(PIPER_RESOURCES_ROOT_LS) ?? "" : "",
+  );
+  const [piperExecutableDraft, setPiperExecutableDraft] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem(PIPER_EXECUTABLE_LS) ?? "" : "",
+  );
+  const [selectedPiperVoiceId, setSelectedPiperVoiceId] = useState(() =>
+    typeof window !== "undefined"
+      ? localStorage.getItem(PIPER_VOICE_ID_LS) || DEFAULT_PIPER_VOICE_ID
+      : DEFAULT_PIPER_VOICE_ID,
+  );
   const [showWizard, setShowWizard] = useState(
     () => typeof window !== "undefined" && !hasSetupWizardDismissed(),
   );
@@ -105,6 +157,9 @@ export function App() {
 
   const [chatDraft, setChatDraft] = useState("");
   const [assistantLine, setAssistantLine] = useState<string | null>(null);
+  const [sttBlock, setSttBlock] = useState<{ text: string; hint: string | null } | null>(null);
+  const [observerLine, setObserverLine] = useState<string | null>(null);
+  const [activityFeed, setActivityFeed] = useState<string[]>([]);
   const pttCycleRunningRef = useRef(false);
   const pttReleasedEarlyRef = useRef(false);
   const pttReleaseRef = useRef<(() => void) | null>(null);
@@ -125,21 +180,52 @@ export function App() {
     };
   }, []);
 
-  const { feedAudioChunk, isSpeaking, mouthLevel, stop: stopAudio } = useAudioStreamPlayer();
+  const { feedAudioChunk, isSpeaking, mouthLevel, stop: stopAudio, prime: primeAudio, playbackError } =
+    useAudioStreamPlayer();
   const { pttBusy, pttError, setPttError, pttArm, pttFinalize } = usePttRecorder();
+
+  useEffect(() => {
+    const unlock = () => {
+      void primeAudio();
+    };
+    window.addEventListener("pointerdown", unlock, { once: true });
+    return () => window.removeEventListener("pointerdown", unlock);
+  }, [primeAudio]);
 
   const onFrame = useCallback(
     (f: WsFrame) => {
       if (f.event === "emotion" && typeof f.payload.emotion === "string") {
         setEmotion(f.payload.emotion);
       }
-      if (f.event === "text_overlay" && typeof f.payload.text === "string") {
+      if (
+        (f.event === "assistant_reply_text" || f.event === "text_overlay") &&
+        typeof f.payload.text === "string"
+      ) {
         const line = f.payload.text.trim();
         setAssistantLine(line || null);
       }
       if (f.event === "audio_stream" && typeof f.payload.chunk_base64 === "string") {
-        setAssistantLine(null);
+        void primeAudio();
         feedAudioChunk(f.payload.chunk_base64);
+      }
+      if (f.event === "stt_result") {
+        setSttBlock({
+          text: typeof f.payload.text === "string" ? f.payload.text : "",
+          hint: typeof f.payload.hint === "string" ? f.payload.hint : null,
+        });
+      }
+      if (f.event === "observer_comment" && typeof f.payload.text === "string") {
+        const o = f.payload.text.trim();
+        setObserverLine(o || null);
+      }
+      if (f.event === "agent_activity") {
+        const tool = typeof f.payload.tool === "string" ? f.payload.tool : "(?)";
+        const phase = typeof f.payload.phase === "string" ? f.payload.phase : "";
+        const preview = typeof f.payload.arguments_preview === "string" ? f.payload.arguments_preview : "";
+        const short = preview.length > 160 ? `${preview.slice(0, 160)}…` : preview;
+        const stamp = new Date().toISOString().slice(11, 19);
+        const line = `${stamp} · ${tool} (${phase})${short ? `: ${short}` : ""}`;
+        setActivityFeed((prev) => [...prev.slice(-14), line]);
       }
       if (
         (f.event === "player_profile.league_hint" && f.payload.mismatch_hint === true) ||
@@ -159,7 +245,7 @@ export function App() {
         `${new Date().toISOString().slice(11, 19)} ← ${f.event}`,
       ]);
     },
-    [feedAudioChunk],
+    [feedAudioChunk, primeAudio],
   );
 
   const { status, sendFrame } = useWebSocket({
@@ -173,11 +259,42 @@ export function App() {
 
   const wsReady = status === "open";
 
+  const [ttsDiag, setTtsDiag] = useState<{
+    checked: boolean;
+    available: boolean;
+    resolvedYaml: string | null;
+  }>({ checked: false, available: false, resolvedYaml: null });
+
+  useEffect(() => {
+    if (!wsReady) {
+      return undefined;
+    }
+    let cancelled = false;
+    const url = `${apiBase.replace(/\/$/, "")}/api/v1/status`;
+    void (async () => {
+      try {
+        const res = await fetch(url);
+        const data = (await res.json()) as Record<string, unknown>;
+        if (!cancelled) {
+          setTtsDiag(ttsDiagFromStatusJson(data));
+        }
+      } catch {
+        if (!cancelled) {
+          setTtsDiag({ checked: false, available: false, resolvedYaml: null });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [wsReady, apiBase]);
+
   const handleSendText = useCallback(() => {
     const t = chatDraft.trim();
     if (!t) {
       return;
     }
+    void primeAudio();
     stopAudio();
     const ok = sendFrame("chat_text", { text: t });
     const preview = t.length > 80 ? `${t.slice(0, 80)}…` : t;
@@ -185,7 +302,7 @@ export function App() {
     if (ok) {
       setChatDraft("");
     }
-  }, [chatDraft, sendFrame, stopAudio, push]);
+  }, [chatDraft, sendFrame, stopAudio, push, primeAudio]);
 
   const handlePttDown = useCallback(() => {
     if (pttCycleRunningRef.current) {
@@ -194,6 +311,7 @@ export function App() {
     pttCycleRunningRef.current = true;
     void (async () => {
       try {
+        void primeAudio();
         stopAudio();
         setPttError(null);
         pttReleasedEarlyRef.current = false;
@@ -233,7 +351,7 @@ export function App() {
         pttReleaseRef.current = null;
       }
     })();
-  }, [stopAudio, sendFrame, push, pttArm, pttFinalize, setPttError]);
+  }, [stopAudio, sendFrame, push, pttArm, pttFinalize, setPttError, primeAudio]);
 
   const handlePttUp = useCallback(() => {
     pttReleasedEarlyRef.current = true;
@@ -283,7 +401,9 @@ export function App() {
         return;
       }
       try {
-        setStatusJson(JSON.stringify(JSON.parse(text), null, 2));
+        const parsed = JSON.parse(text);
+        setStatusJson(JSON.stringify(parsed, null, 2));
+        setTtsDiag(ttsDiagFromStatusJson(parsed));
       } catch {
         setStatusJson(text);
       }
@@ -294,6 +414,64 @@ export function App() {
       setBusyStatus(false);
     }
   }, [apiBase]);
+
+  const applyPiperVoice = useCallback(async () => {
+    const root = piperResourcesRootDraft.trim();
+    if (!root) {
+      setConfigMessage("Ustaw absolutną ścieżkę do katalogu frontend/resources tego repozytorium.");
+      return;
+    }
+    const voice = bundledPiperVoiceById(selectedPiperVoiceId);
+    if (!voice) {
+      setConfigMessage("Nieznany wybór głosu.");
+      return;
+    }
+    const onnxAbs = joinResourcesPath(root, voice.onnxRelativeToResources);
+    if (!onnxAbs) {
+      setConfigMessage("Nie można złożyć ścieżki do pliku ONNX.");
+      return;
+    }
+    setBusyConfig(true);
+    setConfigMessage(null);
+    try {
+      const ttsPatch: Record<string, unknown> = { piper_voice_onnx_path: onnxAbs };
+      const exe = piperExecutableDraft.trim();
+      if (exe) {
+        ttsPatch.piper_executable = exe;
+      }
+      const res = await fetch(`${apiBase}/api/v1/config`, {
+        method: "PUT",
+        headers: configPutHeaders(),
+        body: JSON.stringify({ patch: { tts: ttsPatch } }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail =
+          typeof data === "object" && data && "detail" in data
+            ? JSON.stringify((data as { detail: unknown }).detail)
+            : res.statusText;
+        setConfigMessage(`Błąd ${res.status}: ${detail}`);
+        return;
+      }
+      localStorage.setItem(PIPER_RESOURCES_ROOT_LS, root);
+      localStorage.setItem(PIPER_VOICE_ID_LS, selectedPiperVoiceId);
+      if (exe) {
+        localStorage.setItem(PIPER_EXECUTABLE_LS, exe);
+      } else {
+        localStorage.removeItem(PIPER_EXECUTABLE_LS);
+      }
+      setConfigMessage("Zapisano głos Piper — backend przeładowany (hot-reload).");
+      const st = await fetch(`${apiBase.replace(/\/$/, "")}/api/v1/status`);
+      if (st.ok) {
+        const payload = (await st.json()) as Record<string, unknown>;
+        setTtsDiag(ttsDiagFromStatusJson(payload));
+      }
+    } catch (e) {
+      setConfigMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusyConfig(false);
+    }
+  }, [apiBase, piperResourcesRootDraft, piperExecutableDraft, selectedPiperVoiceId]);
 
   const applyTtsSpeed = useCallback(async () => {
     const spd = Number(ttsVoiceSpeed);
@@ -386,11 +564,134 @@ export function App() {
           <AvatarCanvas vrmUrl={vrmUrl} emotion={emotion} lipSyncLevel={isSpeaking ? mouthLevel : 0} />
           <p style={{ margin: "0.5rem 0 0", fontSize: 12, color: "#8a8198" }}>
             Emocja (z WS): <strong style={{ color: "#d4ccec" }}>{emotion}</strong>
-            {isSpeaking ? " · TTS (lip-sync)" : ""}
+            {isSpeaking ? " · odtwarzanie TTS (lip-sync)" : ""}
           </p>
+          {playbackError ? (
+            <p style={{ margin: "0.35rem 0 0", fontSize: 13, color: "#f0b0b8", lineHeight: 1.45 }}>{playbackError}</p>
+          ) : null}
+          {ttsDiag.checked && !ttsDiag.available ? (
+            <div
+              style={{
+                margin: "0.4rem 0 0",
+                padding: "0.65rem 0.85rem",
+                borderRadius: 8,
+                border: "1px solid #6b5338",
+                background: "rgba(90, 70, 40, 0.15)",
+                maxWidth: 560,
+              }}
+            >
+              <div style={{ fontSize: 13, color: "#e8d4b0", lineHeight: 1.5 }}>
+                Silnik Piper nie jest aktywny — backend bez <code style={{ fontSize: 12 }}>audio_stream</code>. Kod
+                włącza TTS dopiero gdy ustawisz <strong>niepustą</strong> wartość{" "}
+                <code style={{ fontSize: 12 }}>tts.piper_voice_onnx_path</code> (plik <code>.onnx</code> +
+                towarzyszący jeśli trzeba). Opcjonalnie pełna ścieżka do binary:{" "}
+                <code style={{ fontSize: 12 }}>tts.piper_executable</code> (domyślnie szuka komendy{" "}
+                <code style={{ fontSize: 12 }}>piper</code> na <code style={{ fontSize: 12 }}>PATH</code>).
+              </div>
+              {ttsDiag.resolvedYaml ? (
+                <div style={{ fontSize: 12, color: "#a89880", marginTop: "0.45rem", wordBreak: "break-all" }}>
+                  Aktualnie wczytywany YAML: <code style={{ fontSize: 11 }}>{ttsDiag.resolvedYaml}</code>
+                </div>
+              ) : (
+                <div style={{ fontSize: 12, color: "#a89880", marginTop: "0.45rem" }}>
+                  Nie znaleziono pliku YAML w content root — możesz ustawić ścieżkę przez zmienną{" "}
+                  <code style={{ fontSize: 11 }}>ASSY_TTS__PIPER_VOICE_ONNX_PATH</code> (i opcjonalnie{" "}
+                  <code style={{ fontSize: 11 }}>ASSY_TTS__PIPER_EXECUTABLE</code>).
+                </div>
+              )}
+              <pre
+                style={{
+                  marginTop: "0.55rem",
+                  padding: "0.5rem 0.6rem",
+                  borderRadius: 6,
+                  background: "#0d0b12",
+                  border: "1px solid #2a2438",
+                  fontSize: 11,
+                  color: "#d4cce8",
+                  overflowX: "auto",
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+{`tts:
+  piper_executable: "C:/sciezka/do/piper.exe"
+  piper_voice_onnx_path: "C:/sciezka/do/glos/pl_PL-xxxx-medium.onnx"`}
+              </pre>
+              <div style={{ fontSize: 12, color: "#8a8175", marginTop: "0.35rem" }}>
+                Po zapisie zrestartuj backend albo przeładuj konfigurację (PUT /api/v1/config). Pełny opis pobrania Pipera:{" "}
+                <code style={{ fontSize: 11 }}>docs/ENV_SETUP.md</code>, sekcja 5.3.
+              </div>
+            </div>
+          ) : null}
+
+          <div
+            style={{
+              marginTop: "0.65rem",
+              padding: "0.65rem 0.85rem",
+              borderRadius: 8,
+              border: "1px solid #362e48",
+              background: "rgba(18, 15, 28, 0.65)",
+              maxWidth: 560,
+            }}
+          >
+            <div style={{ fontSize: 12, color: "#9a93b0", marginBottom: "0.25rem" }}>Co usłyszał backend (STT)</div>
+            {sttBlock ? (
+              <>
+                <div style={{ fontSize: 14, color: "#eae6f8", lineHeight: 1.45, wordBreak: "break-word" }}>
+                  {sttBlock.text.trim() ? sttBlock.text : "— (pusty wynik albo cisza)"}
+                </div>
+                {sttHintMessage(sttBlock.hint) ? (
+                  <div style={{ fontSize: 12, color: "#c89880", marginTop: "0.35rem" }}>{sttHintMessage(sttBlock.hint)}</div>
+                ) : null}
+              </>
+            ) : (
+              <div style={{ fontSize: 13, color: "#7a7390", fontStyle: "italic" }}>Użyj PTT lub wyślij wiadomość — tu pojawi się transkrypt.</div>
+            )}
+          </div>
+
+          <div
+            style={{
+              marginTop: "0.65rem",
+              padding: "0.65rem 0.85rem",
+              borderRadius: 8,
+              border: "1px solid #2f3d4f",
+              background: "rgba(14, 20, 28, 0.55)",
+              maxWidth: 560,
+            }}
+          >
+            <div style={{ fontSize: 12, color: "#9a93b0", marginBottom: "0.25rem" }}>Obserwator ekranu / wizja</div>
+            {observerLine ? (
+              <div style={{ fontSize: 14, color: "#c8dce8", lineHeight: 1.45 }}>{observerLine}</div>
+            ) : (
+              <div style={{ fontSize: 13, color: "#6d7a88" }}>Brak ostatniego komentarza z obserwatora.</div>
+            )}
+          </div>
+
+          {activityFeed.length ? (
+            <div
+              style={{
+                marginTop: "0.65rem",
+                padding: "0.65rem 0.85rem",
+                borderRadius: 8,
+                border: "1px solid #3a3248",
+                background: "rgba(22, 18, 32, 0.55)",
+                maxWidth: 560,
+              }}
+            >
+              <div style={{ fontSize: 12, color: "#9a93b0", marginBottom: "0.35rem" }}>Działania agenta (narzędzia)</div>
+              <ul style={{ margin: 0, paddingLeft: "1.1rem", fontSize: 12, color: "#c8c0dc", lineHeight: 1.5 }}>
+                {activityFeed.map((line, i) => (
+                  <li key={`${i}-${line.slice(0, 24)}`} style={{ marginBottom: "0.2rem" }}>
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
           {assistantLine ? (
-            <p style={{ margin: "0.4rem 0 0", fontSize: 13, color: "#c8c0dc", lineHeight: 1.45 }}>
-              Odpowiedź (tekst, bez nagłośnika): <span style={{ color: "#eae6f8" }}>{assistantLine}</span>
+            <p style={{ margin: "0.65rem 0 0", fontSize: 14, color: "#c8c0dc", lineHeight: 1.45 }}>
+              <span style={{ color: "#8a8198", fontSize: 12 }}>Odpowiedź agenta (tekst): </span>
+              <span style={{ color: "#eae6f8" }}>{assistantLine}</span>
             </p>
           ) : null}
 
@@ -453,14 +754,50 @@ export function App() {
                   if (!wsReady || pttBusy) {
                     return;
                   }
+                  if (e.pointerType === "mouse" && e.button !== 0) {
+                    return;
+                  }
                   e.preventDefault();
+                  const el = e.currentTarget;
+                  if (el instanceof HTMLElement) {
+                    try {
+                      el.setPointerCapture(e.pointerId);
+                    } catch {
+                      /* starsze silniki / nietypowe wskaźniki */
+                    }
+                  }
                   handlePttDown();
                 }}
                 onPointerUp={(e) => {
+                  if (e.pointerType === "mouse" && e.button !== 0) {
+                    return;
+                  }
                   e.preventDefault();
+                  const el = e.currentTarget;
+                  if (el instanceof HTMLElement) {
+                    try {
+                      if (el.hasPointerCapture(e.pointerId)) {
+                        el.releasePointerCapture(e.pointerId);
+                      }
+                    } catch {
+                      /* ignore */
+                    }
+                  }
                   handlePttUp();
                 }}
-                onPointerLeave={() => handlePttUp()}
+                onPointerCancel={(e) => {
+                  const el = e.currentTarget;
+                  if (el instanceof HTMLElement) {
+                    try {
+                      if (el.hasPointerCapture(e.pointerId)) {
+                        el.releasePointerCapture(e.pointerId);
+                      }
+                    } catch {
+                      /* ignore */
+                    }
+                  }
+                  handlePttUp();
+                }}
                 style={{
                   ...btnSecondary,
                   borderColor: "#5c4d8c",
@@ -539,6 +876,18 @@ export function App() {
           statusJson={statusJson}
           statusError={statusError}
           busyStatus={busyStatus}
+          piperResourcesRoot={piperResourcesRootDraft}
+          onPiperResourcesRootChange={setPiperResourcesRootDraft}
+          piperExecutable={piperExecutableDraft}
+          onPiperExecutableChange={setPiperExecutableDraft}
+          selectedPiperVoiceId={selectedPiperVoiceId}
+          onSelectedPiperVoiceIdChange={(id) => {
+            setSelectedPiperVoiceId(id);
+            if (typeof window !== "undefined") {
+              localStorage.setItem(PIPER_VOICE_ID_LS, id);
+            }
+          }}
+          onApplyPiperVoice={applyPiperVoice}
           ttsVoiceSpeed={ttsVoiceSpeed}
           onTtsVoiceSpeedChange={setTtsVoiceSpeed}
           onApplyTtsSpeed={applyTtsSpeed}

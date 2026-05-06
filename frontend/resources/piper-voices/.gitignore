@@ -1,0 +1,4 @@
+# Modele ONNX i próbki audio są duże — trzymaj lokalnie albo zsynchronizuj:
+# powershell -File scripts/sync-piper-voices.ps1
+*.onnx
+*.mp3

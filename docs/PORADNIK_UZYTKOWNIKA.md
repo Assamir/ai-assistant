@@ -12,8 +12,8 @@ Ten dokument zbiera **ścieżki w repozytorium**, **kroki od zera do działając
 | Historia zmian | [CHANGELOG.md](../CHANGELOG.md) w korzeniu repo |
 | README projektu | [README.md](../README.md) |
 | Plan implementacji | [docs/plan/implementation_plan_part2.md](plan/implementation_plan_part2.md) |
-| Domyślna konfiguracja YAML (wzór) | [backend/config/config.default.yaml](../backend/config/config.default.yaml) |
-| Schemat ustawień (Pydantic) | [backend/config/schema.py](../backend/config/schema.py) |
+| Domyślna konfiguracja YAML (wzór) | [backend/config/schema.py](../backend/config/schema.py) — domyślne pola Pydantic |
+| Przykład `config.yaml` dev — Piper przy starcie z korzenia repo | [config/config.yaml](../config/config.yaml) |
 | Ładowanie YAML + ENV `ASSY_*` | [backend/config/loader.py](../backend/config/loader.py) |
 | Skrypt jednorazowy venv + pip | [scripts/setup.ps1](../scripts/setup.ps1) |
 | Start dev (Windows, 3 okna) | [scripts/start-dev.bat](../scripts/start-dev.bat) |
@@ -23,6 +23,9 @@ Ten dokument zbiera **ścieżki w repozytorium**, **kroki od zera do działając
 | Frontend — preload (bridge ENV → strona) | [frontend/preload.cjs](../frontend/preload.cjs) |
 | Katalog modeli VRM w buildzie dev/prod | [frontend/resources](../frontend/resources) |
 | Lista wbudowanych VRM w UI (aktualizuj przy nowym pliku) | [frontend/src/vrmBundledCatalog.ts](../frontend/src/vrmBundledCatalog.ts) |
+| Katalog głosów Piper PL (lista rozwijalna w UI) | [frontend/src/piperVoicesCatalog.ts](../frontend/src/piperVoicesCatalog.ts) |
+| Synchronizacja głosów Piper do `resources/` | [scripts/sync-piper-voices.ps1](../scripts/sync-piper-voices.ps1) |
+| Instalacja binary Piper (Windows ZIP) | [scripts/install-piper-windows.ps1](../scripts/install-piper-windows.ps1) |
 | Vite — statyczne `resources` → root `dist` | [frontend/vite.config.ts](../frontend/vite.config.ts) |
 | NSIS — instalator tylko klient | [frontend/electron-builder.client.yml](../frontend/electron-builder.client.yml) |
 | NSIS — instalator komplet (+ `extraResources` backend) | [frontend/electron-builder.full.yml](../frontend/electron-builder.full.yml) |
@@ -201,7 +204,8 @@ Ustawienia są w prawym panelu kart.
 
 ### Karta „Więcej”
 
-- **Pobierz status** — `GET {apiBase}/api/v1/status`.
+- **Pobierz status** — `GET {apiBase}/api/v1/status` (przeładowuje też wskaźnik TTS na stronie głównej).
+- **TTS — głos Piper** — pole **absolutnej** ścieżki do katalogu [frontend/resources](../frontend/resources) (w nim `piper-voices/…`), lista rozwijalna głosu (zob. [piperVoicesCatalog.ts](../frontend/src/piperVoicesCatalog.ts)), opcjonalnie ścieżka do `piper.exe`, przycisk **Zastosuj głos TTS** (`PUT /api/v1/config` jak poniżej). Duże pliki `.onnx` są ignorowane w gicie — synchronizacja: [scripts/sync-piper-voices.ps1](../scripts/sync-piper-voices.ps1).
 - **TTS — prędkość głosu** — `PUT /api/v1/config` (wymaga zapisanej konfiguracji w `content_root`). Przy włączonym tokenie ochrony ustaw ten sam sekret co backend — poniżej.
 
 ---

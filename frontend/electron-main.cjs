@@ -1,4 +1,8 @@
 const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, session } = require("electron");
+
+/** Bez tego Chromium w Electron często zatrzymuje `AudioContext` / TTS dopóki użytkownik nie „obudzi” audio gestem. */
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
+
 const path = require("path");
 const fs = require("fs");
 const { spawn } = require("child_process");
@@ -98,8 +102,14 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
+      backgroundThrottling: false,
     },
   });
+  try {
+    mainWindow.webContents.setAudioMuted(false);
+  } catch (_) {
+    /* ignore */
+  }
   const devUrl = process.env.VITE_DEV_SERVER_URL || "http://localhost:5173";
   if (process.env.ASSYSTENT_DEV === "1") {
     mainWindow.loadURL(devUrl);

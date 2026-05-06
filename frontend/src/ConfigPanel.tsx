@@ -6,6 +6,7 @@ import {
   bundledSelectValueForUrl,
   bundledVrmRelativeUrl,
 } from "./vrmBundledCatalog";
+import { BUNDLED_PIPER_VOICES } from "./piperVoicesCatalog";
 
 export type ConfigTabId = "connection" | "avatar" | "more";
 
@@ -23,6 +24,13 @@ interface ConfigPanelProps {
   statusJson: string | null;
   statusError: string | null;
   busyStatus: boolean;
+  piperResourcesRoot: string;
+  onPiperResourcesRootChange: (v: string) => void;
+  piperExecutable: string;
+  onPiperExecutableChange: (v: string) => void;
+  selectedPiperVoiceId: string;
+  onSelectedPiperVoiceIdChange: (v: string) => void;
+  onApplyPiperVoice: () => Promise<void>;
   ttsVoiceSpeed: string;
   onTtsVoiceSpeedChange: (v: string) => void;
   onApplyTtsSpeed: () => Promise<void>;
@@ -49,6 +57,13 @@ export function ConfigPanel({
   statusJson,
   statusError,
   busyStatus,
+  piperResourcesRoot,
+  onPiperResourcesRootChange,
+  piperExecutable,
+  onPiperExecutableChange,
+  selectedPiperVoiceId,
+  onSelectedPiperVoiceIdChange,
+  onApplyPiperVoice,
   ttsVoiceSpeed,
   onTtsVoiceSpeedChange,
   onApplyTtsSpeed,
@@ -242,6 +257,66 @@ export function ConfigPanel({
               {statusJson}
             </pre>
           )}
+
+          <p style={{ margin: "1rem 0 0.35rem", color: "#e8e4f0" }}>TTS — głos Piper (model ONNX)</p>
+          <p style={{ margin: 0, fontSize: 12, color: "#8a8198", lineHeight: 1.5 }}>
+            Wpisz <strong>absolutną</strong> ścieżkę do katalogu <code style={{ fontSize: 11 }}>frontend/resources</code>{" "}
+            w tym klone (tam są <code style={{ fontSize: 11 }}>piper-voices/…</code>). Wybierz głosu i wyślij do
+            backendu — zapis jak przy prędkości TTS (<code style={{ fontSize: 11 }}>config.yaml</code> +
+            token). Modele ONNX nie są commitowane w gicie — przy braku plików:{" "}
+            <code style={{ fontSize: 11 }}>scripts/sync-piper-voices.ps1</code>.
+          </p>
+          <label htmlFor="piper-resources-root" style={{ display: "block", marginTop: "0.5rem", marginBottom: "0.25rem", fontSize: 13 }}>
+            Katalog resources (abs.)
+          </label>
+          <input
+            id="piper-resources-root"
+            type="text"
+            value={piperResourcesRoot}
+            onChange={(e) => onPiperResourcesRootChange(e.target.value)}
+            placeholder="np. C:\code\_repos\antigravity\assystent\frontend\resources"
+            autoCorrect="off"
+            spellCheck={false}
+            style={inputStyle}
+          />
+          <label htmlFor="piper-exe" style={{ display: "block", marginTop: "0.5rem", marginBottom: "0.25rem", fontSize: 13 }}>
+            Piper — opcjonalnie pełna ścieżka do <code style={{ fontSize: 11 }}>piper.exe</code>
+          </label>
+          <input
+            id="piper-exe"
+            type="text"
+            value={piperExecutable}
+            onChange={(e) => onPiperExecutableChange(e.target.value)}
+            placeholder="Jeśli puste — używana jest nazwa piper z PATH"
+            autoCorrect="off"
+            spellCheck={false}
+            style={inputStyle}
+          />
+          <label htmlFor="piper-voice" style={{ display: "block", marginTop: "0.5rem", marginBottom: "0.25rem", fontSize: 13 }}>
+            Głos
+          </label>
+          <select
+            id="piper-voice"
+            value={selectedPiperVoiceId}
+            onChange={(e) => onSelectedPiperVoiceIdChange(e.target.value)}
+            style={{ ...inputStyle, cursor: "pointer", marginBottom: "0.5rem" }}
+          >
+            {BUNDLED_PIPER_VOICES.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.label}
+              </option>
+            ))}
+          </select>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={() => void onApplyPiperVoice()}
+              disabled={busyConfig}
+              style={btnPrimary}
+            >
+              {busyConfig ? "Wysyłanie…" : "Zastosuj głos TTS"}
+            </button>
+          </div>
 
           <p style={{ margin: "1rem 0 0.35rem", color: "#e8e4f0" }}>TTS — prędkość głosu</p>
           <p style={{ margin: 0, fontSize: 12, color: "#8a8198" }}>

@@ -206,9 +206,17 @@ class ConversationOrchestrator:
         *,
         conversation_tail: Sequence[Dict[str, Any]] = (),
         db_chat_session_id: Optional[int] = None,
+        emitter_override: EmitFn | None = None,
     ) -> ChatCompletionResult:
+        emit = emitter_override or self._emit
+
+        async def _vs(state_name: OrchestratorState) -> None:
+            self.phase = state_name
+            if emit:
+                await emit("visual_state", {"state": state_name.value})
+
         self.phase = OrchestratorState.THINKING
-        await self.emit_visual_state(self.phase)
+        await _vs(self.phase)
         persona = self._resolve_persona()
         tools_payload = self._registry.openai_tools()
 
@@ -307,6 +315,16 @@ class ConversationOrchestrator:
                     if nm != "generate_document":
                         tool_calls_done += 1
                     in_json = _openai_tool_input_json(blob)
+                    preview = str(in_json)[:480]
+                    if nm and emit:
+                        await emit(
+                            "agent_activity",
+                            {
+                                "phase": "tool_start",
+                                "tool": nm,
+                                "arguments_preview": preview,
+                            },
+                        )
                     t0 = time.perf_counter()
                     tool_msg: Optional[Dict[str, Any]] = None
                     try:
@@ -358,7 +376,8 @@ class ConversationOrchestrator:
             return await self._llm.chat_completion(msgs, tools=None)
         finally:
             self.phase = OrchestratorState.IDLE
-            await self.emit_visual_state(self.phase)
+            if emit:
+                await emit("visual_state", {"state": OrchestratorState.IDLE.value})
 
     async def handle_user_message(
         self,
@@ -384,6 +403,7 @@ class ConversationOrchestrator:
             user_text,
             conversation_tail=conversation_tail,
             db_chat_session_id=db_chat_session_id,
+            emitter_override=emitter_override,
         )
         persona = self._resolve_persona()
         bias = persona_bias_fallback or persona.frontmatter.tts_emotion_bias

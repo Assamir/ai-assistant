@@ -1,0 +1,9 @@
+# Konfiguracja dev — zakładamy start backendu z katalogu głównego repozytorium (`uvicorn …` jak w scripts/start-dev.bat).
+# Piper CLI: `powershell -ExecutionPolicy Bypass -File scripts/install-piper-windows.ps1`.
+
+general:
+  content_root: "."
+
+tts:
+  piper_executable: "tools/piper/piper/piper.exe"
+  piper_voice_onnx_path: "frontend/resources/piper-voices/pl/pl_PL/gosia/medium/pl_PL-gosia-medium.onnx"

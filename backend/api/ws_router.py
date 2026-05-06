@@ -66,6 +66,9 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
         wav = b""
         synth = getattr(ctx, "tts_engine", None)
         trimmed = text_body.strip()
+        if trimmed:
+            await mgr.send_to_session(sid, "assistant_reply_text", {"text": trimmed})
+
         if trimmed and synth is not None:
             wav = await synth.speak(trimmed, emotion=emotion or None)
 
@@ -242,6 +245,13 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
                         transcription = ""
 
                 clipped = transcription.strip()
+                stt_payload: dict[str, Any] = {"text": clipped}
+                if not blob_b64:
+                    stt_payload["hint"] = "no_audio_payload"
+                elif decoder is None:
+                    stt_payload["hint"] = "stt_unconfigured"
+                await mgr.send_to_session(sid, "stt_result", stt_payload)
+
                 if clipped:
                     await process_text(clipped)
 
