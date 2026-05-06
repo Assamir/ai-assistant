@@ -1,4 +1,11 @@
 import React, { useState } from "react";
+import {
+  BUNDLED_VRM_FILENAMES,
+  BUNDLED_VRM_SELECT_OTHER,
+  bundledFilenameFromStoredUrl,
+  bundledSelectValueForUrl,
+  bundledVrmRelativeUrl,
+} from "./vrmBundledCatalog";
 
 export type ConfigTabId = "connection" | "avatar" | "more";
 
@@ -155,17 +162,47 @@ export function ConfigPanel({
 
       {tab === "avatar" && (
         <div style={{ fontSize: 14 }}>
-          <label htmlFor="vrm-url" style={{ display: "block", marginBottom: "0.35rem" }}>
-            URL modelu VRM
+          <label htmlFor="vrm-bundled" style={{ display: "block", marginBottom: "0.35rem" }}>
+            Model z <code style={{ fontSize: 12 }}>resources/</code>
           </label>
-          <input
-            id="vrm-url"
-            type="url"
-            value={draftVrm}
-            onChange={(e) => setDraftVrm(e.target.value)}
-            placeholder="https://…/model.vrm"
-            style={inputStyle}
-          />
+          <select
+            id="vrm-bundled"
+            value={bundledSelectValueForUrl(draftVrm)}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === BUNDLED_VRM_SELECT_OTHER) {
+                setDraftVrm((prev) => (bundledFilenameFromStoredUrl(prev) ? "" : prev));
+              } else {
+                setDraftVrm(bundledVrmRelativeUrl(v));
+              }
+            }}
+            style={{ ...inputStyle, cursor: "pointer", marginBottom: "0.75rem" }}
+          >
+            {BUNDLED_VRM_FILENAMES.map((fn) => (
+              <option key={fn} value={fn}>
+                {fn.replace(/\.vrm$/i, "")}
+              </option>
+            ))}
+            <option value={BUNDLED_VRM_SELECT_OTHER}>Inny adres URL…</option>
+          </select>
+          {bundledSelectValueForUrl(draftVrm) === BUNDLED_VRM_SELECT_OTHER && (
+            <>
+              <label htmlFor="vrm-url" style={{ display: "block", marginBottom: "0.35rem" }}>
+                Własny URL modelu VRM
+              </label>
+              <input
+                id="vrm-url"
+                type="url"
+                value={draftVrm}
+                onChange={(e) => setDraftVrm(e.target.value)}
+                placeholder="https://…/model.vrm"
+                style={inputStyle}
+              />
+            </>
+          )}
+          <p style={{ margin: "0.6rem 0 0", fontSize: 12, color: "#8a8198" }}>
+            Modele z aplikacji: <code>./nazwa.vrm</code> (katalog <code>frontend/resources</code>).
+          </p>
           <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
             <button type="button" onClick={() => onVrmSave(draftVrm.trim())} style={btnPrimary}>
               Zapisz

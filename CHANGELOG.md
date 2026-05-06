@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is inspired 
 
 ### Added
 
+- **Docs:** [docs/PORADNIK_UZYTKOWNIKA.md](docs/PORADNIK_UZYTKOWNIKA.md) — zbiorczy poradnik użytkownika i konfiguracji (kroki, porty, panel UI, ENV, **`start-dev.bat` jako jedna komenda**, rozmowa z agentem przez UI/`voice/chat`/`voice.process`, WS PTT — linki). README linkuje ten plik na początku.
+- **Frontend / Avatar:** lista rozwijana modeli VRM z wbudowanego katalogu (pliki w `frontend/resources`, Vite `publicDir: resources`); domyślny model `./kaguya_watanuki.vrm` gdy brak `localStorage` / bridge Electron / `VITE_VRM_URL`. Opcja „Inny adres URL…” z polem jak dotychczas dla zewnętrznych plików — przy nowym modelu w folderze dopisz nazwę pliku w `src/vrmBundledCatalog.ts`.
 - **T8 / Auto league hint:** `observer.auto_league_hint_on_game_detected` (YAML) lub `ASSY_OBSERVER__AUTO_LEAGUE_HINT_ON_GAME_DETECTED` — po `game_detected` z znanym `game_id` uruchamia `check-league-hint`; przy `mismatch_hint` broadcast WS `player_profile.league_hint` (jak REST `broadcast: true`). Dokumentacja ENV: `docs/ENV_SETUP.md` §11.2.
 - **Frontend:** baner + badge „Liga” (karta Połączenie) dla WS `player_profile.league_hint` oraz `player_profile.league_changed`.
 - Desktop packaging: `electron-builder` Windows (NSIS) uses `frontend/resources/icon.png` as the application icon (`frontend/package.json` → `build.icon`).

@@ -127,7 +127,7 @@ export function SetupWizard({ apiBase, onFinish, onOpenConnectionSettings }: Set
         {step === 2 && (
           <div style={{ fontSize: 14, lineHeight: 1.55, color: "#c8c0dc" }}>
             <p style={{ margin: "0 0 0.75rem" }}>
-              W zakładce <strong>Avatar</strong> ustaw URL pliku VRM (HTTPS z nagłówkami CORS lub host lokalny). WebSocket domyślnie wskazuje na port <strong>8000</strong>.
+              W zakładce <strong>Avatar</strong> wybierz model z listy (<code style={{ fontSize: 12 }}>resources/</code>) lub podaj własny URL (HTTPS z CORS lub host lokalny). Domyślnie ładuje się <strong>kaguya_watanuki</strong>. WebSocket domyślnie wskazuje na port <strong>8000</strong>.
             </p>
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
               <button type="button" onClick={finish} style={btnPrimary}>

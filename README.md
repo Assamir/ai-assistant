@@ -2,7 +2,7 @@
 
 Lokalny asystent podczas grania: backend **FastAPI** (LLM/STT/TTS/MCP, WebSocket, profil gracza) i klient **Electron + React + Vite** z awatarem **VRM**.
 
-Szczegóły środowiska, modeli i pierwszego uruchomienia: **[docs/ENV_SETUP.md](docs/ENV_SETUP.md)**. Zmiany wersji: **[CHANGELOG.md](CHANGELOG.md)**. Plany i status: **[docs/plan/implementation_plan_part2.md](docs/plan/implementation_plan_part2.md)**.
+**Poradnik użytkownika i konfiguracji** (kroki, linki wewnętrzne i zewnętrzne, panel UI, ENV): **[docs/PORADNIK_UZYTKOWNIKA.md](docs/PORADNIK_UZYTKOWNIKA.md)**. Szczegóły środowiska, modeli i pierwszego uruchomienia: **[docs/ENV_SETUP.md](docs/ENV_SETUP.md)**. Zmiany wersji: **[CHANGELOG.md](CHANGELOG.md)**. Plany i status: **[docs/plan/implementation_plan_part2.md](docs/plan/implementation_plan_part2.md)**.
 
 ## Szybki start (dev)
 

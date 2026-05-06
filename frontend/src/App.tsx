@@ -5,6 +5,7 @@ import { ConfigPanel, type ConfigTabId } from "./ConfigPanel";
 import { SetupWizard, SETUP_WIZARD_STORAGE_KEY, hasSetupWizardDismissed } from "./SetupWizard";
 import { useAudioStreamPlayer } from "./useAudioStreamPlayer";
 import { useWebSocket, type WsFrame } from "./useWebSocket";
+import { bundledVrmRelativeUrl, DEFAULT_BUNDLED_VRM_FILENAME } from "./vrmBundledCatalog";
 
 const VRM_STORAGE_KEY = "assystent.vrmUrl";
 const API_BASE_STORAGE_KEY = "assystent.apiBaseUrl";
@@ -21,7 +22,7 @@ function readInitialVrmUrl(): string {
   if (bridged) {
     return bridged;
   }
-  return import.meta.env.VITE_VRM_URL?.trim() || "";
+  return import.meta.env.VITE_VRM_URL?.trim() || bundledVrmRelativeUrl(DEFAULT_BUNDLED_VRM_FILENAME);
 }
 
 function readInitialApiBase(): string {
