@@ -342,6 +342,7 @@ async def test_voice_chat_empty_text_rejected(http_stub_client):
 @pytest.mark.asyncio
 async def test_voice_synthesize_503_when_no_tts(http_stub_client):
     """/voice/synthesize — brak TTS engine → 503."""
-    ac, _ = http_stub_client
+    ac, ctx = http_stub_client
+    ctx.tts_engine = None
     r = await ac.post("/api/v1/voice/synthesize", json={"text": "test", "emotion": "neutral"})
     assert r.status_code == 503

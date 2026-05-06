@@ -1,7 +1,7 @@
 # ENV_SETUP.md — Środowisko Deweloperskie Assystent
 
-> **Status:** v1.3
-> **Data:** 2026-05-05
+> **Status:** v1.4
+> **Data:** 2026-05-06
 > **Cel:** Kompletny manual konfiguracji środowiska deweloperskiego. Osoba na świeżym Windows 11 powinna skończyć w < 2h.
 > **Źródło decyzji:** DECISIONS_LOG.md (v1.1) — nie podważaj wartości z tego pliku.
 
@@ -429,25 +429,48 @@ print("openWakeWord: OK")
 | Binary rozmiar | ~15 MB                                    |
 | Model głosu    | ~30–100 MB (zależnie od jakości)          |
 | VRAM           | CPU only                                  |
-| Ścieżka        | `c:\ai\asystent\models\piper\`            |
+| Ścieżka (dev)  | Repo: `tools\piper\`, głosy: `frontend\resources\piper-voices\` |
+| Ścieżka (sandbox) | `c:\ai\asystent\models\piper\` (opcjonalnie) |
 | Alternatywa    | XTTSv2 (wyższa jakość, ~2 GB, ~3 GB VRAM) |
 
+Backend włącza silnik TTS tylko wtedy, gdy w YAML jest ustawione niepuste `tts.piper_voice_onnx_path` ([`TTSConfig`](../../backend/config/schema.py), [`try_build_tts_engine`](../../backend/api/app_context.py)). W przeciwnym razie `GET /api/v1/status` zwróci `health.components.tts.available: false`.
 
-**Krok 1 — Pobierz Piper binary:**
+#### 5.3.1 Domyślnie w klonie (względne ścieżki, start z korzenia repo)
+
+Plik [`config/config.yaml`](../../config/config.yaml) zakłada **uruchomienie uvicorn z katalogu głównego repozytorium** (tak jak [`scripts/start-dev.bat`](../../scripts/start-dev.bat)), żeby rozwiązywać ścieżki względem `general.content_root` (np. `"."`).
+
+**Krok 1 — binary Piper (Windows):**
 
 ```powershell
-# Z https://github.com/rhasspy/piper/releases (latest release)
-# Pobierz: piper_windows_amd64.zip (~15 MB)
-Expand-Archive piper_windows_amd64.zip -DestinationPath "c:\ai\asystent\models\piper"
-
-# Weryfikacja
-& "c:\ai\asystent\models\piper\piper.exe" --version
+cd c:\code\_repos\antigravity\assystent
+powershell -ExecutionPolicy Bypass -File scripts/install-piper-windows.ps1
+# Oczekiwane: tools\piper\piper\piper.exe
 ```
 
-**Krok 2 — Skopiuj głos `gosia` (żeński PL, medium):**
+**Krok 2 — głosy PL w repo (opcjonalnie, jeśli katalog nie istnieje):**
 
-Dostępne głosy PL w repozytorium (`C:\code\_repos\antigravity\piper-voices\pl\pl_PL\`):
+- Skrypt [`scripts/sync-piper-voices.ps1`](../../scripts/sync-piper-voices.ps1) kopiuje z katalogu równoległego do klonu: `...\antigravity\piper-voices\pl\pl_PL` → `frontend\resources\piper-voices\pl\pl_PL`.
+- Możesz też wskazać źródło: `.\scripts\sync-piper-voices.ps1 -SourceRoot 'C:\sciezka\piper-voices\pl\pl_PL'`.
 
+**Krok 3 — wpis w `config/config.yaml` (zsynchronizowany z repozytorium):**
+
+```yaml
+general:
+  content_root: "."
+
+tts:
+  piper_executable: "tools/piper/piper/piper.exe"
+  piper_voice_onnx_path: "frontend/resources/piper-voices/pl/pl_PL/gosia/medium/pl_PL-gosia-medium.onnx"
+```
+
+**Weryfikacja HTTP (po starcie backendu):**
+
+```powershell
+curl -s http://127.0.0.1:8000/api/v1/status
+# Szukaj: "tts": { "available": true }  (w health.components)
+```
+
+Lista polskich głosów (np. przy wyborze w UI — **Więcej**), typowe pliki ONNX:
 
 | Głos        | Plik                          | Płeć     | Jakość | Licencja   |
 | ----------- | ----------------------------- | -------- | ------ | ---------- |
@@ -457,41 +480,29 @@ Dostępne głosy PL w repozytorium (`C:\code\_repos\antigravity\piper-voices\pl\
 | mc_speech   | `pl_PL-mc_speech-medium.onnx` | nieznana | medium | CC0        |
 | mls_6892    | `pl_PL-mls_6892-low.onnx`     | nieznana | low    | CC BY 4.0  |
 
+**Domyślny w konfiguracji repo: `gosia/medium`.**
 
-**Domyślny: `gosia/medium`** — jedyny potwierdzony żeński głos PL.
+**Test CLI (dostosuj ścieżki do swojego `piper_executable` i modelu):**
 
 ```powershell
-# Skopiuj głos gosia do content root
-$src = "C:\code\_repos\antigravity\piper-voices\pl\pl_PL\gosia\medium"
-$dst = "C:\ai\asystent\models\piper\gosia"
-
-New-Item -ItemType Directory -Force -Path $dst
-Copy-Item "$src\pl_PL-gosia-medium.onnx" $dst
-Copy-Item "$src\pl_PL-gosia-medium.onnx.json" $dst
-
-# Weryfikacja
-ls $dst
-# pl_PL-gosia-medium.onnx
-# pl_PL-gosia-medium.onnx.json
+cd c:\code\_repos\antigravity\assystent
+echo "Witaj, jestem gotowa do pomocy." | `
+    & ".\tools\piper\piper\piper.exe" `
+    --model ".\frontend\resources\piper-voices\pl\pl_PL\gosia\medium\pl_PL-gosia-medium.onnx" `
+    --output-file test_tts.wav
 ```
 
-**Config entry (config.yaml):**
+#### 5.3.2 Wariant sandbox: `c:\ai\asystent\models\piper\`
+
+Jeśli trzymasz binary i głosy w content root (NF-S-04), możesz użyć **bezwzględnych** ścieżek w `tts`:
 
 ```yaml
-models:
-  piper_voice_path: "C:\\ai\\asystent\\models\\piper\\gosia\\pl_PL-gosia-medium.onnx"
+tts:
+  piper_executable: "C:\\ai\\asystent\\models\\piper\\piper.exe"
+  piper_voice_onnx_path: "C:\\ai\\asystent\\models\\piper\\gosia\\pl_PL-gosia-medium.onnx"
 ```
 
-**Weryfikacja:**
-
-```powershell
-echo "Witaj, jestem gotowa do pomocy." | `
-    & "C:\ai\asystent\models\piper\piper.exe" `
-    --model "C:\ai\asystent\models\piper\gosia\pl_PL-gosia-medium.onnx" `
-    --output-file test_tts.wav
-
-# Odtwórz test_tts.wav — oczekiwany głos żeński PL
-```
+Ręczna instalacja z [wydań Piper](https://github.com/rhasspy/piper/releases) zamiast skryptu — rozpakuj do `c:\ai\asystent\models\piper` i zweryfikuj `piper.exe --version`.
 
 ### 5.4 sentence-transformers (pamięć semantyczna)
 
@@ -773,18 +784,16 @@ cd c:\code\_repos\antigravity\assystent
 uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-**Oczekiwane logi przy starcie:**
+**Logi przy starcie** zależą od zainstalowanych modułów. Zamiast sztywnej listy — po uruchomieniu sprawdź:
 
+```powershell
+curl -s http://127.0.0.1:8000/api/v1/status
 ```
-INFO: LM Studio connection: OK (latency: 14ms)
-INFO: SQLite database: c:\ai\asystent\data\assystent.db
-INFO: ChromaDB initialized: c:\ai\asystent\data\chroma
-INFO: Faster-Whisper loaded (medium, CUDA, int8)
-INFO: Piper TTS ready: pl_PL-{nazwa}-high
-INFO: openWakeWord loaded (fallback: hey_jarvis)
-INFO: Application startup complete.
-INFO: Uvicorn running on http://127.0.0.1:8000
-```
+
+- `health.overall` — `healthy` / `degraded` (np. open circuit LLM).
+- `health.components.tts.available` — `true` tylko przy poprawnym Piper + `piper_voice_onnx_path`.
+- `health.components.stt.available` — STT (faster-whisper), jeśli zainstalowane i działa.
+- `health.config.resolved_yaml` — faktycznie wczytany plik konfiguracji.
 
 ### 8.3 Sanity check backend
 
@@ -793,9 +802,9 @@ INFO: Uvicorn running on http://127.0.0.1:8000
 curl http://127.0.0.1:8000/api/v1/health
 # {"status":"ok","uptime_seconds":3}
 
-# Pełny status
-curl http://127.0.0.1:8000/api/v1/status
-# Sprawdź: health_state = "healthy", wszystkie komponenty "up"
+# Pełny status (komponenty m.in. TTS/STT)
+curl -s http://127.0.0.1:8000/api/v1/status
+# Szukaj: health.components.tts.available (true = Piper skonfigurowany i zainicjalizowany)
 
 # Test STT (wymaga pliku WAV)
 curl -X POST http://127.0.0.1:8000/api/v1/voice/transcribe `
@@ -870,7 +879,7 @@ echo "test" | & "c:\ai\asystent\models\piper\piper.exe" `
 # 2. Sprawdź czy oba pliki istnieją (.onnx i .onnx.json)
 ls "c:\ai\asystent\models\piper\"
 
-# 3. Sprawdź ścieżkę w config.yaml: models.piper_voice_path
+# 3. Sprawdź YAML: tts.piper_voice_onnx_path i tts.piper_executable (nie "models.piper_*")
 ```
 
 ### 9.3 Mikrofon nie wykryty
@@ -1003,7 +1012,7 @@ Przed pierwszym uruchomieniem backendu, upewnij się:
 - `c:\ai\asystent\models\avatar\primary.vrm` istnieje
 - `c:\ai\asystent\models\piper\{model}.onnx` istnieje
 - `c:\ai\asystent\LICENSES.md` uzupełniony (atrybucje VRM)
-- `c:\ai\asystent\config\config.yaml` skopiowany z `backend/config/config.default.yaml`
+- `config/config.yaml` w **content root** lub domyślny [`config/config.yaml`](../../config/config.yaml) w repo (dev z `content_root: "."`); nie musi być kopią wyłącznie z `backend/config/config.default.yaml`, byle zgodny ze [schematem](../../backend/config/schema.py)
 - Mikrofon widoczny w systemie Windows (Settings → Sound)
 - Antywirus nie blokuje `.venv\Lib\site-packages\dxcam\`
 
