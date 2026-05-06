@@ -9,6 +9,13 @@ from backend.api.app_context import AppContext
 
 def build_health_snapshot(ctx: AppContext) -> Dict[str, Any]:
     """Zwraca strukturę pod HTTP (bez sekretów)."""
+    try:
+        from backend.ai.screen_capture import _detect_best_backend
+
+        sc_backend = _detect_best_backend()
+    except Exception:
+        sc_backend = None
+
     breaker = getattr(ctx.llm_client, "_breaker", None)
     cb_state = getattr(breaker, "state", None) if breaker else None
     cb_failures = int(getattr(breaker, "failure_count", 0)) if breaker else 0
@@ -30,6 +37,10 @@ def build_health_snapshot(ctx: AppContext) -> Dict[str, Any]:
             "engine_initialized": ctx.ocr_engine is not None,
         },
         "vision_pipeline": {"available": ctx.vision_pipeline is not None},
+        "screen_capture": {
+            "backend": sc_backend,
+            "capture_available": sc_backend is not None,
+        },
         "database": {"path": ctx.db_path},
         "observer": {
             "running": ctx.game_observer.is_running if ctx.game_observer else False,

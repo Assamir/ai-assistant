@@ -2,15 +2,35 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict
+
+_logger = logging.getLogger(__name__)
+
+_SCFAIL_ASSISTANT = (
+    "Narzędzie screen_capture zostało wywołane, ale zwróciło błąd. Przekaż użytkownikowi treść pola "
+    "`error` po polsku (możesz ją uprościć). Nie twierdz, że «nie masz narzędzia zrzutu» — problem jest "
+    "techniczny po stronie środowiska (konfiguracja / brak biblioteki / potok wizji)."
+)
+
+
+def _screen_capture_fail(payload: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(payload)
+    out["ok"] = False
+    out["assistant_instruction"] = _SCFAIL_ASSISTANT
+    return out
+
 
 _TOOL_SCREEN_CAPTURE = {
     "type": "function",
     "function": {
         "name": "screen_capture",
         "description": (
-            "Robi zrzut ekranu i zwraca opis (VLM) oraz opcjonalnie OCR z potoku wizji. "
-            "Używaj przy pytaniach „co widzisz na ekranie”."
+            "Wykonuje zrzut ekranu użytkownika i zwraca opis sceny oraz tekst OCR (gdy potok wizji jest włączony). "
+            "Używaj przy pytaniach „co widzisz na ekranie”. "
+            "Jeśli wynik JSON ma ok=true — **najpierw przeczytaj pole `summary`**, potem `description` i `ocr_text`. "
+            "Opisz ekran po polsku na tej podstawie; nie twierdź, że nie widzisz ekranu. "
+            "Gdy ok=false — postępuj według `assistant_instruction` i pola `error`."
         ),
         "parameters": {
             "type": "object",
@@ -45,44 +65,78 @@ def register_screen_capture_tool(ctx: Any) -> None:
         cap = getattr(ctx, "screen_capture", None)
         vp = getattr(ctx, "vision_pipeline", None)
         if cap is None:
-            return {"ok": False, "error": "screen_capture niedostępny"}
+            return _screen_capture_fail({"error": "screen_capture niedostępny (backend bez modułu capture)"})
         try:
             png = await cap.capture_png(monitor_index=int(monitor_index))
         except Exception as exc:
-            return {"ok": False, "error": str(exc)}
-        description = ""
-        ocr_text = ""
-        ocr_ran = False
-        if vp is not None:
-            try:
-                result = await vp.analyze_png(png)
-                description = (result.vlm_text or "").strip()
-                ocr_text = (result.ocr_text or "").strip()
-                ocr_ran = result.ocr_ran
-            except Exception as exc:
-                description = f"(błąd wizji: {exc})"
-        elif prompt:
-            description = "(vision_pipeline wyłączony — brak opisu VLM)"
+            return _screen_capture_fail({"error": str(exc)})
+        if vp is None:
+            return _screen_capture_fail(
+                {
+                    "error": (
+                        "Potok wizji nie jest aktywny: w config `ocr.enabled: true` oraz `pip install easyocr`, "
+                        "ew. `vlm.enabled: true` (Moondream). Diagnostyka: GET /api/v1/status — "
+                        "health.components.vision_pipeline.available, ocr.engine_initialized."
+                    ),
+                }
+            )
+        try:
+            result = await vp.analyze_png(png)
+        except Exception as exc:
+            _logger.warning("screen_capture: analyze_png failed: %s", exc, exc_info=True)
+            return _screen_capture_fail(
+                {
+                    "error": (
+                        f"Zrzut ekranu wykonany ({len(png)} bajtów PNG), ale analiza obrazu (OCR/VLM) się nie powiodła: {exc}. "
+                        "Sprawdź logi backendu i easyocr/torch."
+                    ),
+                }
+            )
+
+        description = (result.vlm_text or "").strip()
+        ocr_text = (result.ocr_text or "").strip()
+        ocr_ran = result.ocr_ran
         meta_note = ""
         if focus_cursor and not ocr_ran:
             meta_note = "focus_cursor: pełny crop pod kursor wymaga przyszłej integracji pyautogui."
+
+        summary = (result.merged_context() or "").strip()
+        if not summary:
+            summary = (
+                "Na zrzucie nie rozpoznano tekstu (OCR pusty). "
+                "VLM jest wyłączony lub nie zwrócił opisu — użytkownik może opisać ekran słownie."
+            )
+
         out: Dict[str, Any] = {
             "ok": True,
-            "description": description or "(brak opisu)",
+            "description": description or "(brak opisu VLM)",
             "ocr_text": ocr_text,
+            "ocr_ran": ocr_ran,
+            "summary": summary,
             "cursor_focused": bool(focus_cursor),
         }
+        if prompt and str(prompt).strip():
+            out["user_question_echo"] = str(prompt).strip()
         if meta_note:
             out["note"] = meta_note
+
+        _logger.info(
+            "screen_capture ok: png=%sB ocr_ran=%s ocr_len=%s vlm_len=%s",
+            len(png),
+            ocr_ran,
+            len(ocr_text),
+            len(description),
+        )
         return out
 
     reg.register("screen_capture", _TOOL_SCREEN_CAPTURE, tool_screen_capture, replace=True)
 
 
 def register_context_dependent_mcp_tools(ctx: Any) -> None:
-    """Po zbudowaniu AppContext — narzędzia zależne od capture/VLM."""
-    if not ctx.config.mcp.enabled:
-        return
+    """Po zbudowaniu AppContext — narzędzia zależne od capture/VLM.
+
+    `screen_capture` musi być zarejestrowane także gdy `mcp.enabled: false` (tylko wyłącza web_search itd.).
+    """
     register_screen_capture_tool(ctx)
 
 

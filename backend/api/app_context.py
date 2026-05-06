@@ -244,13 +244,23 @@ def try_build_ocr_engine(cfg: ConfigSchema) -> Optional[BaseOCREngine]:
         return None
     try:
         from backend.ai.easyocr_engine import EasyOCREngine
-
-        return EasyOCREngine(cfg.ocr)
     except ImportError:
         _logger.info("easyocr not installed — OCR engine disabled")
+        return None
+
+    try:
+        return EasyOCREngine(cfg.ocr)
     except Exception as exc:
         _logger.warning("OCR engine init failed: %s", exc)
-    return None
+        if cfg.ocr.use_gpu:
+            try:
+                ocr_cpu = cfg.ocr.model_copy(update={"use_gpu": False})
+                eng = EasyOCREngine(ocr_cpu)
+                _logger.info("EasyOCR: ponowiono inicjalizację w trybie CPU (po błędzie GPU).")
+                return eng
+            except Exception as exc2:  # pragma: no cover - zależne od CUDA
+                _logger.warning("OCR CPU fallback failed: %s", exc2)
+        return None
 
 
 def build_vision_pipeline(

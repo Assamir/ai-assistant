@@ -1,4 +1,4 @@
-"""Zrzuty ekranu (DXcam → pyautogui) — T5 dzień 1; mock dla testów."""
+"""Zrzuty ekranu (Windows: DXcam → mss → pyautogui) — T5 dzień 1; mock dla testów."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ class ScreenCaptureError(RuntimeError):
 
 
 class ScreenCaptureUnavailable(ScreenCaptureError):
-    """Brak zainstalowanych backendów (dxcam / pyautogui + Pillow)."""
+    """Brak zainstalowanych backendów (mss / dxcam / pyautogui + Pillow)."""
 
 
 _DXCAM_LINE_RE = re.compile(
@@ -89,7 +89,26 @@ def _dxcam_probe_primary_dimensions() -> Optional[tuple[int, int]]:
             pass
 
 
-def _detect_best_backend() -> Optional[Literal["dxcam", "pyautogui"]]:
+def _mss_available() -> bool:
+    try:
+        import mss  # noqa: F401
+        from PIL import Image  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def _mss_probe_ok() -> bool:
+    try:
+        import mss
+
+        with mss.mss() as sct:
+            return len(sct.monitors) > 1
+    except Exception:
+        return False
+
+
+def _detect_best_backend() -> Optional[Literal["dxcam", "mss", "pyautogui"]]:
     if sys.platform == "win32":
         try:
             import dxcam
@@ -106,10 +125,52 @@ def _detect_best_backend() -> Optional[Literal["dxcam", "pyautogui"]]:
                 if dims is not None:
                     return "dxcam"
             except Exception:
-                logger.debug("DXcam detection failed; trying pyautogui if available.", exc_info=True)
+                logger.debug("DXcam detection failed; trying mss / pyautogui.", exc_info=True)
+    if _mss_available() and _mss_probe_ok():
+        return "mss"
     if _pyautogui_available():
         return "pyautogui"
     return None
+
+
+def _list_monitors_mss_sync() -> list[MonitorInfo]:
+    import mss
+
+    with mss.mss() as sct:
+        mons = sct.monitors[1:]
+        if not mons:
+            raise ScreenCaptureError("mss: brak monitorów (pusta lista).")
+        out: list[MonitorInfo] = []
+        for i, region in enumerate(mons):
+            out.append(
+                MonitorInfo(
+                    index=i,
+                    device_idx=0,
+                    output_idx=i,
+                    width=int(region["width"]),
+                    height=int(region["height"]),
+                    is_primary=(i == 0),
+                    label=f"mss output {i}",
+                )
+            )
+        return out
+
+
+def _capture_mss_png_sync(monitor_index: int) -> bytes:
+    import mss
+    from PIL import Image
+
+    with mss.mss() as sct:
+        if monitor_index < 0 or monitor_index + 1 >= len(sct.monitors):
+            raise ScreenCaptureError(
+                f"mss: monitor_index={monitor_index} poza zakresem (0..{max(0, len(sct.monitors) - 2)})"
+            )
+        region = sct.monitors[monitor_index + 1]
+        shot = sct.grab(region)
+        img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
 
 
 def _list_monitors_dxcam_sync() -> list[MonitorInfo]:
@@ -189,18 +250,19 @@ def _capture_pyautogui_png_sync(monitor_index: int) -> bytes:
 
 
 class DesktopScreenCapture(BaseScreenCapture):
-    """DXcam (Windows) z fallbackiem do pyautogui; wywołania sync w wątku."""
+    """DXcam (Windows) → mss → pyautogui; wywołania sync w wątku."""
 
     def __init__(self) -> None:
-        self._backend: Optional[Literal["dxcam", "pyautogui"]] = None
+        self._backend: Optional[Literal["dxcam", "mss", "pyautogui"]] = None
 
-    def _ensure_backend(self) -> Literal["dxcam", "pyautogui"]:
+    def _ensure_backend(self) -> Literal["dxcam", "mss", "pyautogui"]:
         if self._backend is None:
             b = _detect_best_backend()
             if b is None:
                 raise ScreenCaptureUnavailable(
-                    "Brak backendu zrzutu ekranu. Na Windows: pip install dxcam. "
-                    "Alternatywa: pip install pyautogui pillow."
+                    "Brak działającego backendu zrzutu ekranu. Zainstaluj w venv backendu: "
+                    "`pip install mss` (zalecane), opcjonalnie `dxcam` (Windows DXGI) lub `pyautogui`. "
+                    "Wymagany jest pakiet `pillow`."
                 )
             self._backend = b
         return self._backend
@@ -209,10 +271,14 @@ class DesktopScreenCapture(BaseScreenCapture):
         b = self._ensure_backend()
         if b == "dxcam":
             return _list_monitors_dxcam_sync()
+        if b == "mss":
+            return _list_monitors_mss_sync()
         return _list_monitors_pyautogui_sync()
 
     def _capture_png_sync(self, monitor_index: int) -> bytes:
         self._ensure_backend()
+        if self._backend == "mss":
+            return _capture_mss_png_sync(monitor_index)
         monitors = self._list_monitors_sync()
         if monitor_index < 0 or monitor_index >= len(monitors):
             raise ScreenCaptureError(

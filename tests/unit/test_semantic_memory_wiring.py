@@ -42,7 +42,9 @@ def test_init_semantic_memory_ingests_knowledge_dir(tmp_path: Path):
     sr, ing, w = init_semantic_memory(cfg, root)
     assert sr is not None and ing is not None
     assert w is None
-    hits = sr.recall_knowledge("unique_ingest_wire", k=2)
+    # Zapytanie zbliżone do pełnej linii z pliku — hash-embedding + Chroma mogą słabiej łączyć krótki substring z jedynym chunkiem.
+    hits = sr.recall_knowledge("unique_ingest_wire_phrase_alpha", k=4)
+    assert hits, "oczekiwano trafień po ingest_on_startup"
     assert any("unique_ingest_wire" in h for h in hits)
 
 

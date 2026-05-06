@@ -180,8 +180,16 @@ export function App() {
     };
   }, []);
 
-  const { feedAudioChunk, isSpeaking, mouthLevel, stop: stopAudio, prime: primeAudio, playbackError } =
-    useAudioStreamPlayer();
+  const {
+    feedAudioChunk,
+    isSpeaking,
+    mouthLevel,
+    stop: stopAudio,
+    prime: primeAudio,
+    playbackError,
+    outputVolume,
+    setOutputVolume,
+  } = useAudioStreamPlayer();
   const { pttBusy, pttError, setPttError, pttArm, pttFinalize } = usePttRecorder();
 
   useEffect(() => {
@@ -566,6 +574,34 @@ export function App() {
             Emocja (z WS): <strong style={{ color: "#d4ccec" }}>{emotion}</strong>
             {isSpeaking ? " · odtwarzanie TTS (lip-sync)" : ""}
           </p>
+          <div
+            style={{
+              marginTop: "0.45rem",
+              maxWidth: 560,
+              padding: "0.5rem 0.65rem",
+              borderRadius: 8,
+              border: "1px solid #2f2840",
+              background: "rgba(20, 17, 32, 0.55)",
+            }}
+          >
+            <label htmlFor="assystent-tts-volume" style={{ fontSize: 12, color: "#9a93b0", display: "block", marginBottom: "0.35rem" }}>
+              Głośność odpowiedzi (TTS) — domyślne urządzenie audio systemu
+            </label>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
+              <input
+                id="assystent-tts-volume"
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round(outputVolume * 100)}
+                onChange={(e) => setOutputVolume(Number(e.target.value) / 100)}
+                style={{ flex: 1, accentColor: "#9b7fd6" }}
+              />
+              <span style={{ fontSize: 13, color: "#c8c0dc", minWidth: "2.75rem", textAlign: "right" }}>
+                {Math.round(outputVolume * 100)}%
+              </span>
+            </div>
+          </div>
           {playbackError ? (
             <p style={{ margin: "0.35rem 0 0", fontSize: 13, color: "#f0b0b8", lineHeight: 1.45 }}>{playbackError}</p>
           ) : null}

@@ -1,8 +1,25 @@
 # Konfiguracja dev — zakładamy start backendu z katalogu głównego repozytorium (`uvicorn …` jak w scripts/start-dev.bat).
 # Piper CLI: `powershell -ExecutionPolicy Bypass -File scripts/install-piper-windows.ps1`.
+# Wakeword „Hej Aria”: openWakeWord ma głównie modele EN; prefiks po polsku jest obcinany z transkryptu STT (`audio.strip_wake_phrase_from_transcription`).
 
 general:
+  assistant_name: Aria
   content_root: "."
+
+audio:
+  strip_wake_phrase_from_transcription: true
+  wake_transcription_prefixes:
+    - "hej aria"
+    - "hej, aria"
+    - "cześć aria"
+
+ocr:
+  enabled: true
+  # Na niektórych sterownikach GPU CUDA EasyOCR pada przy pierwszym imporcie torch — wtedy backend spróbuje CPU.
+  use_gpu: false
+
+mcp:
+  enabled: true
 
 tts:
   piper_executable: "tools/piper/piper/piper.exe"

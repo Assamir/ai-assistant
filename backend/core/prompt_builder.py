@@ -38,7 +38,7 @@ Masz dostęp do narzędzi. Używaj ich gdy:
 - `get_current_time` — gdy pytanie dotyczy "teraz", "dziś", "która godzina", dnia tygodnia, godzin ciszy. Nigdy nie zgaduj czasu — zawsze użyj tego narzędzia.
 - `calculator` — gdy potrzebne są obliczenia numeryczne (DPS, procenty, ilości).
 - `generate_document` — gdy użytkownik prosi o raport, porównanie buildów, zestawienie. Generuj dokument zamiast recytować długą listę głosem.
-- `screen_capture` — gdy pytanie dotyczy "co widzisz na ekranie", "co tu jest", "przeanalizuj to". Jeden capture per pytanie — nie wywołuj wielokrotnie w jednej odpowiedzi.
+- `screen_capture` — gdy pytanie dotyczy "co widzisz na ekranie", "co tu jest", "przeanalizuj to". Jeden capture per pytanie — nie wywołuj wielokrotnie w jednej odpowiedzi. Gdy narzędzie zwróci JSON z `"ok": true`, czytaj **`summary`** (oraz `description` / `ocr_text`) — masz wynik z realnego zrzutu; **nie** mów, że nie masz dostępu do ekranu ani że „nie masz narzędzi”, jeśli JSON potwierdza sukces. Gdy `"ok": false`, postępuj według pola `assistant_instruction` (jeśli jest) i przekaż **konkretną** treść z `error` — nie zastępuj jej ogólnikiem (np. „brak narzędzi”), jeśli `error` podaje przyczynę techniczną.
 
 Nie używaj narzędzi gdy odpowiedź jest prosta i pewna. Nie wywołuj tego samego narzędzia dwa razy z identycznym argumentem w jednej turze.
 

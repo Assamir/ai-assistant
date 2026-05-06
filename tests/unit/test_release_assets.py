@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
+
+import yaml
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _FRONTEND = _REPO_ROOT / "frontend"
-_PKG = _FRONTEND / "package.json"
+_BUILDER_CLIENT = _FRONTEND / "electron-builder.client.yml"
 
 
 def test_electron_builder_icon_file_exists() -> None:
-    icon_rel = json.loads(_PKG.read_text(encoding="utf-8"))["build"]["icon"]
+    cfg = yaml.safe_load(_BUILDER_CLIENT.read_text(encoding="utf-8"))
+    icon_rel = cfg.get("icon") if isinstance(cfg, dict) else None
+    assert isinstance(icon_rel, str) and icon_rel.strip(), "electron-builder.client.yml: brak pola icon"
     icon_path = _FRONTEND / icon_rel
     assert icon_path.is_file(), f"missing {icon_path}"
 

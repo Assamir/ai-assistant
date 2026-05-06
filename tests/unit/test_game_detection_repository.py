@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+
+from backend.config.schema import ConfigSchema
 from unittest.mock import AsyncMock
 
 import pytest
@@ -128,6 +130,7 @@ async def test_make_game_emitter_triggers_detection_row(migrated_db_path):
     ws = SimpleNamespace(_by_session={}, send_to_session=AsyncMock())
     ctx = SimpleNamespace(
         db_path=migrated_db_path,
+        config=ConfigSchema(),
         orchestrator=SimpleNamespace(
             state={"observer_active": True, "manual_game_profile_lock": True}
         ),

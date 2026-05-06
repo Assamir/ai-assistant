@@ -47,10 +47,11 @@ pytest-asyncio>=0.24.0,<2.0.0
 # pip install torch torchvision           # Moondream2 VLM (gdy vlm.enabled)
 # pip install transformers accelerate
 
-# Vision / screen capture (optional — T5); DXcam tylko Windows
+# Vision / screen capture (T5); kolejność w kodzie: DXcam (Win) → mss → pyautogui
 pillow>=10.0.0,<12.0.0
-# pip install dxcam          # Windows, DXGI capture
-# pip install pyautogui      # fallback screenshot
+mss>=9.0.1,<11.0.0
+# pip install dxcam          # Windows, DXGI (opcjonalnie zamiast mss)
+# pip install pyautogui      # ostatni fallback screenshot
 # pip install easyocr        # OCR (gdy ocr.enabled)
 
 # chromadb — T8 SemanticRecall (na Python 3.11–3.13 pełny stack; 3.14+ może wymagać aktualizacji chroma — wtedy działa fallback w pamięci w SemanticRecall)

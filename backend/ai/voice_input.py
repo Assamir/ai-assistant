@@ -136,7 +136,7 @@ class PTTHotkeyListener:
 
 
 class WakewordDetector:
-    """Detektor openWakeWord (CPU); fallback model „hey_jarvis”. Bez pakietu / błąd load → brak inferencji."""
+    """Detektor openWakeWord (CPU); typowo model EN (np. hey_jarvis). Frazy PL („Hej Aria”) — po STT obcinane w `ws_router` (`audio.wake_transcription_prefixes`)."""
 
     __slots__ = (
         "_config_enabled",

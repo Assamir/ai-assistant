@@ -1,8 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+const VOLUME_LS_KEY = "assystent.outputVolume";
+
+function readStoredVolume(): number {
+  if (typeof window === "undefined") {
+    return 1;
+  }
+  const raw = localStorage.getItem(VOLUME_LS_KEY);
+  if (raw == null) {
+    return 1;
+  }
+  const n = Number(raw);
+  if (!Number.isFinite(n)) {
+    return 1;
+  }
+  return Math.max(0, Math.min(1, n));
+}
+
+type AudioCtxWithSink = AudioContext & { setSinkId?: (id: string) => Promise<void> };
+
 /**
  * Składa kolejne `audio_stream.chunk_base64` z WS (jeden WAV w Base64, pocięty na struny),
  * odtwarza przez Web Audio API i udostępnia poziom RMS do lip-sync.
+ * Domyślne urządzenie wyjściowe: `setSinkId("")` gdy przeglądarka/Electron to wspiera.
  */
 export function useAudioStreamPlayer() {
   const bufferRef = useRef("");
@@ -11,17 +31,33 @@ export function useAudioStreamPlayer() {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
   const rafRef = useRef<number | null>(null);
+  const liveGainRef = useRef<GainNode | null>(null);
+
+  const [outputVolume, setOutputVolumeState] = useState(readStoredVolume);
 
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [mouthLevel, setMouthLevel] = useState(0);
 
   const [playbackError, setPlaybackError] = useState<string | null>(null);
 
+  const setOutputVolume = useCallback((v: number) => {
+    const clamped = Math.max(0, Math.min(1, v));
+    setOutputVolumeState(clamped);
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(VOLUME_LS_KEY, String(clamped));
+    }
+    const g = liveGainRef.current;
+    if (g) {
+      g.gain.value = clamped;
+    }
+  }, []);
+
   const interruptPlayback = useCallback(() => {
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
+    liveGainRef.current = null;
     const src = sourceRef.current;
     if (src) {
       try {
@@ -50,6 +86,14 @@ export function useAudioStreamPlayer() {
     const ctx = audioCtxRef.current ?? new AudioContext({ latencyHint: "playback" });
     audioCtxRef.current = ctx;
     try {
+      const c = ctx as AudioCtxWithSink;
+      if (typeof c.setSinkId === "function") {
+        await c.setSinkId("");
+      }
+    } catch {
+      /* starsze WebView / polityka — zostaw domyślne urządzenie systemowe */
+    }
+    try {
       await ctx.resume();
       setPlaybackError(null);
     } catch {
@@ -70,6 +114,15 @@ export function useAudioStreamPlayer() {
 
       try {
         await ctx.resume();
+      } catch {
+        /* ignore */
+      }
+
+      try {
+        const c = ctx as AudioCtxWithSink;
+        if (typeof c.setSinkId === "function") {
+          await c.setSinkId("");
+        }
       } catch {
         /* ignore */
       }
@@ -102,7 +155,8 @@ export function useAudioStreamPlayer() {
       const source = ctx.createBufferSource();
       source.buffer = buf;
       const gain = ctx.createGain();
-      gain.gain.value = 1;
+      gain.gain.value = outputVolume;
+      liveGainRef.current = gain;
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 512;
       analyser.smoothingTimeConstant = 0.72;
@@ -133,6 +187,9 @@ export function useAudioStreamPlayer() {
         if (sourceRef.current === source) {
           sourceRef.current = null;
         }
+        if (liveGainRef.current === gain) {
+          liveGainRef.current = null;
+        }
         if (rafRef.current !== null) {
           cancelAnimationFrame(rafRef.current);
           rafRef.current = null;
@@ -145,8 +202,15 @@ export function useAudioStreamPlayer() {
       source.start(0);
       rafRef.current = requestAnimationFrame(loop);
     },
-    [interruptPlayback],
+    [interruptPlayback, outputVolume],
   );
+
+  useEffect(() => {
+    const g = liveGainRef.current;
+    if (g) {
+      g.gain.value = outputVolume;
+    }
+  }, [outputVolume]);
 
   const feedAudioChunk = useCallback(
     (chunk: string) => {
@@ -190,5 +254,14 @@ export function useAudioStreamPlayer() {
 
   useEffect(() => () => stop(), [stop]);
 
-  return { feedAudioChunk, isSpeaking, mouthLevel, stop, prime, playbackError };
+  return {
+    feedAudioChunk,
+    isSpeaking,
+    mouthLevel,
+    stop,
+    prime,
+    playbackError,
+    outputVolume,
+    setOutputVolume,
+  };
 }

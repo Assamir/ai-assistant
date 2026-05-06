@@ -245,6 +245,11 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
                         transcription = ""
 
                 clipped = transcription.strip()
+                if clipped and getattr(ctx.config.audio, "strip_wake_phrase_from_transcription", True):
+                    from backend.services.speech_transcription_clean import strip_wake_prefixes
+
+                    prefixes = list(getattr(ctx.config.audio, "wake_transcription_prefixes", []) or [])
+                    clipped = strip_wake_prefixes(clipped, prefixes)
                 stt_payload: dict[str, Any] = {"text": clipped}
                 if not blob_b64:
                     stt_payload["hint"] = "no_audio_payload"

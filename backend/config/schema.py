@@ -65,6 +65,25 @@ class AudioConfig(BaseModel):
         description="Prebuilt openWakeWord — domyślnie hey_jarvis (fallback PRD).",
     )
     wakeword_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+    strip_wake_phrase_from_transcription: bool = Field(
+        default=True,
+        description="Po STT usuń wiodącą frazę z wake_transcription_prefixes (np. „Hej Aria”) przed chat.",
+    )
+    wake_transcription_prefixes: List[str] = Field(
+        default_factory=lambda: ["hej aria", "hej, aria", "cześć aria"],
+        description="Frazy (PL) do obcięcia z początku transkryptu — uzupełnia openWakeWord (tylko modele EN).",
+    )
+
+    @field_validator("wake_transcription_prefixes", mode="before")
+    @classmethod
+    def normalize_wake_prefixes(cls, v: Any) -> List[str]:
+        if v is None:
+            return ["hej aria", "hej, aria", "cześć aria"]
+        if isinstance(v, str):
+            parts = [x.strip() for x in v.split(",") if x.strip()]
+            return parts or ["hej aria", "hej, aria", "cześć aria"]
+        out = [str(x).strip() for x in v if str(x).strip()]
+        return out or ["hej aria", "hej, aria", "cześć aria"]
 
 class LLMConfig(BaseModel):
     api_base_url: str = "http://localhost:1234"
