@@ -4,6 +4,7 @@ import { AvatarCanvas } from "./AvatarCanvas";
 import { ConfigPanel, type ConfigTabId } from "./ConfigPanel";
 import { SetupWizard, SETUP_WIZARD_STORAGE_KEY, hasSetupWizardDismissed } from "./SetupWizard";
 import { useAudioStreamPlayer } from "./useAudioStreamPlayer";
+import { usePttRecorder } from "./usePttRecorder";
 import { useWebSocket, type WsFrame } from "./useWebSocket";
 import { bundledVrmRelativeUrl, DEFAULT_BUNDLED_VRM_FILENAME } from "./vrmBundledCatalog";
 
@@ -102,6 +103,12 @@ export function App() {
   const [profileBanner, setProfileBanner] = useState<ProfileBannerState | null>(null);
   const profileBannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [chatDraft, setChatDraft] = useState("");
+  const [assistantLine, setAssistantLine] = useState<string | null>(null);
+  const pttCycleRunningRef = useRef(false);
+  const pttReleasedEarlyRef = useRef(false);
+  const pttReleaseRef = useRef<(() => void) | null>(null);
+
   const dismissProfileBanner = useCallback(() => {
     if (profileBannerTimer.current !== null) {
       clearTimeout(profileBannerTimer.current);
@@ -119,13 +126,19 @@ export function App() {
   }, []);
 
   const { feedAudioChunk, isSpeaking, mouthLevel, stop: stopAudio } = useAudioStreamPlayer();
+  const { pttBusy, pttError, setPttError, pttArm, pttFinalize } = usePttRecorder();
 
   const onFrame = useCallback(
     (f: WsFrame) => {
       if (f.event === "emotion" && typeof f.payload.emotion === "string") {
         setEmotion(f.payload.emotion);
       }
+      if (f.event === "text_overlay" && typeof f.payload.text === "string") {
+        const line = f.payload.text.trim();
+        setAssistantLine(line || null);
+      }
       if (f.event === "audio_stream" && typeof f.payload.chunk_base64 === "string") {
+        setAssistantLine(null);
         feedAudioChunk(f.payload.chunk_base64);
       }
       if (
@@ -154,8 +167,82 @@ export function App() {
     onFrame,
   });
 
-  const push = (line: string) =>
+  const push = useCallback((line: string) => {
     setLog((prev) => [...prev.slice(-40), `${new Date().toISOString().slice(11, 19)} ${line}`]);
+  }, []);
+
+  const wsReady = status === "open";
+
+  const handleSendText = useCallback(() => {
+    const t = chatDraft.trim();
+    if (!t) {
+      return;
+    }
+    stopAudio();
+    const ok = sendFrame("chat_text", { text: t });
+    const preview = t.length > 80 ? `${t.slice(0, 80)}…` : t;
+    push(ok ? `→ chat_text (${preview})` : "→ chat_text (socket niegotowy)");
+    if (ok) {
+      setChatDraft("");
+    }
+  }, [chatDraft, sendFrame, stopAudio, push]);
+
+  const handlePttDown = useCallback(() => {
+    if (pttCycleRunningRef.current) {
+      return;
+    }
+    pttCycleRunningRef.current = true;
+    void (async () => {
+      try {
+        stopAudio();
+        setPttError(null);
+        pttReleasedEarlyRef.current = false;
+        pttReleaseRef.current = null;
+
+        const wsOk = sendFrame("ptt_start", {});
+        if (!wsOk) {
+          push("→ ptt_start (socket niegotowy)");
+          return;
+        }
+        push("→ ptt_start");
+
+        const armed = await pttArm();
+        if (!armed) {
+          sendFrame("ptt_end", {});
+          push("→ ptt_end (błąd mikrofonu / nagrywania)");
+          return;
+        }
+
+        await new Promise<void>((resolve) => {
+          pttReleaseRef.current = resolve;
+          if (pttReleasedEarlyRef.current) {
+            resolve();
+          }
+        });
+
+        const audioB64 = await pttFinalize();
+        const payload: Record<string, unknown> = audioB64 ? { audio: audioB64 } : {};
+        const endOk = sendFrame("ptt_end", payload);
+        if (endOk) {
+          push(audioB64 ? "→ ptt_end (wav)" : "→ ptt_end");
+        } else {
+          push("→ ptt_end (socket niegotowy)");
+        }
+      } finally {
+        pttCycleRunningRef.current = false;
+        pttReleaseRef.current = null;
+      }
+    })();
+  }, [stopAudio, sendFrame, push, pttArm, pttFinalize, setPttError]);
+
+  const handlePttUp = useCallback(() => {
+    pttReleasedEarlyRef.current = true;
+    const r = pttReleaseRef.current;
+    if (r) {
+      r();
+      pttReleaseRef.current = null;
+    }
+  }, []);
 
   const saveVrmUrl = useCallback((next: string) => {
     const u = next.trim();
@@ -257,7 +344,8 @@ export function App() {
     <main style={layout}>
       <h1 style={{ fontSize: "1.65rem", fontWeight: 600, margin: "0 0 0.25rem" }}>Assystent</h1>
       <p style={{ margin: "0 0 1.25rem", color: "#b8afc8", fontSize: 15 }}>
-        Avatar VRM, lip-sync z audio, idle; REST <code>PUT /api/v1/config</code> + panel statusu.
+        Avatar VRM, lip-sync z audio (<code>audio_stream</code> przez WebSocket); czat tekstowy, push‑to‑talk; REST{" "}
+        <code>PUT /api/v1/config</code> + panel statusu.
       </p>
 
       {profileBanner ? (
@@ -300,10 +388,102 @@ export function App() {
             Emocja (z WS): <strong style={{ color: "#d4ccec" }}>{emotion}</strong>
             {isSpeaking ? " · TTS (lip-sync)" : ""}
           </p>
+          {assistantLine ? (
+            <p style={{ margin: "0.4rem 0 0", fontSize: 13, color: "#c8c0dc", lineHeight: 1.45 }}>
+              Odpowiedź (tekst, bez nagłośnika): <span style={{ color: "#eae6f8" }}>{assistantLine}</span>
+            </p>
+          ) : null}
 
           <section style={{ marginTop: "1.25rem" }}>
             <h2 style={{ fontSize: "0.95rem", margin: "0 0 0.65rem" }}>WebSocket</h2>
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+
+            <div style={{ marginBottom: "1rem" }}>
+              <label
+                htmlFor="assystent-chat-draft"
+                style={{ display: "block", marginBottom: "0.35rem", fontSize: 13, color: "#c8c0dc" }}
+              >
+                Wiadomość do agenta
+              </label>
+              <textarea
+                id="assystent-chat-draft"
+                aria-label="Wiadomość do agenta"
+                value={chatDraft}
+                disabled={!wsReady}
+                onChange={(e) => setChatDraft(e.target.value)}
+                placeholder={wsReady ? "Napisz i wyślij (Enter). Shift+Enter — nowa linia." : "Poczekaj na połączenie WS…"}
+                rows={3}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendText();
+                  }
+                }}
+                style={{
+                  width: "100%",
+                  maxWidth: 520,
+                  boxSizing: "border-box",
+                  resize: "vertical",
+                  padding: "0.55rem 0.65rem",
+                  borderRadius: 8,
+                  border: "1px solid #3d3550",
+                  background: "#120f18",
+                  color: "#eae6f8",
+                  fontSize: 14,
+                  fontFamily: "inherit",
+                  lineHeight: 1.4,
+                  minHeight: 72,
+                }}
+              />
+              <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap", marginTop: "0.5rem", alignItems: "center" }}>
+                <button type="button" onClick={() => handleSendText()} disabled={!wsReady} style={btnSecondary}>
+                  Wyślij
+                </button>
+                <span style={{ fontSize: 12, color: "#7a7390" }}>Enter wyślij · Shift+Enter nowa linia</span>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: "1rem" }}>
+              <span style={{ display: "block", marginBottom: "0.35rem", fontSize: 13, color: "#c8c0dc" }}>
+                Mikrofon (push-to-talk)
+              </span>
+              <button
+                type="button"
+                disabled={!wsReady || pttBusy}
+                onPointerDown={(e) => {
+                  if (!wsReady || pttBusy) {
+                    return;
+                  }
+                  e.preventDefault();
+                  handlePttDown();
+                }}
+                onPointerUp={(e) => {
+                  e.preventDefault();
+                  handlePttUp();
+                }}
+                onPointerLeave={() => handlePttUp()}
+                style={{
+                  ...btnSecondary,
+                  borderColor: "#5c4d8c",
+                  background: "#2c2440",
+                  userSelect: "none",
+                  touchAction: "manipulation",
+                  minWidth: "11rem",
+                }}
+              >
+                Trzymaj — mów
+              </button>
+              {pttBusy ? (
+                <span style={{ marginLeft: "0.5rem", fontSize: 12, color: "#9a93b0" }}>Przygotowanie mikrofonu…</span>
+              ) : null}
+              {pttError ? (
+                <div style={{ marginTop: "0.35rem", fontSize: 12, color: "#e898a8" }}>{pttError}</div>
+              ) : null}
+              {!wsReady ? (
+                <div style={{ marginTop: "0.35rem", fontSize: 12, color: "#7a7390" }}>PTT dostępne po zestawieniu WS.</div>
+              ) : null}
+            </div>
+
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
               <button
                 type="button"
                 onClick={() => {
@@ -323,16 +503,6 @@ export function App() {
                 style={btnSecondary}
               >
                 Frontend ready
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const ok = sendFrame("chat_text", { text: "Cześć z React." });
-                  push(ok ? "→ chat_text" : "→ chat_text (socket niegotowy)");
-                }}
-                style={btnSecondary}
-              >
-                Chat (test)
               </button>
               <button type="button" onClick={() => stopAudio()} style={btnMuted}>
                 Zatrzymaj audio

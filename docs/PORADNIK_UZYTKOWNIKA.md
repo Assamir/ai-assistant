@@ -115,8 +115,9 @@ Backend realizuje narzędzia / MCP zgodnie z konfiguracją. Najprostsze ścieżk
 1. Karta **Połączenie:** ustaw i zapisz **URL backendu** (np. `http://127.0.0.1:8000`) — **`assystent.apiBaseUrl`**.
 2. Poczekaj na **podłączenie WebSocket** (status jak w aplikacji; zdarzenia w logu poniżej przycisków).
 3. **Frontend ready** — rejestruje kontekst sesji WS ([ws_router](../backend/api/ws_router.py)).
-4. **Chat (test)** — wysyła **`chat_text`** z przykładowym tekstem; w logu widać m.in. `emotion`, **`audio_stream`** jeśli odpowiedź idzie przez TTS ([App.tsx](../frontend/src/App.tsx)).
-5. **Zatrzymaj audio** — przerywa odtwarzanie WAV ze strumienia WS.
+4. **Wiadomość do agenta** — pole tekstowe + przycisk **Wyślij** (Enter wysyła, Shift+Enter nowa linia); zdarzenie **`chat_text`**. Jeśli masz **TTS**, w logu pojawi się też **`audio_stream`** (lip-sync avataru — [App.tsx](../frontend/src/App.tsx)); bez TTS zobaczysz **`text_overlay`** oraz podpis pod avatarem „Odpowiedź (tekst, bez nagłośnika)”.
+5. **Trzymaj — mów** — **push-to-talk**: przytrzymaj przycisk, puść po wypowiedzi; klient nagrywa **mono 16 kHz WAV** i wysyła **`audio`** w **`ptt_end`**. Backend musi mieć działający **STT**. Przy pierwszym użyciu Electron/Chromium pyta o **mikrofon** — dla okna Electron uprawnienie **`media`** jest domyślnie przyjmowane w [electron-main.cjs](../frontend/electron-main.cjs).
+6. **Zatrzymaj audio** — przerywa odtwarzanie strumienia WAV z WS.
 
 Szczegóły eventów oraz **`ptt_start` / `ptt_end`**: [tests/integration/test_ws_chat.py](../tests/integration/test_ws_chat.py), [docs/api-plan.md](api-plan.md).
 
@@ -143,9 +144,9 @@ curl -s -X POST "http://127.0.0.1:8000/api/v1/voice/process" `
 
 Alternatywy: **`POST /api/v1/voice/transcribe`**, **`POST /api/v1/voice/synthesize`** — próbki poleceń [ENV_SETUP.md](ENV_SETUP.md), rozdz. 8.3.
 
-#### D) WebSocket push-to-talk (protokół, rozszerzenia UI)
+#### D) WebSocket push-to-talk w kliencie React
 
-Jeśli kiedyś dołożysz nagrywanie mikrofonu w kliencie, audio na koniec przycisku nadawczego ma trafiać w **`ptt_end`** w **`payload.audio`** (Base64, konwencja jak w testach wyżej). Obecnie React **nie** nagrywa do `ptt_*` — tylko wysyła gotowy **`chat_text`** testowy.
+Electron / przeglądarka: przycisk **„Trzymaj — mów”** nagrywa krótki **WAV PCM mono 16 kHz** po **`ptt_start`** i przy puszczeniu wysyła **`ptt_end`** z **`payload.audio`** (Base64, konwencja jak w [test_ws_chat.py](../tests/integration/test_ws_chat.py)). Ścieżka STT jest w backendzie — **`stt_*`** musi być poprawnie skonfigurowane.
 
 #### Backendowy „PTT” (klawiatura) — `audio.backend_ptt_listener_enabled`
 

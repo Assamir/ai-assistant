@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut } = require("electron");
+const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, session } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { spawn } = require("child_process");
@@ -152,6 +152,17 @@ app.on("before-quit", () => {
 });
 
 app.whenReady().then(() => {
+  try {
+    session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+      if (permission === "media") {
+        callback(true);
+        return;
+      }
+      callback(false);
+    });
+  } catch (_) {
+    /* ignore */
+  }
   spawnBundledBackend();
   createWindow();
   try {
