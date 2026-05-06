@@ -1,0 +1,32 @@
+# Instalator „komplet”: klient + kod backendu w resources (wymaga Pythona w PATH; pierwszy raz: pip).
+appId: com.assystent.app.full
+productName: Assystent Komplet
+icon: resources/icon.png
+directories:
+  output: ../electron-release-out/full
+files:
+  - dist/**/*
+  - electron-main.cjs
+  - preload.cjs
+  - package.json
+win:
+  target:
+    - nsis
+  signAndEditExecutable: false
+  artifactName: "${productName}-Setup-${version}.${ext}"
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+extraResources:
+  - from: ../backend
+    to: bundled/python-app/backend
+    filter:
+      - "**/*"
+      - "!**/__pycache__/**"
+      - "!**/*.pyc"
+      - "!**/tests/**"
+      - "!**/test_*.py"
+  - from: ../requirements.txt
+    to: bundled/python-app/requirements.txt
+  - from: installer-resources-full
+    to: bundled/docs

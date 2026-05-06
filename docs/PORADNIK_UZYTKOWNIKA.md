@@ -24,6 +24,9 @@ Ten dokument zbiera **ścieżki w repozytorium**, **kroki od zera do działając
 | Katalog modeli VRM w buildzie dev/prod | [frontend/resources](../frontend/resources) |
 | Lista wbudowanych VRM w UI (aktualizuj przy nowym pliku) | [frontend/src/vrmBundledCatalog.ts](../frontend/src/vrmBundledCatalog.ts) |
 | Vite — statyczne `resources` → root `dist` | [frontend/vite.config.ts](../frontend/vite.config.ts) |
+| NSIS — instalator tylko klient | [frontend/electron-builder.client.yml](../frontend/electron-builder.client.yml) |
+| NSIS — instalator komplet (+ `extraResources` backend) | [frontend/electron-builder.full.yml](../frontend/electron-builder.full.yml) |
+| Tekst / BAT pierwszego `pip` (pakiet Komplet) | [frontend/installer-resources-full/](../frontend/installer-resources-full/) |
 | Protokół WS (`chat_text`, `ptt_*`) — testy integracyjne | [tests/integration/test_ws_chat.py](../tests/integration/test_ws_chat.py) |
 | Plan zdarzeń API / WS (referencja) | [docs/api-plan.md](api-plan.md) |
 
@@ -240,6 +243,8 @@ Ustawienia są w prawym panelu kart.
 | `ASSYSTENT_API_URL` / `VITE_API_BASE_URL` | Baza REST ([preload.cjs](../frontend/preload.cjs)). |
 | `ASSYSTENT_VRM_URL` / `VITE_VRM_URL` | Domyślny URL modelu VRM (nad `localStorage`, jeśli ustawione w bridge). |
 | `ASSYSTENT_CONFIG_PUT_TOKEN` / `VITE_CONFIG_PUT_TOKEN` | Token do `PUT /api/v1/config` z UI. |
+| `ASSYSTENT_NO_AUTO_BACKEND=1` | Instalator Komplet: nie uruchamiaj `uvicorn` z bundlowanego backendu przy starcie ([electron-main.cjs](../frontend/electron-main.cjs)). |
+| `ASSYSTENT_PYTHON_EXE` | Instalator Komplet: pełna ścieżka do `python.exe`, gdy `python` nie jest w PATH. |
 
 Szczegóły zbiorczo: [ENV_SETUP.md](ENV_SETUP.md), rozdz. 11.3.
 
@@ -247,9 +252,12 @@ Szczegóły zbiorczo: [ENV_SETUP.md](ENV_SETUP.md), rozdz. 11.3.
 
 ## Release Windows (installer)
 
-1. Frontend: z katalogu [frontend](../frontend): `npm run electron:dist` — build Vite + `electron-builder`.
-2. Artefakty: [frontend/release](../frontend/release) (NSIS).
-3. Ikona: [frontend/resources/icon.png](../frontend/resources/icon.png), konfiguracja w `frontend/package.json` pole `build` — patrz [README.md](../README.md).
+1. Frontend: z katalogu [frontend](../frontend):
+   - **`npm run electron:dist`** lub **`npm run electron:dist:client`** — instalator tylko klient → `electron-release-out/client/Assystent-Client-Setup-0.1.0.exe`
+   - **`npm run electron:dist:full`** — klient + kod backendu i `requirements.txt` w `resources` → `electron-release-out/full/Assystent Komplet-Setup-0.1.0.exe`
+   - **`npm run electron:dist:all`** — oba powyższe
+2. Ikona: [frontend/resources/icon.png](../frontend/resources/icon.png). Konfiguracja: [electron-builder.client.yml](../frontend/electron-builder.client.yml), [electron-builder.full.yml](../frontend/electron-builder.full.yml).
+3. **Komplet:** po instalacji przeczytaj `resources\bundled\docs\README-KOMPLET.txt` i przy pierwszym użyciu uruchom **`Pierwsze-zaleznosci-backend.bat`** (albo ręcznie `pip install -r ...` w `resources\bundled\python-app`).
 
 Polityka: nie wklejaj sekretów do repo; dla użytkownika końcowego dostarczaj binaria + `content_root`, `config`, dane ([README.md](../README.md)).
 

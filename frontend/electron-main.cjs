@@ -1,9 +1,94 @@
 const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut } = require("electron");
 const path = require("path");
+const fs = require("fs");
+const { spawn } = require("child_process");
 
 let mainWindow = null;
 let tray = null;
 let allowQuit = false;
+/** Proces uvicorn przy instalatorze „Komplet”; null w pakiecie tylko-klient. */
+let bundledBackendProc = null;
+
+function getBundledPythonAppRoot() {
+  try {
+    const base = process.resourcesPath;
+    if (!base) {
+      return null;
+    }
+    const p = path.join(base, "bundled", "python-app");
+    if (fs.existsSync(path.join(p, "backend", "main.py"))) {
+      return p;
+    }
+  } catch (_) {
+    /* ignore */
+  }
+  return null;
+}
+
+function spawnBundledBackend() {
+  const root = getBundledPythonAppRoot();
+  if (!root || process.env.ASSYSTENT_NO_AUTO_BACKEND === "1") {
+    return;
+  }
+  const args = ["-m", "uvicorn", "backend.main:app", "--host", "127.0.0.1", "--port", "8000"];
+  let cmd = process.env.ASSYSTENT_PYTHON_EXE?.trim();
+  if (!cmd && process.platform === "win32") {
+    bundledBackendProc = spawn("python", args, {
+      cwd: root,
+      stdio: "ignore",
+      windowsHide: true,
+      shell: false,
+    });
+  } else if (!cmd) {
+    bundledBackendProc = spawn("python3", args, {
+      cwd: root,
+      stdio: "ignore",
+      windowsHide: true,
+      shell: false,
+    });
+  } else {
+    bundledBackendProc = spawn(cmd, args, {
+      cwd: root,
+      stdio: "ignore",
+      windowsHide: true,
+      shell: false,
+    });
+  }
+  bundledBackendProc.on("error", () => {
+    bundledBackendProc = null;
+  });
+  bundledBackendProc.on("exit", (code, signal) => {
+    if (code !== 0 && code != null && process.env.ASSYSTENT_DEV !== "1") {
+      console.warn("Bundled backend exited:", code, signal);
+    }
+    bundledBackendProc = null;
+  });
+}
+
+function stopBundledBackend() {
+  const p = bundledBackendProc;
+  if (!p || p.killed) {
+    bundledBackendProc = null;
+    return;
+  }
+  try {
+    p.kill();
+  } catch (_) {
+    /* ignore */
+  }
+  if (process.platform === "win32" && p.pid) {
+    try {
+      spawn("taskkill", ["/pid", String(p.pid), "/T", "/F"], {
+        stdio: "ignore",
+        windowsHide: true,
+        shell: true,
+      });
+    } catch (_) {
+      /* ignore */
+    }
+  }
+  bundledBackendProc = null;
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -67,6 +152,7 @@ app.on("before-quit", () => {
 });
 
 app.whenReady().then(() => {
+  spawnBundledBackend();
   createWindow();
   try {
     globalShortcut.register("CommandOrControl+Shift+A", () => {
@@ -82,11 +168,14 @@ app.whenReady().then(() => {
         w.focus();
       }
     });
-  } catch (_) {}
+  } catch (_) {
+    /* ignore */
+  }
 });
 
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
+  stopBundledBackend();
 });
 
 app.on("window-all-closed", () => {

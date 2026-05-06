@@ -35,3 +35,6 @@ build/
 # Frontend (T9)
 frontend/node_modules/
 frontend/dist/
+electron-release-out/
+frontend/release/
+frontend/electron-release/

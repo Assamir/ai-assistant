@@ -10,7 +10,7 @@ All notable changes to this project are documented here. The format is inspired 
 - **Frontend / Avatar:** lista rozwijana modeli VRM z wbudowanego katalogu (pliki w `frontend/resources`, Vite `publicDir: resources`); domyślny model `./kaguya_watanuki.vrm` gdy brak `localStorage` / bridge Electron / `VITE_VRM_URL`. Opcja „Inny adres URL…” z polem jak dotychczas dla zewnętrznych plików — przy nowym modelu w folderze dopisz nazwę pliku w `src/vrmBundledCatalog.ts`.
 - **T8 / Auto league hint:** `observer.auto_league_hint_on_game_detected` (YAML) lub `ASSY_OBSERVER__AUTO_LEAGUE_HINT_ON_GAME_DETECTED` — po `game_detected` z znanym `game_id` uruchamia `check-league-hint`; przy `mismatch_hint` broadcast WS `player_profile.league_hint` (jak REST `broadcast: true`). Dokumentacja ENV: `docs/ENV_SETUP.md` §11.2.
 - **Frontend:** baner + badge „Liga” (karta Połączenie) dla WS `player_profile.league_hint` oraz `player_profile.league_changed`.
-- Desktop packaging: `electron-builder` Windows (NSIS) uses `frontend/resources/icon.png` as the application icon (`frontend/package.json` → `build.icon`).
+- Desktop packaging: `electron-builder` Windows (NSIS) — dwa instalatory konfiguracyjnie w `electron-builder.client.yml` / `electron-builder.full.yml`; ikona `frontend/resources/icon.png`.
 - **Dev (Windows):** `scripts/start-dev.bat` — backend uvicorn (--reload), Vite, Electron (`ASSYSTENT_DEV=1`), opcjonalnie pierwszy `npm ci` w `frontend/`.
 - Avatar UX: crossfade (~0.42s, ease-out) between VRM expression weights when the WebSocket `emotion` changes; richer scene lighting (`hemisphereLight` + dual pulsing fill/key `pointLight`s).
 - **T8 / Player profile:** `POST /api/v1/player-profile/games/{game}/archive` — writes the current YAML slice for that game to SQLite `player_profile_archives` (`season`, `reason` ∈ `season_reset` | `manual` | `backup`); does **not** clear live `player_profile.yaml` (see PRD / api-plan). `GET /api/v1/player-profile/archives` lists rows (optional `game`, `limit`).
@@ -23,6 +23,8 @@ All notable changes to this project are documented here. The format is inspired 
 - Electron / strona `file://`: domyślny URL API nie używa już schematu `file` (było `file://127.0.0.1:8000` → `fetch` się wywalał); zawsze `http://127.0.0.1:8000` lub normalizacja `localStorage` / wpisu użytkownika (`normalizeApiBaseUrl`). WebSocket przy `file://` wymusza port backendu `:8000`.
 
 ### Changed
+
+- **Frontend / Windows installers:** Dwa instalatory NSIS (`electron-builder.client.yml` / `electron-builder.full.yml`): tylko klient lub **Komplet** (klient + `backend/` i `requirements.txt` w `resources`, dokumentacja i BAT w `installer-resources-full`). Artefakty: `electron-release-out/client/`, `electron-release-out/full/`. Skrypty: `npm run electron:dist` ≡ `electron:dist:client`; dodano `electron:dist:full` i `electron:dist:all`. `electron-main.cjs` przy wykryciu bundlowanego backendu uruchamia `uvicorn` (zmienne: `ASSYSTENT_NO_AUTO_BACKEND`, `ASSYSTENT_PYTHON_EXE`). Ustawienia `electron-builder` w YAML (usunięto z `frontend/package.json` pole `build`). `cross-env CSC_IDENTITY_AUTO_DISCOVERY=false`, `signAndEditExecutable: false`. README, ENV_SETUP, poradnik, `.gitignore`.
 
 - Avatar: jawna mapa wszystkich emocji z `emotions.json` na rodziny palet w `AuraLights` (fallback rodziny: neutral); exponential kołysanie tułowia w idle i lerp barw świateł bez zmiany logiki crossfade ekspresji.
 - Refactored emotion weight math into `frontend/src/emotionBlend.ts` (shared helpers for normalization and blending).

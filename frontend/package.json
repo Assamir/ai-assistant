@@ -8,30 +8,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "electron": "electron .",
-    "electron:dist": "vite build && electron-builder --win"
-  },
-  "build": {
-    "appId": "com.assystent.app",
-    "productName": "Assystent",
-    "icon": "resources/icon.png",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist/**/*",
-      "electron-main.cjs",
-      "preload.cjs",
-      "package.json"
-    ],
-    "win": {
-      "target": [
-        "nsis"
-      ]
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
+    "electron:dist": "npm run electron:dist:client",
+    "electron:dist:client": "vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --config electron-builder.client.yml",
+    "electron:dist:full": "vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --config electron-builder.full.yml",
+    "electron:dist:all": "npm run electron:dist:client && npm run electron:dist:full"
   },
   "dependencies": {
     "@pixiv/three-vrm": "^3.3.1",
@@ -46,6 +26,7 @@
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
+    "cross-env": "^7.0.3",
     "electron": "^31.0.0",
     "electron-builder": "^26.8.1",
     "typescript": "^5.5.0",

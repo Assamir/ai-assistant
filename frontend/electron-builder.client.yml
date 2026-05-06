@@ -1,0 +1,19 @@
+# Instalator wyłącznie klient (Electron + frontend) — bez kodu Python backendu.
+appId: com.assystent.app.client
+productName: Assystent
+icon: resources/icon.png
+directories:
+  output: ../electron-release-out/client
+files:
+  - dist/**/*
+  - electron-main.cjs
+  - preload.cjs
+  - package.json
+win:
+  target:
+    - nsis
+  signAndEditExecutable: false
+  artifactName: "${productName}-Client-Setup-${version}.${ext}"
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

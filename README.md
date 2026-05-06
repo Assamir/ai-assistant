@@ -15,8 +15,16 @@ Pełna instrukcja: [docs/ENV_SETUP.md](docs/ENV_SETUP.md) §7–8.
 
 ## Release (Windows)
 
-- Artefakt instalatora: **`frontend/release/`** po buildzie NSIS.
-- Polecenie (z `frontend`): `npm run electron:dist` — najpierw `vite build`, potem `electron-builder --win` (ikona: `frontend/resources/icon.png`, zob. `frontend/package.json` → `build.icon`).
+Dwie paczki NSIS (ikonka: `frontend/resources/icon.png`; obie z `CSC_IDENTITY_AUTO_DISCOVERY=false` oraz `signAndEditExecutable: false` — patrz `frontend/electron-builder.*.yml`):
+
+| Instalator | Polecenie (`frontend/`) | Artefakt (`electron-release-out/`) |
+| --- | --- | --- |
+| **Tylko klient** (bez kodu Python w paczce) | `npm run electron:dist` lub `npm run electron:dist:client` | **`client/Assystent-Client-Setup-0.1.0.exe`** |
+| **Komplet** — klient + kod backendu (`backend/`, `requirements.txt`) w `resources`; wymaga **Pythona w PATH**; pierwsze `pip` — skrypt w `resources\bundled\docs` | `npm run electron:dist:full` | **`full/Assystent Komplet-Setup-0.1.0.exe`** |
+| Oba kolejno | `npm run electron:dist:all` | Podkatalogi `client/` oraz `full/` |
+
+Instalator **Komplet** przy starcie Electron próbuje uruchomić `uvicorn backend.main:app` z bundlowanego katalogu. Wyłączenie: **`ASSYSTENT_NO_AUTO_BACKEND=1`**. Interpreter: domyślnie `python` (Windows); nadpisanie: **`ASSYSTENT_PYTHON_EXE`**. Dokument dla użytkownika instalatora: `frontend/installer-resources-full/README-KOMPLET.txt` (trafia do `resources/bundled/docs`).
+
 
 **Polityka produktowa (skrót):**
 

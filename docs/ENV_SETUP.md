@@ -739,7 +739,7 @@ npm run electron:dev
 ### 7.4 Pakiet Windows (`electron-builder`)
 
 - Ikona aplikacji / instalatora: repo trzyma `**frontend/resources/icon.png**`; ścieżka jest ustawiona w `frontend/package.json` → `**build.icon**`. Nie umieszczaj ikony pod `frontend/build/`, ponieważ w korzeniu repozytorium `.gitignore` ignoruje dowolny katalog `**build/**`.
-- Instalator NSIS (Windows): po `npm install` uruchom `**npm run electron:dist**` (łączy `vite build` z `electron-builder --win`). Artefakty trafiają do `**frontend/release/**`. Zmiany w changelogu release: `**CHANGELOG.md**` w korzeniu repo.
+- Instalacja NSIS (Windows): po `npm install` w `frontend/` — **`npm run electron:dist:client`** (tylko klient) oraz **`npm run electron:dist:full`** (klient + bundlowany kod backendu w `extraResources`; patrz `electron-builder.full.yml`). Oba kolejno: **`npm run electron:dist:all`**. Artefakty trafiają do **`electron-release-out/client/`** oraz **`electron-release-out/full/`** w korzeniu repozytorium. Historia zmian: `**CHANGELOG.md**` w korzeniu repo.
 
 ---
 
