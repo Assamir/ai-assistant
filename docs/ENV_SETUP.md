@@ -1,7 +1,7 @@
 # ENV_SETUP.md — Środowisko Deweloperskie Assystent
 
-> **Status:** v1.4
-> **Data:** 2026-05-06
+> **Status:** v1.5
+> **Data:** 2026-05-07
 > **Cel:** Kompletny manual konfiguracji środowiska deweloperskiego. Osoba na świeżym Windows 11 powinna skończyć w < 2h.
 > **Źródło decyzji:** DECISIONS_LOG.md (v1.1) — nie podważaj wartości z tego pliku.
 
@@ -222,6 +222,8 @@ python -c "import sys; print(sys.prefix)"
 
 ### 4.2 requirements.txt
 
+**Kanoniczny plik zależności** to [`requirements.txt`](../../requirements.txt) w korzeniu repozytorium — instaluj z niego (`pip install -r requirements.txt`). Poniższy blok jest **orientacyjny** (wersje mogą się różnić). Łańcuch zrzutu ekranu w kodzie to **DXcam → mss → pyautogui**; pakiet **`mss`** musi być zainstalowany (fallback bez DXcam).
+
 ```
 # =====================================================
 # CORE API
@@ -266,10 +268,11 @@ accelerate==1.3.0
 huggingface-hub==0.27.0
 
 # =====================================================
-# SCREEN CAPTURE
+# SCREEN CAPTURE (w repo: dxcam opcjonalnie; mss + Pillow w requirements.txt)
 # =====================================================
-dxcam==0.0.5
-pygetwindow==0.0.9
+mss>=9.0.1,<11.0.0
+# dxcam — Windows DXGI, opcjonalnie
+# pyautogui — ostatni fallback, opcjonalnie
 
 # =====================================================
 # MEMORY — ChromaDB + Embeddings
@@ -452,16 +455,38 @@ powershell -ExecutionPolicy Bypass -File scripts/install-piper-windows.ps1
 - Skrypt [`scripts/sync-piper-voices.ps1`](../../scripts/sync-piper-voices.ps1) kopiuje z katalogu równoległego do klonu: `...\antigravity\piper-voices\pl\pl_PL` → `frontend\resources\piper-voices\pl\pl_PL`.
 - Możesz też wskazać źródło: `.\scripts\sync-piper-voices.ps1 -SourceRoot 'C:\sciezka\piper-voices\pl\pl_PL'`.
 
-**Krok 3 — wpis w `config/config.yaml` (zsynchronizowany z repozytorium):**
+**Krok 3 — wpis w `config/config.yaml` (minimalny plik dev zsynchronizowany z repozytorium):**
 
 ```yaml
+# Start backendu z katalogu głównego repo (jak scripts/start-dev.bat).
 general:
+  assistant_name: Aria
   content_root: "."
+
+audio:
+  strip_wake_phrase_from_transcription: true
+  wake_transcription_prefixes:
+    - "hej aria"
+    - "hej, aria"
+    - "cześć aria"
+
+ocr:
+  # Repozytorium: domyślnie false (easyocr nie jest w minimalnym requirements.txt).
+  enabled: false
+  # Po `pip install easyocr` możesz ustawić true. Przy błędzie GPU backend ponowi na CPU.
+  use_gpu: false
+
+mcp:
+  enabled: true
 
 tts:
   piper_executable: "tools/piper/piper/piper.exe"
   piper_voice_onnx_path: "frontend/resources/piper-voices/pl/pl_PL/gosia/medium/pl_PL-gosia-medium.onnx"
 ```
+
+- **`general.assistant_name`** — imię asystenta (np. „Aria”); spójne z czyszczeniem frazy w STT.
+- **`audio.*`** — po PTT/STT wiodąca fraza z `wake_transcription_prefixes` jest obcinana przed czatem; to **nie** zastępuje ciągłego nasłuchu wakeword (openWakeWord — osobno, `audio.wakeword_*`).
+- **`ocr.use_gpu: true`** — jeśli init na GPU się wywali, backend spróbuje **CPU** zanim zrezygnuje.
 
 **Weryfikacja HTTP (po starcie backendu):**
 
@@ -595,6 +620,8 @@ print("EasyOCR: OK —", result[:2])
 ```
 
 > **Uwaga:** EasyOCR zapisuje modele w `%USERPROFILE%\.EasyOCR\`. Nie w content root — ale to tylko cache, nie dane użytkownika.
+
+> **Backend:** Przy `ocr.use_gpu: true`, jeśli inicjalizacja Readera na GPU się nie powiedzie, `try_build_ocr_engine` (`backend/api/app_context.py`) **ponawia próbę na CPU** przed rezygnacją.
 
 ### 5.7 Modele VRM (awatar 3D)
 
@@ -793,6 +820,9 @@ curl -s http://127.0.0.1:8000/api/v1/status
 - `health.overall` — `healthy` / `degraded` (np. open circuit LLM).
 - `health.components.tts.available` — `true` tylko przy poprawnym Piper + `piper_voice_onnx_path`.
 - `health.components.stt.available` — STT (faster-whisper), jeśli zainstalowane i działa.
+- `health.components.screen_capture` — `capture_available` oraz wybrany **backend** łańcucha (dxcam / mss / pyautogui), jeśli wykryto działający sposób zrzutu.
+- `health.components.ocr` — `enabled_in_config` vs `engine_initialized` (np. brak `easyocr` lub błąd CUDA).
+- `health.components.observer` — m.in. `running` (GameObserver), `vision_loop_running` (pętla capture→wizja), interwały z konfiguracji.
 - `health.config.resolved_yaml` — faktycznie wczytany plik konfiguracji.
 
 ### 8.3 Sanity check backend
@@ -919,21 +949,23 @@ taskkill /PID {pid} /F
 # ai.lm_studio_url: "http://127.0.0.1:1235/v1"
 ```
 
-### 9.5 Antywirus blokuje DXcam
+### 9.5 Antywirus / brak DXcam — zrzut ekranu
 
-**Objawy:** `ImportError: DLL load failed` lub `Access denied` przy capture ekranu
+**Objawy:** narzędzia ekranu zwracają błąd; w `GET /api/v1/status` → `health.components.screen_capture.capture_available: false`
 
 **Rozwiązania:**
 
 ```powershell
-# 1. Dodaj wyjątek antywirusowy dla katalogu .venv:
-# C:\code\_repos\antigravity\assystent\.venv\Lib\site-packages\dxcam\
+# 1. Upewnij się, że zainstalowany jest mss (kolejny krok po DXcam):
+pip install "mss>=9.0.1,<11.0.0"
 
-# 2. Uruchom jako Administrator (jednorazowo do weryfikacji)
-# Jeśli działa → problem z uprawnieniami, nie AV
+# 2. Dodaj wyjątek AV dla .venv (gdy używasz DXcam):
+# ...\site-packages\dxcam\
 
-# 3. Alternatywa: użyj pyautogui jako fallback capture
-# W config.yaml: observer.capture_backend: "pyautogui"
+# 3. Uruchom jako Administrator (jednorazowo do weryfikacji)
+
+# Łańcuch w kodzie: DXcam → mss → pyautogui — nie trzeba ręcznie ustawiać
+# pojedynczego backendu w YAML; wystarczy działająca biblioteka w środowisku.
 ```
 
 ---

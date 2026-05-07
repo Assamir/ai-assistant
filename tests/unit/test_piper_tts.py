@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
-
 import pytest
 
 from backend.ai.piper_tts import PiperTTS, _minimal_silent_wav
@@ -88,14 +86,10 @@ async def test_stream_to_tts_yields_chunks(piper_cfg: TTSConfig):
 
 @pytest.mark.asyncio
 async def test_subprocess_failure_raises(piper_cfg: TTSConfig):
-    proc = AsyncMock()
-    proc.communicate = AsyncMock(return_value=(b"", b"broken"))
-    proc.returncode = 1
+    def bad_sync(text: str, length_scale: float, exe: str, onnx: str) -> bytes:
+        raise RuntimeError("Piper failed (exit 1): broken")
 
-    async def runner(*_a, **_kw):
-        return proc
-
-    tts = PiperTTS(piper_cfg, subprocess_runner=runner)
+    tts = PiperTTS(piper_cfg, sync_runner=bad_sync)
 
     with pytest.raises(RuntimeError, match="Piper failed"):
         await tts._invoke_piper_cli("txt", 1.0)

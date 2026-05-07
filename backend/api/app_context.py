@@ -243,9 +243,14 @@ def try_build_ocr_engine(cfg: ConfigSchema) -> Optional[BaseOCREngine]:
     if not cfg.ocr.enabled:
         return None
     try:
+        import easyocr  # noqa: F401
+    except ImportError:
+        _logger.info("Pakiet easyocr nie jest zainstalowany — OCR wyłączony (pip install easyocr).")
+        return None
+    try:
         from backend.ai.easyocr_engine import EasyOCREngine
     except ImportError:
-        _logger.info("easyocr not installed — OCR engine disabled")
+        _logger.info("Moduł EasyOCREngine niedostępny — OCR wyłączony")
         return None
 
     try:

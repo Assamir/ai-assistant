@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Optional
 
 from backend.config.schema import OCRConfig
 from backend.core.interfaces import BaseOCREngine, BaseVLMAnalyzer
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -55,16 +58,43 @@ class DualVisionPipeline:
 
     async def analyze_png(self, image_data: bytes) -> VisionFrameResult:
         vlm_part = ""
+        vlm_exc: Optional[Exception] = None
         if self._vlm is not None:
-            vlm_part = await self._vlm.analyze_image(image_data)
+            try:
+                vlm_part = await self._vlm.analyze_image(image_data) or ""
+            except Exception as exc:
+                vlm_exc = exc
+                _logger.warning("VLM analyze_image failed — kontynuuję z OCR / pustym opisem", exc_info=True)
+                vlm_part = ""
 
         ocr_part = ""
         ran = False
-        if self._should_run_ocr(vlm_part):
-            ocr_part = await self._ocr.extract_text(image_data)
-            ran = True
+        ocr_exc: Optional[Exception] = None
+        want_ocr = self._should_run_ocr(vlm_part)
+        if self._ocr is not None and self._ocr_cfg.enabled and not want_ocr and vlm_exc is not None:
+            want_ocr = True
 
-        return VisionFrameResult(vlm_text=vlm_part, ocr_text=ocr_part, ocr_ran=ran)
+        if want_ocr and self._ocr is not None:
+            try:
+                ocr_part = await self._ocr.extract_text(image_data)
+                ran = True
+            except Exception as exc:
+                ocr_exc = exc
+                _logger.warning("OCR extract_text failed — zwracam ewentualny wynik VLM", exc_info=True)
+                ocr_part = ""
+                ran = False
+
+        if (vlm_part.strip() or (ocr_part or "").strip()):
+            return VisionFrameResult(vlm_text=vlm_part, ocr_text=ocr_part, ocr_ran=ran)
+
+        errors: list[str] = []
+        if vlm_exc is not None:
+            errors.append(f"VLM: {vlm_exc}")
+        if ocr_exc is not None:
+            errors.append(f"OCR: {ocr_exc}")
+        if errors:
+            raise RuntimeError("; ".join(errors)) from (vlm_exc if vlm_exc is not None else ocr_exc)
+        raise RuntimeError("Analiza obrazu nie zwróciła treści (pusty wynik VLM i OCR).")
 
 
 __all__ = ["DualVisionPipeline", "VisionFrameResult"]

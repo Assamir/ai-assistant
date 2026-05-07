@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json as _json
+import logging
 from typing import Any
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -11,6 +12,8 @@ from pydantic import BaseModel, ValidationError
 
 from backend.api.app_context import ensure_ws_db_session
 from backend.core.orchestrator import OrchestratorState
+
+_logger = logging.getLogger(__name__)
 
 
 class _WsFrame(BaseModel):
@@ -70,7 +73,11 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
             await mgr.send_to_session(sid, "assistant_reply_text", {"text": trimmed})
 
         if trimmed and synth is not None:
-            wav = await synth.speak(trimmed, emotion=emotion or None)
+            try:
+                wav = await synth.speak(trimmed, emotion=emotion or None)
+            except Exception as exc:
+                _logger.warning("TTS speak failed — tylko tekst / overlay", exc_info=True)
+                wav = b""
 
 
         if wav:

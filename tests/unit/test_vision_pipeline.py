@@ -18,6 +18,11 @@ class _FakeVLM:
         return self._text
 
 
+class _FailingVLM(_FakeVLM):
+    async def analyze_image(self, image_data: bytes) -> str:  # type: ignore[override]
+        raise RuntimeError("VLM boom")
+
+
 class _FakeOCR:
     def __init__(self, out: str = "line1") -> None:
         self._out = out
@@ -27,6 +32,11 @@ class _FakeOCR:
         self.calls += 1
         assert image_data
         return self._out
+
+
+class _FailingOCR(_FakeOCR):
+    async def extract_text(self, image_data: bytes) -> str:  # type: ignore[override]
+        raise RuntimeError("OCR boom")
 
 
 @pytest.mark.asyncio
@@ -76,6 +86,40 @@ async def test_pipeline_ocr_only_without_vlm():
     r = await p.analyze_png(MINIMAL_PNG_BYTES)
     assert r.vlm_text == ""
     assert r.ocr_ran is True and r.ocr_text == "solo"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_vlm_fails_ocr_fallback_returns_ocr():
+    """Gdy VLM rzuca — wymuszamy OCR (np. trigger_keywords chciały opisu VLM)."""
+    cfg = OCRConfig(enabled=True, trigger_keywords=["inventory"])
+    ocr = _FakeOCR("tekst z ocr")
+    p = DualVisionPipeline(vlm_engine=_FailingVLM(""), ocr_engine=ocr, ocr_config=cfg)
+    r = await p.analyze_png(MINIMAL_PNG_BYTES)
+    assert r.vlm_text == ""
+    assert r.ocr_ran is True
+    assert r.ocr_text == "tekst z ocr"
+    assert ocr.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_pipeline_ocr_fails_returns_vlm_only():
+    cfg = OCRConfig(enabled=True, trigger_keywords=[])
+    ocr = _FailingOCR()
+    p = DualVisionPipeline(vlm_engine=_FakeVLM("tylko vlm"), ocr_engine=ocr, ocr_config=cfg)
+    r = await p.analyze_png(MINIMAL_PNG_BYTES)
+    assert r.vlm_text == "tylko vlm"
+    assert r.ocr_ran is False
+    assert r.ocr_text == ""
+
+
+@pytest.mark.asyncio
+async def test_pipeline_both_stages_fail_raises():
+    cfg = OCRConfig(enabled=True, trigger_keywords=[])
+    ocr = _FailingOCR()
+    p = DualVisionPipeline(vlm_engine=_FailingVLM(""), ocr_engine=ocr, ocr_config=cfg)
+    with pytest.raises(RuntimeError) as ei:
+        await p.analyze_png(MINIMAL_PNG_BYTES)
+    assert "VLM:" in str(ei.value) and "OCR:" in str(ei.value)
 
 
 def test_vision_frame_result_merged():

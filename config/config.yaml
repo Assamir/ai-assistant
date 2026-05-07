@@ -14,8 +14,9 @@ audio:
     - "cześć aria"
 
 ocr:
+  # Domyślnie wyłączone. Włączenie: najpierw w venv `pip install -r requirements-vision.txt`,
+  # potem tutaj `enabled: true` i restart backendu. Alternatywa: vlm.enabled (Moondream, patrz ENV_SETUP).
   enabled: true
-  # Na niektórych sterownikach GPU CUDA EasyOCR pada przy pierwszym imporcie torch — wtedy backend spróbuje CPU.
   use_gpu: false
 
 mcp:

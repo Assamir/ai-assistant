@@ -1,0 +1,8 @@
+# Opcjonalny potok wizji (OCR) — screen_capture + obserwator bez pełnego VLM.
+# Użycie z katalogu głównego repozytorium, tym samym venv co backend:
+#   pip install -r requirements-vision.txt
+# Potem w config.yaml: ocr.enabled: true (i ewent. ocr.use_gpu: false), restart uvicorn.
+
+-r requirements.txt
+
+easyocr>=1.7.0,<2.0.0

@@ -8,9 +8,10 @@ from typing import Any, Dict
 _logger = logging.getLogger(__name__)
 
 _SCFAIL_ASSISTANT = (
-    "Narzędzie screen_capture zostało wywołane, ale zwróciło błąd. Przekaż użytkownikowi treść pola "
-    "`error` po polsku (możesz ją uprościć). Nie twierdz, że «nie masz narzędzia zrzutu» — problem jest "
-    "techniczny po stronie środowiska (konfiguracja / brak biblioteki / potok wizji)."
+    "Narzędzie screen_capture zwróciło błąd. W odpowiedzi użytkownikowi **wymień treść pola `error`** "
+    "(parafraza OK, ale zachowaj konkret: pip install, klucze w YAML, GET /api/v1/status). "
+    "**Zabronione:** ogólniki w stylu «nie mogę analizować ekranu» bez przekazania tych kroków. "
+    "Nie twierdź, że «nie masz narzędzia zrzutu», jeśli błąd mówi o potoku wizji / OCR / VLM."
 )
 
 
@@ -30,7 +31,7 @@ _TOOL_SCREEN_CAPTURE = {
             "Używaj przy pytaniach „co widzisz na ekranie”. "
             "Jeśli wynik JSON ma ok=true — **najpierw przeczytaj pole `summary`**, potem `description` i `ocr_text`. "
             "Opisz ekran po polsku na tej podstawie; nie twierdź, że nie widzisz ekranu. "
-            "Gdy ok=false — postępuj według `assistant_instruction` i pola `error`."
+            "Gdy ok=false — w odpowiedzi **cytuj lub streść pole `error`**, nie zastępuj go ogólną wymówką."
         ),
         "parameters": {
             "type": "object",
@@ -74,9 +75,12 @@ def register_screen_capture_tool(ctx: Any) -> None:
             return _screen_capture_fail(
                 {
                     "error": (
-                        "Potok wizji nie jest aktywny: w config `ocr.enabled: true` oraz `pip install easyocr`, "
-                        "ew. `vlm.enabled: true` (Moondream). Diagnostyka: GET /api/v1/status — "
-                        "health.components.vision_pipeline.available, ocr.engine_initialized."
+                        "Potok wizji nie działa — brak działającego VLM i OCR. "
+                        "Opcja A (OCR, zwykle najlżejsza): z korzenia repo, aktywny venv backendu — "
+                        "`pip install -r requirements-vision.txt`, w config.yaml `ocr.enabled: true` "
+                        "(przy problemach z CUDA ustaw `ocr.use_gpu: false`), restart uvicorn. "
+                        "Opcja B: `vlm.enabled: true` + torch/transformers + Moondream (docs/ENV_SETUP.md). "
+                        "Diagnostyka: GET /api/v1/status → vision_pipeline.available, ocr.engine_initialized, vlm.engine_initialized."
                     ),
                 }
             )

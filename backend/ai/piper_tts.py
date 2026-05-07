@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import io
 import os
+import subprocess
 import tempfile
 import wave
 from typing import Any, AsyncIterator, Callable, Optional
@@ -13,6 +14,39 @@ from backend.config.schema import TTSConfig
 from backend.core.interfaces import BaseTTSEngine
 
 from backend.ai.tts_emotion import combined_speed, emotion_speed_pitch, length_scale_from_speed
+
+
+def piper_cli_invoker_sync(text: str, length_scale: float, exe: str, onnx: str) -> bytes:
+    """Uruchom `piper` przez `subprocess.run` w wątku (kompatybilne z każdą pętlą asyncio na Windows)."""
+    fd, out_path = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    try:
+        proc = subprocess.run(
+            [
+                exe,
+                "--model",
+                onnx,
+                "--output_file",
+                out_path,
+                "--length_scale",
+                str(round(length_scale, 6)),
+            ],
+            input=(text or "").encode("utf-8"),
+            capture_output=True,
+            timeout=180,
+            check=False,
+        )
+        if proc.returncode != 0:
+            err = (proc.stderr or b"").decode("utf-8", errors="replace").strip()
+            out = (proc.stdout or b"").decode("utf-8", errors="replace").strip()
+            raise RuntimeError(f"Piper failed (exit {proc.returncode}): {err or out or 'no stderr'}")
+        with open(out_path, "rb") as f:
+            return f.read()
+    finally:
+        try:
+            os.unlink(out_path)
+        except OSError:
+            pass
 
 
 def _minimal_silent_wav(sample_rate: int = 22050, frames: int = 320) -> bytes:
@@ -46,19 +80,17 @@ def _apply_pitch_wav_optional(wav_bytes: bytes, pitch_percent: float) -> bytes:
 
 
 class PiperTTS(BaseTTSEngine):
-    """Wywołanie binariów Piper (`piper`) przez subprocess; chunkowany WAV na wyjściu streamu."""
+    """Wywołanie binariów Piper (`piper`) przez subprocess w wątku; unika NotImplementedError na Windows."""
 
     def __init__(
         self,
         tts_config: TTSConfig,
         *,
-        subprocess_runner: Optional[
-            Callable[..., asyncio.subprocess.Process]
-        ] = None,
+        sync_runner: Optional[Callable[[str, float, str, str], bytes]] = None,
     ) -> None:
         self._cfg = tts_config
         self._chunk = max(512, tts_config.chunk_bytes)
-        self._subprocess_runner: Any = subprocess_runner or asyncio.create_subprocess_exec
+        self._sync_runner = sync_runner or piper_cli_invoker_sync
 
     async def speak(self, text: str, emotion: Optional[str] = None) -> bytes:
         stripped = (text or "").strip()
@@ -86,35 +118,7 @@ class PiperTTS(BaseTTSEngine):
     async def _invoke_piper_cli(self, text: str, length_scale: float) -> bytes:
         exe = self._cfg.piper_executable or "piper"
         onnx = self._cfg.piper_voice_onnx_path or ""
-
-        fd, out_path = tempfile.mkstemp(suffix=".wav")
-        os.close(fd)
-
-        try:
-            proc = await self._subprocess_runner(
-                exe,
-                "--model",
-                onnx,
-                "--output_file",
-                out_path,
-                "--length_scale",
-                str(round(length_scale, 6)),
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            _stdout, err = await proc.communicate(text.encode("utf-8"))
-            if proc.returncode != 0:
-                msg = (err or b"").decode("utf-8", errors="replace").strip()
-                raise RuntimeError(f"Piper failed (exit {proc.returncode}): {msg or _stdout.decode(errors='replace')}")
-
-            with open(out_path, "rb") as f:
-                return f.read()
-        finally:
-            try:
-                os.unlink(out_path)
-            except OSError:
-                pass
+        return await asyncio.to_thread(self._sync_runner, text, length_scale, exe, onnx)
 
 
-__all__ = ["PiperTTS", "_minimal_silent_wav"]
+__all__ = ["PiperTTS", "_minimal_silent_wav", "piper_cli_invoker_sync"]

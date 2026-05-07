@@ -126,6 +126,45 @@ function ttsDiagFromStatusJson(data: unknown): {
   };
 }
 
+/** Teksty diagnostyczne pod pusty panel obserwatora — z `GET /api/v1/status`. */
+function observerHintsFromStatusJson(data: unknown): string[] {
+  const hints: string[] = [];
+  const d = data as {
+    health?: {
+      components?: {
+        screen_capture?: { backend?: string | null; capture_available?: boolean };
+        vision_pipeline?: { available?: boolean };
+        vlm?: { enabled_in_config?: boolean; engine_initialized?: boolean };
+        ocr?: { enabled_in_config?: boolean; engine_initialized?: boolean };
+      };
+    };
+  };
+  const c = d.health?.components;
+  if (c?.screen_capture?.capture_available === false) {
+    const b = c.screen_capture.backend;
+    hints.push(
+      `Zrzut ekranu niedostępny (backend: ${b ?? "—"}). Sprawdź DXcam / mss / pyautogui i logi przy starcie.`,
+    );
+  }
+  if (c?.vision_pipeline?.available === false) {
+    hints.push("Potok wizji (VLM/OCR) niedostępny — `screen_capture` i obserwator nie mają analizy obrazu.");
+    if (c?.ocr?.enabled_in_config !== true) {
+      hints.push(
+        "Żeby szybko włączyć sam OCR: w terminalu z aktywnym venv backendu (katalog główny repo) `pip install -r requirements-vision.txt`, potem w YAML `ocr.enabled: true` i restart backendu.",
+      );
+    }
+  }
+  if (c?.vlm?.enabled_in_config === true && c?.vlm?.engine_initialized === false) {
+    hints.push("VLM włączony w konfiguracji, ale silnik nie został załadowany (torch / model HF).");
+  }
+  if (c?.ocr?.enabled_in_config === true && c?.ocr?.engine_initialized === false) {
+    hints.push(
+      "OCR włączony w konfiguracji, ale EasyOCR nie działa — brak pakietu lub błąd init (backend może ponowić na CPU po GPU).",
+    );
+  }
+  return hints;
+}
+
 export function App() {
   const [log, setLog] = useState<string[]>([]);
   const [emotion, setEmotion] = useState("neutral");
@@ -272,6 +311,7 @@ export function App() {
     available: boolean;
     resolvedYaml: string | null;
   }>({ checked: false, available: false, resolvedYaml: null });
+  const [observerStatusHints, setObserverStatusHints] = useState<string[]>([]);
 
   useEffect(() => {
     if (!wsReady) {
@@ -285,10 +325,12 @@ export function App() {
         const data = (await res.json()) as Record<string, unknown>;
         if (!cancelled) {
           setTtsDiag(ttsDiagFromStatusJson(data));
+          setObserverStatusHints(observerHintsFromStatusJson(data));
         }
       } catch {
         if (!cancelled) {
           setTtsDiag({ checked: false, available: false, resolvedYaml: null });
+          setObserverStatusHints([]);
         }
       }
     })();
@@ -412,6 +454,7 @@ export function App() {
         const parsed = JSON.parse(text);
         setStatusJson(JSON.stringify(parsed, null, 2));
         setTtsDiag(ttsDiagFromStatusJson(parsed));
+        setObserverStatusHints(observerHintsFromStatusJson(parsed));
       } catch {
         setStatusJson(text);
       }
@@ -473,6 +516,7 @@ export function App() {
       if (st.ok) {
         const payload = (await st.json()) as Record<string, unknown>;
         setTtsDiag(ttsDiagFromStatusJson(payload));
+        setObserverStatusHints(observerHintsFromStatusJson(payload));
       }
     } catch (e) {
       setConfigMessage(e instanceof Error ? e.message : String(e));
@@ -698,7 +742,29 @@ export function App() {
             {observerLine ? (
               <div style={{ fontSize: 14, color: "#c8dce8", lineHeight: 1.45 }}>{observerLine}</div>
             ) : (
-              <div style={{ fontSize: 13, color: "#6d7a88" }}>Brak ostatniego komentarza z obserwatora.</div>
+              <div style={{ fontSize: 13, color: "#6d7a88", lineHeight: 1.45 }}>
+                <div>Brak ostatniego komentarza — to nie błąd samego UI.</div>
+                <div style={{ marginTop: "0.35rem" }}>
+                  Tu pojawia się treść dopiero po zdarzeniu WebSocket <code style={{ fontSize: 11 }}>observer_comment</code>. Backend wysyła je
+                  tylko gdy obserwator jest włączony (np. „zacznij obserwować”), gra jest wykryta, nie trwa nagrywanie PTT, a po analizie ekranu
+                  model uzna zmianę za istotną — przy rutynie zwraca <code style={{ fontSize: 11 }}>[SKIP]</code> i nic nie leci do klienta.
+                </div>
+                {observerStatusHints.length ? (
+                  <ul
+                    style={{
+                      margin: "0.4rem 0 0",
+                      paddingLeft: "1.1rem",
+                      fontSize: 12,
+                      color: "#c89880",
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    {observerStatusHints.map((h, i) => (
+                      <li key={`${i}-${h.slice(0, 24)}`}>{h}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
             )}
           </div>
 
