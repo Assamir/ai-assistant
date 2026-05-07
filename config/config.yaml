@@ -25,3 +25,7 @@ mcp:
 tts:
   piper_executable: "tools/piper/piper/piper.exe"
   piper_voice_onnx_path: "frontend/resources/piper-voices/pl/pl_PL/gosia/medium/pl_PL-gosia-medium.onnx"
+
+# Opcjonalnie — LM Studio / niektóre modele (np. Gemma) ignorują role=tool; włącz echo wyniku jako user:
+# ai_runtime:
+#   mirror_tool_results_as_user: true

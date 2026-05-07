@@ -102,7 +102,7 @@ def _mss_probe_ok() -> bool:
     try:
         import mss
 
-        with mss.mss() as sct:
+        with mss.MSS() as sct:
             return len(sct.monitors) > 1
     except Exception:
         return False
@@ -136,7 +136,7 @@ def _detect_best_backend() -> Optional[Literal["dxcam", "mss", "pyautogui"]]:
 def _list_monitors_mss_sync() -> list[MonitorInfo]:
     import mss
 
-    with mss.mss() as sct:
+    with mss.MSS() as sct:
         mons = sct.monitors[1:]
         if not mons:
             raise ScreenCaptureError("mss: brak monitorów (pusta lista).")
@@ -160,7 +160,7 @@ def _capture_mss_png_sync(monitor_index: int) -> bytes:
     import mss
     from PIL import Image
 
-    with mss.mss() as sct:
+    with mss.MSS() as sct:
         if monitor_index < 0 or monitor_index + 1 >= len(sct.monitors):
             raise ScreenCaptureError(
                 f"mss: monitor_index={monitor_index} poza zakresem (0..{max(0, len(sct.monitors) - 2)})"

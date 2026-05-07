@@ -53,6 +53,27 @@ def _tool_payload_success(content: str) -> tuple[bool, Optional[str]]:
         return True, None
 
 
+def _append_tool_message_with_optional_user_mirror(
+    msgs: List[Dict[str, Any]],
+    *,
+    entry: Dict[str, Any],
+    fallback_tool_name: str,
+    mirror_enabled: bool,
+) -> None:
+    """Wstawia `role=tool`; przy `mirror_enabled` duplikuje treść jako `user` (słaba obsługa FC w LM Studio)."""
+    msgs.append(entry)
+    if not mirror_enabled:
+        return
+    tname = (str(entry.get("name") or fallback_tool_name or "narzędzie") or "narzędzie").strip()
+    tid = str(entry.get("tool_call_id") or "").strip()
+    tcontent = str(entry.get("content") or "")
+    header = f"[Wynik narzędzia `{tname}`"
+    if tid:
+        header += f", tool_call_id={tid}"
+    header += " — uwzględnij to w odpowiedzi użytkownikowi po polsku.]\n"
+    msgs.append({"role": "user", "content": header + tcontent})
+
+
 class SimpleOrchestratorContext:
     """Minimalny kontekst dla handlerów komend."""
 
@@ -337,7 +358,12 @@ class ConversationOrchestrator:
                         tnm = tool_msg.get("name")
                         if tnm:
                             entry["name"] = tnm
-                        msgs.append(entry)
+                        _append_tool_message_with_optional_user_mirror(
+                            msgs,
+                            entry=entry,
+                            fallback_tool_name=nm,
+                            mirror_enabled=self._cfg.ai_runtime.mirror_tool_results_as_user,
+                        )
                     except KeyError:
                         tc_id = blob.get("id")
                         tool_msg = {
@@ -345,12 +371,18 @@ class ConversationOrchestrator:
                             "name": nm,
                             "content": _json.dumps({"error": "unknown_tool"}, ensure_ascii=False),
                         }
-                        msgs.append(
-                            {
-                                "role": "tool",
-                                "tool_call_id": tool_msg["tool_call_id"],
-                                "content": tool_msg["content"],
-                            }
+                        entry_err: Dict[str, Any] = {
+                            "role": "tool",
+                            "tool_call_id": tool_msg["tool_call_id"],
+                            "content": tool_msg["content"],
+                        }
+                        if nm:
+                            entry_err["name"] = nm
+                        _append_tool_message_with_optional_user_mirror(
+                            msgs,
+                            entry=entry_err,
+                            fallback_tool_name=nm,
+                            mirror_enabled=self._cfg.ai_runtime.mirror_tool_results_as_user,
                         )
                     finally:
                         if parent_msg_id is not None and self._db_path:

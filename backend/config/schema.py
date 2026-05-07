@@ -12,6 +12,13 @@ class AIControlConfig(BaseModel):
     max_context_tokens: int = Field(default=4096, ge=512, le=128_000)
     command_match_fuzzy: bool = True
     max_tool_calls_per_turn: int = Field(default=5, ge=1, le=50)
+    mirror_tool_results_as_user: bool = Field(
+        default=False,
+        description=(
+            "Po każdej wiadomości role=tool dodatkowa wiadomość user z tą samą treścią — obejście modeli lokalnych "
+            "(np. część presetów Gemmy w LM Studio), które ignorują wyniki narzędzi w standardowym formacie."
+        ),
+    )
 
 class LogLevel(str, Enum):
     DEBUG = "DEBUG"
