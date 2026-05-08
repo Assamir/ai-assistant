@@ -85,6 +85,16 @@ _GAME_AUTO_P = (
     r".*(?:wykrywaj\s+gre\s+automatycznie|automatyczna\s+detekcja\s+gry|"
     r"clear\s+manual\s+game|resetuj\s+wybor\s+gry)\b.*$"
 )
+_LEAGUE_HINT_P = (
+    r".*(?:sprawdz\s+hint\s+ligi\b|sprawdz\s+lige\b|sprawdz\s+aktualna\s+lige\b|"
+    r"jaka\s+jest\s+aktualna\s+liga\b|sprawdz\s+czy\s+liga\s+sie\s+zmienila\b|"
+    r"check\s+league\s+hint\b|league\s+hint\b).*$"
+)
+_DAILY_CHECK_P = (
+    r".*(?:sprawdz\s+meta\b|sprawdz\s+meta\s+gry\b|co\s+nowego\s+w\s+grze\b|"
+    r"co\s+sie\s+zmienilo\s+w\s+grze\b|sprawdz\s+zmiany\s+w\s+grze\b|"
+    r"check\s+game\s+meta\b|sprawdz\s+meta\s+teraz\b).*$"
+)
 
 
 @dataclass(frozen=True)
@@ -154,6 +164,8 @@ def builtin_rules_ordered() -> List[BuiltinMatchRule]:
         BuiltinMatchRule("CMD-08", 35, "session_report", _anchor(_SESSION_REP_P), 60),
         BuiltinMatchRule("CMD-10", 30, "reload_config", _anchor(_REL_CFG_P), 10),
         BuiltinMatchRule("CMD-09", 20, "open_documents", _anchor(_OPEN_DOC_P), 5),
+        BuiltinMatchRule("CMD-19", 45, "check_league_hint", _anchor(_LEAGUE_HINT_P), 30),
+        BuiltinMatchRule("CMD-20", 45, "daily_check", _anchor(_DAILY_CHECK_P), 120),
     )
     return sorted(tbl, key=lambda r: (-r.priority, r.cmd_id))
 

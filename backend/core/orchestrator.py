@@ -9,7 +9,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Mapping,
 
 from backend.ai.llm_client import ChatCompletionResult, LMStudioClient
 from backend.config.schema import ConfigSchema
-from backend.core.command_handlers import CommandExecutionResult, OrchestratorContext, dispatch_builtin
+from backend.core.command_handlers import CommandExecutionResult, dispatch_builtin
 from backend.core.command_matching import CommandMatcher, CooldownTracker
 from backend.core.emotion_parser import parse_emotion_tag, resolve_default_emotion
 from backend.core.persona_loader import LoadedPersona, PersonaLoader
@@ -77,15 +77,25 @@ def _append_tool_message_with_optional_user_mirror(
 class SimpleOrchestratorContext:
     """Minimalny kontekst dla handlerów komend."""
 
-    __slots__ = ("_emitter", "_state")
+    __slots__ = ("_emitter", "_state", "_services")
 
-    def __init__(self, state: MutableMapping[str, Any], emitter: EmitFn | None):
+    def __init__(
+        self,
+        state: MutableMapping[str, Any],
+        emitter: EmitFn | None,
+        *,
+        services: Optional[Dict[str, Any]] = None,
+    ):
         self._state = state
         self._emitter = emitter
+        self._services: Dict[str, Any] = services or {}
 
     @property
     def state(self) -> MutableMapping[str, Any]:
         return self._state
+
+    def svc(self, name: str, default: Any = None) -> Any:
+        return self._services.get(name, default)
 
     async def emit_side_effect(self, name: str, payload: Dict[str, Any]) -> None:
         if self._emitter:
@@ -124,6 +134,9 @@ class ConversationOrchestrator:
         self._db_path = db_path
         self._semantic_recall = semantic_recall
         self._player_profile_repo = player_profile_repo
+        # Opcjonalne callables ustawiane przez app_context po wiring (unikamy circular dep)
+        self._league_hint_fn: Optional[Any] = None  # async (game_id: str) -> dict
+        self._daily_check_fn: Optional[Any] = None  # async (game_id: str, force: bool) -> dict
 
     def apply_configuration(
         self,
@@ -159,9 +172,16 @@ class ConversationOrchestrator:
         text: str,
         *,
         emitter_override: EmitFn | None = None,
+        db_chat_session_id: Optional[int] = None,
     ) -> Optional[list[CommandExecutionResult]]:
         emitter = emitter_override or self._emit
-        ctx = SimpleOrchestratorContext(self.state, emitter)
+        services: Dict[str, Any] = {
+            "league_hint_fn": self._league_hint_fn,
+            "daily_check_fn": self._daily_check_fn,
+            "db_path": self._db_path,
+            "db_session_id": db_chat_session_id,
+        }
+        ctx = SimpleOrchestratorContext(self.state, emitter, services=services)
         matched = self._matcher.match_all_segments(text)
         outcomes: List[CommandExecutionResult] = []
 
@@ -421,7 +441,11 @@ class ConversationOrchestrator:
         emitter_override: EmitFn | None = None,
         db_chat_session_id: Optional[int] = None,
     ) -> CommandExecutionResult:
-        cmds = await self.run_commands_if_any(user_text, emitter_override=emitter_override)
+        cmds = await self.run_commands_if_any(
+            user_text,
+            emitter_override=emitter_override,
+            db_chat_session_id=db_chat_session_id,
+        )
         if cmds:
             msgs = [c.message for c in cmds if c.message]
             merged = "\n".join(msgs).strip()

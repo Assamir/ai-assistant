@@ -115,11 +115,141 @@ async def backup_handler(ctx: OrchestratorContext, params: Dict[str, str]) -> Co
     return CommandExecutionResult(success=True, message="Zapisuję kopię zapasową w tle.", emotion="thinking")
 
 
-async def session_report_stub(ctx: OrchestratorContext, params: Dict[str, str]) -> CommandExecutionResult:
+async def session_report_handler(ctx: OrchestratorContext, params: Dict[str, str]) -> CommandExecutionResult:
+    db_path: Any = getattr(ctx, "svc", lambda n, d=None: d)("db_path")
+    session_id: Any = getattr(ctx, "svc", lambda n, d=None: d)("db_session_id")
+    if not db_path or session_id is None:
+        return CommandExecutionResult(
+            success=True,
+            message="Brak aktywnej sesji w bazie — spróbuj przez interfejs graficzny.",
+            emotion="thinking",
+        )
+    try:
+        import aiosqlite
+        from backend.db.connection import apply_pragmas_async
+
+        async with aiosqlite.connect(db_path) as db:
+            await apply_pragmas_async(db)
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                "SELECT source, COUNT(*) as cnt FROM messages WHERE session_id=? GROUP BY source",
+                (session_id,),
+            )
+            rows = await cur.fetchall()
+
+        parts: List[str] = []
+        total = 0
+        for r in rows:
+            source = r["source"]
+            cnt = int(r["cnt"])
+            total += cnt
+            label = {"user": "twoje", "assistant": "moje", "observer": "obserwatora"}.get(source, source)
+            parts.append(f"{cnt} {label}")
+        summary = ", ".join(parts) if parts else "brak wiadomości"
+        return CommandExecutionResult(
+            success=True,
+            message=f"W tej sesji było {total} wiadomości: {summary}.",
+            emotion="thinking",
+        )
+    except Exception as exc:
+        return CommandExecutionResult(
+            success=False,
+            message=f"Nie udało się pobrać raportu: {exc}",
+            emotion="confused",
+        )
+
+
+async def check_league_hint_handler(ctx: OrchestratorContext, params: Dict[str, str]) -> CommandExecutionResult:
+    svc = getattr(ctx, "svc", lambda n, d=None: d)
+    league_hint_fn: Any = svc("league_hint_fn")
+    game_id: str = (params.get("game_id") or ctx.state.get("current_game") or "").strip()
+    if not game_id:
+        return CommandExecutionResult(
+            success=False,
+            message="Nie wykryto aktywnej gry. Uruchom grę lub ustaw profil ręcznie.",
+            emotion="confused",
+        )
+    if league_hint_fn is None:
+        return CommandExecutionResult(
+            success=False,
+            message="Sprawdzanie hintów ligi jest niedostępne — brak profilu gracza lub wyszukiwarki.",
+            emotion="confused",
+        )
+    try:
+        out: Dict[str, Any] = await league_hint_fn(game_id)
+    except Exception as exc:
+        return CommandExecutionResult(success=False, message=f"Błąd sprawdzania ligi: {exc}", emotion="confused")
+    if not out.get("ok"):
+        err = out.get("error", "error")
+        msg_map = {
+            "game_not_in_profile": f"Gra {game_id!r} nie jest w profilu gracza.",
+            "web_search_unavailable": "Wyszukiwarka jest wyłączona. Włącz MCP i narzędzie web_search.",
+            "search_failed": "Wyszukiwanie nie powiodło się.",
+        }
+        return CommandExecutionResult(
+            success=False,
+            message=msg_map.get(str(err), f"Nie udało się sprawdzić ligi: {err}"),
+            emotion="confused",
+        )
+    prof_league = out.get("profile_league") or "nieznana"
+    if out.get("mismatch_hint"):
+        return CommandExecutionResult(
+            success=True,
+            message=(
+                f"Uwaga! W profilu masz ligę {prof_league!r}, ale wyniki wyszukiwania "
+                f"sugerują że coś się zmieniło. Sprawdź aktualne informacje o {game_id}."
+            ),
+            emotion="excited",
+        )
     return CommandExecutionResult(
         success=True,
-        message="Nie mam jeszcze pełnego raportu sesji podłączonego do bazy.",
-        emotion="thinking",
+        message=f"Liga {prof_league!r} w profilu wygląda aktualnie dla {game_id}.",
+        emotion="happy",
+    )
+
+
+async def daily_check_handler(ctx: OrchestratorContext, params: Dict[str, str]) -> CommandExecutionResult:
+    svc = getattr(ctx, "svc", lambda n, d=None: d)
+    daily_check_fn: Any = svc("daily_check_fn")
+    game_id: str = (params.get("game_id") or ctx.state.get("current_game") or "").strip()
+    if not game_id:
+        return CommandExecutionResult(
+            success=False,
+            message="Nie wykryto aktywnej gry. Uruchom grę lub ustaw profil ręcznie.",
+            emotion="confused",
+        )
+    if daily_check_fn is None:
+        return CommandExecutionResult(
+            success=False,
+            message="Daily check jest niedostępny — brak profilu gracza lub wyszukiwarki.",
+            emotion="confused",
+        )
+    try:
+        out: Dict[str, Any] = await daily_check_fn(game_id, False)
+    except Exception as exc:
+        return CommandExecutionResult(success=False, message=f"Błąd sprawdzania meta: {exc}", emotion="confused")
+    if not out.get("ok"):
+        err = out.get("error", "error")
+        msg_map = {
+            "game_not_in_profile": f"Gra {game_id!r} nie jest w profilu gracza.",
+            "too_soon": "Sprawdzałam niedawno. Poczekaj trochę lub powiedz 'sprawdź meta teraz'.",
+        }
+        return CommandExecutionResult(
+            success=False,
+            message=msg_map.get(str(err), f"Nie udało się sprawdzić meta: {err}"),
+            emotion="thinking",
+        )
+    has_changes = out.get("has_changes", False)
+    if has_changes:
+        return CommandExecutionResult(
+            success=True,
+            message=f"Są nowości w {game_id}! Zaktualizowałam bazę wiedzy. Możesz zapytać mnie o szczegóły.",
+            emotion="excited",
+        )
+    return CommandExecutionResult(
+        success=True,
+        message=f"Sprawdziłam meta {game_id} — nic nowego od ostatniego razu.",
+        emotion="neutral",
     )
 
 
@@ -190,7 +320,7 @@ def install_default_builtin_handlers() -> None:
     register_builtin("silent_mode_on", silent_mode_on_handler)
     register_builtin("silent_mode_off", silent_mode_off_handler)
     register_builtin("backup", backup_handler)
-    register_builtin("session_report", session_report_stub)
+    register_builtin("session_report", session_report_handler)
     register_builtin("open_documents", open_documents_handler)
     register_builtin("reload_config", reload_config_stub)
     register_builtin("set_interval", set_interval_handler)
@@ -199,6 +329,8 @@ def install_default_builtin_handlers() -> None:
     register_builtin("click_through_on", click_through_on_handler)
     register_builtin("click_through_off", click_through_off_handler)
     register_builtin("forget_cache", forget_cache_stub)
+    register_builtin("check_league_hint", check_league_hint_handler)
+    register_builtin("daily_check", daily_check_handler)
 
 
 install_default_builtin_handlers()
@@ -210,4 +342,7 @@ __all__ = [
     "dispatch_builtin",
     "register_builtin",
     "install_default_builtin_handlers",
+    "check_league_hint_handler",
+    "daily_check_handler",
+    "session_report_handler",
 ]

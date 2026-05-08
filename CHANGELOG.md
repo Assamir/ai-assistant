@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format is inspired 
 
 ### Added
 
+- **Voice → REST commands (T8):** Trzy nowe komendy głosowe mapowane bezpośrednio na logikę REST:
+  - `CMD-19` — „sprawdź hint ligi" / „sprawdź ligę" → wywołuje `analyze_league_hint` dla aktywnej gry; informuje głosowo o zgodności lub rozbieżności z profilem.
+  - `CMD-20` — „sprawdź meta" / „co nowego w grze" → wywołuje `run_daily_meta_check_for_game`; informuje o nowościach lub braku zmian.
+  - `CMD-08` (poprawka) — „podsumuj sesję" → prawdziwe zapytanie do SQLite (`messages` po `session_id`); wcześniej był stub.
+  - Komendy działają przez `SimpleOrchestratorContext._services` — `league_hint_fn`/`daily_check_fn` wstrzykiwane z `app_context.py` po stworzeniu `ctx` (unikanie circular dep). Cooldown: CMD-19 = 30 s, CMD-20 = 120 s.
+- **LICENSES.md** — lista wszystkich bibliotek open-source (backend Python + frontend JS/Electron), modeli AI i licencji; placeholder dla awatara VRM do uzupełnienia po wyborze modelu.
+- **Testy sandbox audit** (`tests/unit/test_sandbox_audit.py`) — 13 przypadków: path traversal (`../../etc/passwd`, ścieżki bezwzględne poza root, `..` w środku), walidacja URL (blokada `file://`, `javascript:`, `ftp://`, pusta), tryb offline (`OfflineModeError`).
+
 - **Docs:** [docs/PORADNIK_UZYTKOWNIKA.md](docs/PORADNIK_UZYTKOWNIKA.md) — zbiorczy poradnik użytkownika i konfiguracji (kroki, porty, panel UI, ENV, **`start-dev.bat` jako jedna komenda**, rozmowa z agentem przez UI/`voice/chat`/`voice.process`, WS PTT — linki). README linkuje ten plik na początku.
 - **Frontend / Avatar:** lista rozwijana modeli VRM z wbudowanego katalogu (pliki w `frontend/resources`, Vite `publicDir: resources`); domyślny model `./kaguya_watanuki.vrm` gdy brak `localStorage` / bridge Electron / `VITE_VRM_URL`. Opcja „Inny adres URL…” z polem jak dotychczas dla zewnętrznych plików — przy nowym modelu w folderze dopisz nazwę pliku w `src/vrmBundledCatalog.ts`.
 - **T8 / Auto league hint:** `observer.auto_league_hint_on_game_detected` (YAML) lub `ASSY_OBSERVER__AUTO_LEAGUE_HINT_ON_GAME_DETECTED` — po `game_detected` z znanym `game_id` uruchamia `check-league-hint`; przy `mismatch_hint` broadcast WS `player_profile.league_hint` (jak REST `broadcast: true`). Dokumentacja ENV: `docs/ENV_SETUP.md` §11.2.

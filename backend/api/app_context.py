@@ -398,6 +398,20 @@ def create_app_context() -> AppContext:
     from backend.mcp.context_tools import register_context_dependent_mcp_tools
 
     register_context_dependent_mcp_tools(ctx)
+
+    # Wiring voice→REST callables (unikamy circular dep: ctx → orch → ctx)
+    from backend.services.league_hint import analyze_league_hint
+    from backend.services.daily_meta_check import run_daily_meta_check_for_game
+
+    async def _league_hint_fn(game_id: str) -> dict:
+        return await analyze_league_hint(ctx, game_id)
+
+    async def _daily_check_fn(game_id: str, force: bool = False) -> dict:
+        return await run_daily_meta_check_for_game(ctx, game_id, force=force, broadcast=True)
+
+    orch._league_hint_fn = _league_hint_fn
+    orch._daily_check_fn = _daily_check_fn
+
     return ctx
 
 
