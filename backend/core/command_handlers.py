@@ -348,6 +348,49 @@ async def forget_knowledge_handler(ctx: OrchestratorContext, params: Dict[str, s
         )
 
 
+async def import_build_handler(ctx: OrchestratorContext, params: Dict[str, str]) -> CommandExecutionResult:
+    svc = getattr(ctx, "svc", lambda n, d=None: d)
+    import_fn: Any = svc("import_build_fn")
+    url = (params.get("url") or params.get("url2") or "").strip()
+    if not url:
+        return CommandExecutionResult(
+            success=False,
+            message="Podaj pełny adres URL buildu, np. „importuj build z https://maxroll.gg/...'.",
+            emotion="confused",
+        )
+    game_id: str = (ctx.state.get("current_game_profile_id") or ctx.state.get("current_game") or "").strip()
+    if not game_id:
+        return CommandExecutionResult(
+            success=False,
+            message="Nie wykryto aktywnej gry. Uruchom grę lub ustaw profil ręcznie.",
+            emotion="confused",
+        )
+    if import_fn is None:
+        return CommandExecutionResult(
+            success=False,
+            message="Import buildu jest niedostępny — brak wyszukiwarki lub profilu gracza.",
+            emotion="confused",
+        )
+    try:
+        out: Dict[str, Any] = await import_fn(game_id, url)
+    except Exception as exc:
+        return CommandExecutionResult(success=False, message=f"Błąd importu buildu: {exc}", emotion="sad")
+    if not out.get("ok"):
+        err = out.get("error", "nieznany błąd")
+        return CommandExecutionResult(
+            success=False,
+            message=f"Nie udało się zaimportować buildu: {err}.",
+            emotion="disappointed",
+        )
+    char = out.get("character", "")
+    build = out.get("build", "")
+    return CommandExecutionResult(
+        success=True,
+        message=f'Zaimportowałam build "{build}" dla postaci {char}. Profil gracza zaktualizowany.',
+        emotion="happy",
+    )
+
+
 def install_default_builtin_handlers() -> None:
     register_builtin("sleep", sleep_handler)
     register_builtin("wake", wake_handler)
@@ -370,6 +413,7 @@ def install_default_builtin_handlers() -> None:
     register_builtin("check_league_hint", check_league_hint_handler)
     register_builtin("daily_check", daily_check_handler)
     register_builtin("forget_knowledge", forget_knowledge_handler)
+    register_builtin("import_build", import_build_handler)
 
 
 install_default_builtin_handlers()

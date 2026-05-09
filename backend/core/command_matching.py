@@ -96,6 +96,10 @@ _DAILY_CHECK_P = (
     r"check\s+game\s+meta\b|sprawdz\s+meta\s+teraz\b).*$"
 )
 _FORGET_KB_P = r"zapomnij\s+o\s+(?P<topic>\w[\w\s]*)"
+_IMPORT_BUILD_P = (
+    r"(?:importuj|zaladuj|wczytaj)\s+build\s+z\s+(?P<url>https?://\S+)"
+    r"|import\s+build\s+from\s+(?P<url2>https?://\S+)"
+)
 
 
 @dataclass(frozen=True)
@@ -168,6 +172,7 @@ def builtin_rules_ordered() -> List[BuiltinMatchRule]:
         BuiltinMatchRule("CMD-19", 45, "check_league_hint", _anchor(_LEAGUE_HINT_P), 30),
         BuiltinMatchRule("CMD-20", 45, "daily_check", _anchor(_DAILY_CHECK_P), 120),
         BuiltinMatchRule("CMD-21", 38, "forget_knowledge", _anchor(_FORGET_KB_P), 5),
+        BuiltinMatchRule("CMD-22", 42, "import_build", _anchor(_IMPORT_BUILD_P), 10),
     )
     return sorted(tbl, key=lambda r: (-r.priority, r.cmd_id))
 

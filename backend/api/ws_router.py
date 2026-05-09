@@ -103,33 +103,33 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
 
 
     async def emit_chunks(text_body: str, emotion: str) -> None:
+        from backend.core.tts_streaming import sentence_split
 
-
-        wav = b""
         synth = getattr(ctx, "tts_engine", None)
         trimmed = text_body.strip()
         if trimmed:
             await mgr.send_to_session(sid, "assistant_reply_text", {"text": trimmed})
 
         if trimmed and synth is not None:
-            try:
-                wav = await synth.speak(trimmed, emotion=emotion or None)
-            except Exception as exc:
-                _logger.warning("TTS speak failed — tylko tekst / overlay", exc_info=True)
-                wav = b""
-
-
-        if wav:
-
-
-            blob = base64.standard_b64encode(wav).decode("ascii")
             stride = max(512, getattr(ctx.config.tts, "chunk_bytes", 4096))
-            for offset in range(0, len(blob), stride):
-                await mgr.send_to_session(
-                    sid,
-                    "audio_stream",
-                    {"chunk_base64": blob[offset : offset + stride]},
-                )
+            any_audio = False
+            for sentence in sentence_split(trimmed):
+                try:
+                    wav = await synth.speak(sentence, emotion=emotion or None)
+                except Exception:
+                    _logger.warning("TTS speak failed for sentence", exc_info=True)
+                    wav = b""
+                if wav:
+                    any_audio = True
+                    blob = base64.standard_b64encode(wav).decode("ascii")
+                    for offset in range(0, len(blob), stride):
+                        await mgr.send_to_session(
+                            sid,
+                            "audio_stream",
+                            {"chunk_base64": blob[offset : offset + stride]},
+                        )
+            if not any_audio:
+                await mgr.send_to_session(sid, "text_overlay", {"text": trimmed})
         elif trimmed:
             await mgr.send_to_session(sid, "text_overlay", {"text": trimmed})
 

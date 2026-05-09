@@ -402,6 +402,7 @@ def create_app_context() -> AppContext:
     # Wiring voice→REST callables (unikamy circular dep: ctx → orch → ctx)
     from backend.services.league_hint import analyze_league_hint
     from backend.services.daily_meta_check import run_daily_meta_check_for_game
+    from backend.services.build_import import import_build_from_url
 
     async def _league_hint_fn(game_id: str) -> dict:
         return await analyze_league_hint(ctx, game_id)
@@ -409,8 +410,12 @@ def create_app_context() -> AppContext:
     async def _daily_check_fn(game_id: str, force: bool = False) -> dict:
         return await run_daily_meta_check_for_game(ctx, game_id, force=force, broadcast=True)
 
+    async def _import_build_fn(game_id: str, url: str) -> dict:
+        return await import_build_from_url(ctx, game_id, url)
+
     orch._league_hint_fn = _league_hint_fn
     orch._daily_check_fn = _daily_check_fn
+    orch._import_build_fn = _import_build_fn
 
     return ctx
 

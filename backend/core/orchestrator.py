@@ -137,6 +137,7 @@ class ConversationOrchestrator:
         # Opcjonalne callables ustawiane przez app_context po wiring (unikamy circular dep)
         self._league_hint_fn: Optional[Any] = None  # async (game_id: str) -> dict
         self._daily_check_fn: Optional[Any] = None  # async (game_id: str, force: bool) -> dict
+        self._import_build_fn: Optional[Any] = None  # async (game_id: str, url: str) -> dict
 
     def apply_configuration(
         self,
@@ -178,6 +179,7 @@ class ConversationOrchestrator:
         services: Dict[str, Any] = {
             "league_hint_fn": self._league_hint_fn,
             "daily_check_fn": self._daily_check_fn,
+            "import_build_fn": self._import_build_fn,
             "db_path": self._db_path,
             "db_session_id": db_chat_session_id,
             "semantic_recall": self._semantic_recall,

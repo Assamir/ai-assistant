@@ -299,9 +299,15 @@ class ObserverLoop:
 
         await self._persist_observer_comment(spoken, emotion)
 
+        from backend.core.notification_tone import generate_ping_wav
+        from backend.core.tts_streaming import sentence_split
+
         mgr = self._ctx.websocket_manager
         synth = self._ctx.tts_engine
         stride = max(512, getattr(self._ctx.config.tts, "chunk_bytes", 4096))
+        ping_enabled = getattr(self._ctx.config.observer, "notification_sound_enabled", True)
+        ping_wav = generate_ping_wav() if ping_enabled else b""
+        ping_blob = base64.standard_b64encode(ping_wav).decode("ascii") if ping_wav else ""
 
         for sid in mgr.iter_session_ids():
             await mgr.send_to_session(sid, "emotion", {"emotion": emotion})
@@ -316,22 +322,31 @@ class ObserverLoop:
             if synth is None:
                 await mgr.send_to_session(sid, "text_overlay", {"text": spoken})
                 continue
-            try:
-                wav = await synth.speak(spoken, emotion=emotion or None)
-            except Exception:
-                _logger.exception("observer TTS failed")
+            if ping_blob:
+                for offset in range(0, len(ping_blob), stride):
+                    await mgr.send_to_session(
+                        sid,
+                        "audio_stream",
+                        {"chunk_base64": ping_blob[offset : offset + stride]},
+                    )
+            any_audio = False
+            for sentence in sentence_split(spoken):
+                try:
+                    wav = await synth.speak(sentence, emotion=emotion or None)
+                except Exception:
+                    _logger.exception("observer TTS failed")
+                    wav = b""
+                if wav:
+                    any_audio = True
+                    blob = base64.standard_b64encode(wav).decode("ascii")
+                    for offset in range(0, len(blob), stride):
+                        await mgr.send_to_session(
+                            sid,
+                            "audio_stream",
+                            {"chunk_base64": blob[offset : offset + stride]},
+                        )
+            if not any_audio:
                 await mgr.send_to_session(sid, "text_overlay", {"text": spoken})
-                continue
-            if not wav:
-                await mgr.send_to_session(sid, "text_overlay", {"text": spoken})
-                continue
-            blob = base64.standard_b64encode(wav).decode("ascii")
-            for offset in range(0, len(blob), stride):
-                await mgr.send_to_session(
-                    sid,
-                    "audio_stream",
-                    {"chunk_base64": blob[offset : offset + stride]},
-                )
 
         self._last_comment_monotonic = time.monotonic()
 

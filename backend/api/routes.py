@@ -404,6 +404,35 @@ async def api_player_profile_archives(dep: Deps, game: str | None = None, limit:
     return {"archives": out}
 
 
+class ImportBuildBody(BaseModel):
+    url: str = Field(..., min_length=10, max_length=2048)
+
+
+@router.post("/player-profile/games/{game}/import-build")
+async def api_import_build(game: str, body: ImportBuildBody, dep: Deps):
+    """Scrape *url*, extract build data with LLM, upsert into player profile."""
+    from backend.services.build_import import import_build_from_url
+
+    store = dep.player_profile_store
+    if store is None:
+        raise HTTPException(status_code=503, detail={"code": "PLAYER_PROFILE_UNAVAILABLE"})
+    if dep.tool_registry is None:
+        raise HTTPException(status_code=503, detail={"code": "MCP_UNAVAILABLE"})
+    result = await import_build_from_url(dep, game, body.url)
+    if not result.get("ok"):
+        raise HTTPException(status_code=422, detail={"code": "IMPORT_FAILED", "error": result.get("error")})
+    mgr = dep.websocket_manager
+    if mgr is not None:
+        for sid in mgr.iter_session_ids():
+            await mgr.send_to_session(sid, "player_profile.build_imported", {
+                "game": game,
+                "character": result.get("character"),
+                "build": result.get("build"),
+                "url": body.url,
+            })
+    return result
+
+
 class DailyCheckRunBody(BaseModel):
     game: str = Field(..., min_length=1, max_length=64)
     force: bool = False

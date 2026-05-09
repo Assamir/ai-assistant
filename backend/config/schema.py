@@ -247,6 +247,10 @@ class ObserverConfig(BaseModel):
             "uruchom `check-league-hint`; przy rozbieżności broadcast WS `player_profile.league_hint`."
         ),
     )
+    notification_sound_enabled: bool = Field(
+        default=True,
+        description="Czy odtwarzać krótki ping przed komentarzem obserwatora (F-VO-09).",
+    )
 
 
 class MonitorInfo(BaseModel):

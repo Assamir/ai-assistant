@@ -102,6 +102,10 @@ export function ConfigPanel({
     typeof window !== "undefined" ? localStorage.getItem("assystent.configPutToken") ?? "" : "",
   );
   const [tokenSaved, setTokenSaved] = useState(false);
+  const [importBuildUrl, setImportBuildUrl] = useState("");
+  const [importBuildGame, setImportBuildGame] = useState("");
+  const [importBuildStatus, setImportBuildStatus] = useState<string | null>(null);
+  const [importBuildBusy, setImportBuildBusy] = useState(false);
 
   React.useEffect(() => {
     setDraftVrm(vrmUrl);
@@ -441,6 +445,61 @@ export function ConfigPanel({
           <p style={{ margin: "0.75rem 0 0", fontSize: 12, color: "#6d6680" }}>
             Pliki person: <code style={{ fontSize: 11 }}>{"{content_root}"}/personas/*.md</code>. Zmiany pliku wczytają się bez restartu.
           </p>
+
+          <hr style={{ border: "none", borderTop: "1px solid #2a2438", margin: "1rem 0 0.75rem" }} />
+          <div style={{ fontSize: 13, color: "#b8afc8", marginBottom: "0.5rem", fontWeight: 600 }}>Import buildu z URL</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+            <input
+              type="text"
+              placeholder="ID gry (np. poe2)"
+              value={importBuildGame}
+              onChange={(e) => setImportBuildGame(e.target.value)}
+              style={{ background: "#13101e", border: "1px solid #2a2438", borderRadius: 6, color: "#e8e4f0", padding: "0.35rem 0.6rem", fontSize: 13 }}
+            />
+            <input
+              type="url"
+              placeholder="https://maxroll.gg/poe2/..."
+              value={importBuildUrl}
+              onChange={(e) => setImportBuildUrl(e.target.value)}
+              style={{ background: "#13101e", border: "1px solid #2a2438", borderRadius: 6, color: "#e8e4f0", padding: "0.35rem 0.6rem", fontSize: 13 }}
+            />
+            <button
+              type="button"
+              disabled={importBuildBusy || !importBuildUrl.trim() || !importBuildGame.trim()}
+              onClick={async () => {
+                setImportBuildBusy(true);
+                setImportBuildStatus(null);
+                try {
+                  const base = apiBaseUrl.replace(/\/$/, "");
+                  const res = await fetch(`${base}/api/v1/player-profile/games/${encodeURIComponent(importBuildGame.trim())}/import-build`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ url: importBuildUrl.trim() }),
+                  });
+                  if (res.ok) {
+                    const data = (await res.json()) as { character?: string; build?: string };
+                    setImportBuildStatus(`✓ Zaimportowano: ${data.character ?? ""} — ${data.build ?? ""}`);
+                    setImportBuildUrl("");
+                  } else {
+                    const err = (await res.json().catch(() => ({}))) as { detail?: { error?: string } };
+                    setImportBuildStatus(`✗ Błąd: ${err?.detail?.error ?? res.statusText}`);
+                  }
+                } catch (e) {
+                  setImportBuildStatus(`✗ Błąd połączenia: ${String(e)}`);
+                } finally {
+                  setImportBuildBusy(false);
+                }
+              }}
+              style={{ ...btnPrimary, fontSize: 13 }}
+            >
+              {importBuildBusy ? "Importuję…" : "Importuj build"}
+            </button>
+            {importBuildStatus && (
+              <span style={{ fontSize: 12, color: importBuildStatus.startsWith("✓") ? "#7de87d" : "#e87d7d" }}>
+                {importBuildStatus}
+              </span>
+            )}
+          </div>
         </div>
       )}
 

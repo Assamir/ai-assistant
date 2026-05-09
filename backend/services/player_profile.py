@@ -255,6 +255,50 @@ class PlayerProfileRepository:
         self.save(profile)
         return {"ok": True, "active_character": name_clean, "profile": profile}
 
+    def upsert_character_from_build(
+        self,
+        game_id: str,
+        build_data: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Add or update a character entry from imported build data.
+
+        If a character with the same name already exists, its build fields are updated.
+        The character is also set as ``active_character`` for the game.
+        Creates the game entry if it does not exist yet.
+        """
+        gid = str(game_id).strip()
+        name = str(build_data.get("name") or "").strip()
+        if not gid or not name:
+            return {"ok": False, "error": "invalid_input"}
+
+        profile = self.load()
+        entry = profile.games.get(gid)
+        if entry is None:
+            entry = GameEntry()
+
+        existing = next((c for c in entry.characters if c.name == name), None)
+        if existing is not None:
+            existing.build = str(build_data.get("build") or existing.build)
+            existing.char_class = str(build_data.get("char_class") or existing.char_class)
+            existing.level = int(build_data.get("level") or existing.level)
+            existing.build_url = str(build_data.get("build_url") or existing.build_url or "")
+            existing.notes = str(build_data.get("notes") or existing.notes)
+        else:
+            entry.characters.append(
+                Character(
+                    name=name,
+                    char_class=str(build_data.get("char_class") or ""),
+                    build=str(build_data.get("build") or ""),
+                    level=int(build_data.get("level") or 1),
+                    build_url=str(build_data.get("build_url") or "") or None,
+                    notes=str(build_data.get("notes") or ""),
+                )
+            )
+        entry.active_character = name
+        profile.games[gid] = entry
+        self.save(profile)
+        return {"ok": True, "game": gid, "character": name, "profile": profile}
+
 
 __all__ = [
     "Character",
