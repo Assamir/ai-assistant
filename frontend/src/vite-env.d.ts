@@ -15,5 +15,6 @@ interface Window {
     apiUrl?: string;
     configPutToken?: string;
     setClickThrough?: (enabled: boolean) => void;
+    setTrayHealth?: (health: string) => void;
   };
 }

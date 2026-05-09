@@ -285,6 +285,9 @@ export function App() {
       if (f.event === "silent_mode") {
         setSilentMode(!!f.payload.enabled);
       }
+      if (f.event === "system_state" && typeof f.payload.health === "string") {
+        window.assystent?.setTrayHealth?.(f.payload.health);
+      }
       if (f.event === "agent_activity") {
         const tool = typeof f.payload.tool === "string" ? f.payload.tool : "(?)";
         const phase = typeof f.payload.phase === "string" ? f.payload.phase : "";
@@ -334,6 +337,10 @@ export function App() {
   const [observerStatusHints, setObserverStatusHints] = useState<string[]>([]);
 
   useEffect(() => {
+    window.assystent?.setTrayHealth?.(wsReady ? "ok" : "error");
+  }, [wsReady]);
+
+  useEffect(() => {
     if (!wsReady) {
       return undefined;
     }
@@ -346,6 +353,7 @@ export function App() {
         if (!cancelled) {
           setTtsDiag(ttsDiagFromStatusJson(data));
           setObserverStatusHints(observerHintsFromStatusJson(data));
+          window.assystent?.setTrayHealth?.("ok");
         }
       } catch {
         if (!cancelled) {

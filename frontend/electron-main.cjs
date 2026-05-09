@@ -1,17 +1,117 @@
 const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, ipcMain, session } = require("electron");
 
-/** Bez tego Chromium w Electron często zatrzymuje `AudioContext` / TTS dopóki użytkownik nie „obudzi” audio gestem. */
+/** Bez tego Chromium w Electron często zatrzymuje `AudioContext` / TTS dopóki użytkownik nie „obudzi" audio gestem. */
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
 const path = require("path");
 const fs = require("fs");
+const zlib = require("zlib");
 const { spawn } = require("child_process");
 
 let mainWindow = null;
 let tray = null;
 let allowQuit = false;
-/** Proces uvicorn przy instalatorze „Komplet”; null w pakiecie tylko-klient. */
+let currentHealth = "unknown";
+/** Proces uvicorn przy instalatorze „Komplet"; null w pakiecie tylko-klient. */
 let bundledBackendProc = null;
+
+// ---------------------------------------------------------------------------
+// Tray icon PNG generation (no external deps — pure Node.js zlib + CRC32)
+// ---------------------------------------------------------------------------
+
+function crc32(buf) {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < buf.length; i++) {
+    crc ^= buf[i];
+    for (let j = 0; j < 8; j++) {
+      crc = (crc & 1) ? (0xEDB88320 ^ (crc >>> 1)) : (crc >>> 1);
+    }
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function pngChunk(type, data) {
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(data.length);
+  const typeBytes = Buffer.from(type, "ascii");
+  const crcVal = crc32(Buffer.concat([typeBytes, data]));
+  const crcBuf = Buffer.alloc(4);
+  crcBuf.writeUInt32BE(crcVal);
+  return Buffer.concat([len, typeBytes, data, crcBuf]);
+}
+
+function makeSolidPng(size, r, g, b) {
+  const sig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+
+  const ihdrData = Buffer.alloc(13);
+  ihdrData.writeUInt32BE(size, 0);
+  ihdrData.writeUInt32BE(size, 4);
+  ihdrData[8] = 8; // bit depth
+  ihdrData[9] = 2; // color type RGB
+  // compression, filter, interlace = 0
+
+  const row = Buffer.alloc(1 + size * 3);
+  row[0] = 0; // filter: none
+  for (let x = 0; x < size; x++) {
+    row[1 + x * 3] = r;
+    row[1 + x * 3 + 1] = g;
+    row[1 + x * 3 + 2] = b;
+  }
+  const rows = Array.from({ length: size }, () => row);
+  const compressed = zlib.deflateSync(Buffer.concat(rows));
+
+  return Buffer.concat([
+    sig,
+    pngChunk("IHDR", ihdrData),
+    pngChunk("IDAT", compressed),
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+const HEALTH_RGB = {
+  ok:       [34, 197,  94],   // green
+  healthy:  [34, 197,  94],
+  degraded: [234, 179,   8],  // amber
+  error:    [239,  68,  68],  // red
+  unknown:  [107, 114, 128],  // gray
+};
+
+function buildTrayIcon(health) {
+  const [r, g, b] = HEALTH_RGB[health] || HEALTH_RGB.unknown;
+  try {
+    return nativeImage.createFromBuffer(makeSolidPng(16, r, g, b));
+  } catch (_) {
+    return nativeImage.createEmpty();
+  }
+}
+
+function buildTrayMenu() {
+  const h = currentHealth;
+  const statusLabel =
+    h === "ok" || h === "healthy" ? "Asystent aktywny" :
+    h === "degraded"              ? "⚠ Zdegradowany"   :
+                                    "Rozłączony";
+  return Menu.buildFromTemplate([
+    { label: statusLabel, enabled: false },
+    { type: "separator" },
+    {
+      label: "Pokaż",
+      click: () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } },
+    },
+    { type: "separator" },
+    { label: "Zakończ", click: () => { allowQuit = true; app.quit(); } },
+  ]);
+}
+
+function updateTrayHealth(health) {
+  currentHealth = health;
+  if (!tray) return;
+  tray.setImage(buildTrayIcon(health));
+  tray.setToolTip(`Assystent — ${health}`);
+  tray.setContextMenu(buildTrayMenu());
+}
+
+// ---------------------------------------------------------------------------
 
 function getBundledPythonAppRoot() {
   try {
@@ -127,22 +227,8 @@ function createWindow() {
 
   if (!tray) {
     try {
-      const icon = nativeImage.createEmpty();
-      tray = new Tray(icon);
-      tray.setToolTip("Assystent");
-      tray.setContextMenu(
-        Menu.buildFromTemplate([
-          {
-            label: "Pokaż",
-            click: () => {
-              mainWindow.show();
-              mainWindow.focus();
-            },
-          },
-          { type: "separator" },
-          { label: "Zakończ", click: () => { allowQuit = true; app.quit(); } },
-        ]),
-      );
+      tray = new Tray(buildTrayIcon("unknown"));
+      tray.setContextMenu(buildTrayMenu());
       tray.on("click", () => {
         if (mainWindow.isVisible()) {
           mainWindow.hide();
@@ -180,6 +266,10 @@ app.whenReady().then(() => {
     if (mainWindow) {
       mainWindow.setIgnoreMouseEvents(!!enabled, { forward: true });
     }
+  });
+
+  ipcMain.on("tray_health", (_event, health) => {
+    updateTrayHealth(typeof health === "string" ? health : "unknown");
   });
 
   try {
