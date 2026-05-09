@@ -6,6 +6,9 @@ All notable changes to this project are documented here. The format is inspired 
 
 ### Added
 
+- **`requirements-vision.txt`:** opcjonalny plik (`-r requirements.txt` + `easyocr`) dla OCR / analizy zrzutów; opisane w `config/config.yaml` i `docs/ENV_SETUP.md`.
+- **`ai_runtime.mirror_tool_results_as_user`:** opcjonalne dublowanie wyniku narzędzia jako wiadomość `user` (LM Studio / słaba obsługa `role: tool`); testy `tests/unit/test_orchestrator_tool_mirror.py`.
+- **Panel „Obserwator / wizja” (`App.tsx`):** wyjaśnienie `observer_comment` + podpowiedzi z `GET /api/v1/status`; ścieżka `requirements-vision.txt` gdy brak potoku wizji.
 - **Markdown→HTML w `generate_document` (F-DOC-02/03):** Narzędzie MCP `generate_document` przy formacie `html` konwertuje teraz treść Markdown do HTML za pomocą biblioteki `markdown` (rozszerzenia: `tables`, `fenced_code`, `nl2br`). Bloki ` ```mermaid ` są automatycznie przepisywane na `<div class="mermaid">` i renderowane przez Mermaid.js ładowany z CDN. Gdy biblioteka `markdown` nie jest zainstalowana, fallback opakowuje treść w `<pre>`. Dodano `markdown>=3.5.0,<4.0.0` do `requirements.txt`.
 - **Zakładka Status w ConfigPanel (F-UI-07):** Nowa zakładka „Status" automatycznie odpytuje `GET /api/v1/status` co 5 s gdy jest aktywna. Wyświetla kolorowe wskaźniki (zielony/czerwony) dla komponentów: LLM, STT, TTS, zrzut ekranu, potok wizji, pamięć semantyczna. Komponent `StatusHealthView` parsuje JSON odpowiedzi.
 - **Auto-raport sesji po zakończeniu gry (F-DOC-05):** Nowa flaga konfiguracyjna `observer.auto_session_report` (domyślnie `false`). Gdy gra zostaje wykryta jako zamknięta (zdarzenie `game_detected { active: false }`), backend emituje `auto_session_report_start` do wszystkich aktywnych sesji WS. Frontend odbiera zdarzenie i automatycznie wysyła komendę „podsumuj sesję" (CMD-08). Dodatkowe pole `observer.auto_session_report_min_turns` (domyślnie 3). ENV: `ASSY_OBSERVER__AUTO_SESSION_REPORT`.
@@ -55,13 +58,19 @@ All notable changes to this project are documented here. The format is inspired 
 - **T8 / Player profile commands:** `PATCH /api/v1/player-profile/games/{game}` — optional `league` / `game_version` (pusty PATCH → 400); przy zmianie **niepustej** ligi odpowiedź zawiera `archive_recommended` i broadcast WS **`player_profile.league_changed`** (bez auto-archiwum). `POST /api/v1/player-profile/games/{game}/active-character` `{ "character" }` — 422 gdy postaci nie ma na liście.
 - **T8 / Daily meta:** `POST /api/v1/daily-checks/run` `{ "game", "force" }` — inserts `daily_checks`, updates `last_meta_check` in profile YAML, optional DuckDuckGo `web_search` when MCP enabled; `GET /api/v1/daily-checks` lists history. **Persists** a Markdown note under `{content_root}/{memory.knowledge_dir}/daily_checks/` and sets DB `knowledge_file_path`; **re-ingests** that file into Chroma when `memory.enabled` and ingester is present. Background: `mcp.daily_check_on_startup` / `ASSY_MCP__DAILY_CHECK_ON_STARTUP`, `daily_check_interval_hours`. WS `daily_check.complete`.
 
-### Fixed
-
-- Electron / strona `file://`: domyślny URL API nie używa już schematu `file` (było `file://127.0.0.1:8000` → `fetch` się wywalał); zawsze `http://127.0.0.1:8000` lub normalizacja `localStorage` / wpisu użytkownika (`normalizeApiBaseUrl`). WebSocket przy `file://` wymusza port backendu `:8000`.
-
 ### Changed
 
+- **Potok wizji (`DualVisionPipeline`):** częściowe wyniki przy błędzie VLM lub OCR; po błędzie VLM możliwa kontynuacja z OCR.
+- **Piper TTS:** `subprocess.run` w wątku (`asyncio.to_thread`) zamiast `asyncio.create_subprocess_exec` (Windows / niektóre pętle asyncio).
+- **`screen_capture` + prompty:** jaśniejsze komunikaty `error` i reguły w `prompt_builder` (konkret zamiast ogólników).
+- **OCR:** `try_build_ocr_engine` sprawdza dostępność pakietu `easyocr` przy inicjalizacji.
+- **Zrzut ekranu (`mss`):** użycie `mss.MSS()` zamiast przestarzałego `mss.mss()`.
 - **Frontend / Windows installers:** Dwa instalatory NSIS (`electron-builder.client.yml` / `electron-builder.full.yml`): tylko klient lub **Komplet** (klient + `backend/` i `requirements.txt` w `resources`, dokumentacja i BAT w `installer-resources-full`). Artefakty: `electron-release-out/client/`, `electron-release-out/full/`. Skrypty: `npm run electron:dist` ≡ `electron:dist:client`; dodano `electron:dist:full` i `electron:dist:all`. `electron-main.cjs` przy wykryciu bundlowanego backendu uruchamia `uvicorn` (zmienne: `ASSYSTENT_NO_AUTO_BACKEND`, `ASSYSTENT_PYTHON_EXE`). Ustawienia `electron-builder` w YAML (usunięto z `frontend/package.json` pole `build`). `cross-env CSC_IDENTITY_AUTO_DISCOVERY=false`, `signAndEditExecutable: false`. README, ENV_SETUP, poradnik, `.gitignore`.
 
 - Avatar: jawna mapa wszystkich emocji z `emotions.json` na rodziny palet w `AuraLights` (fallback rodziny: neutral); exponential kołysanie tułowia w idle i lerp barw świateł bez zmiany logiki crossfade ekspresji.
 - Refactored emotion weight math into `frontend/src/emotionBlend.ts` (shared helpers for normalization and blending).
+
+### Fixed
+
+- **WebSocket:** awaria TTS nie zamyka połączenia — obsługa wyjątków przy `speak` w `ws_router.py`.
+- Electron / strona `file://`: domyślny URL API nie używa już schematu `file` (było `file://127.0.0.1:8000` → `fetch` się wywalał); zawsze `http://127.0.0.1:8000` lub normalizacja `localStorage` / wpisu użytkownika (`normalizeApiBaseUrl`). WebSocket przy `file://` wymusza port backendu `:8000`.

@@ -14,7 +14,21 @@
       "Bash(python -m pytest tests/unit/test_game_observer.py tests/integration/test_sse_and_tools.py -v --tb=short)",
       "Bash(python -c ' *)",
       "Bash(python *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(.venv\\\\Scripts\\\\python.exe *)",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -m pytest tests/unit/test_backup_service.py -v 2>&1)",
+      "PowerShell(tail *)",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -m pytest tests/unit/ -q 2>&1 | Select-Object -Last 5)",
+      "PowerShell(git add *)",
+      "PowerShell(git push *)",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -m pytest tests/unit/test_online_monitor.py -v 2>&1)",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -m pytest tests/unit/ -q 2>&1 | Select-Object -Last 3)",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -m pytest tests/unit/test_semantic_recall.py -v 2>&1)",
+      "Bash(npx tsc *)",
+      "Bash(node -e \"const r=require\\('./node_modules/@types/react/index.d.ts'\\); console.log\\('ok'\\)\")",
+      "Bash(xargs grep -l \"knowledge\\\\|KnowledgeIngest\")",
+      "Bash(head -5 CHANGELOG.md)",
+      "Bash(ls -la CHANGELOG.md)"
     ]
   }
 }
