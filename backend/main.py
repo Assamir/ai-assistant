@@ -18,6 +18,7 @@ from backend.api.ws_router import websocket_endpoint
 from backend.config.cors_settings import cors_middleware_params
 from backend.db.repositories import SystemStateRepository
 from backend.services.config_hot_reload import start_hot_reload
+from backend.services.online_monitor import OnlineMonitor
 from backend.services.session_watchdog import SessionWatchdog
 from backend.ai.voice_input import (
     AudioDuckSignal,
@@ -90,6 +91,16 @@ async def lifespan(app: FastAPI):
     )
     wd_task = asyncio.create_task(watchdog.run_forever())
 
+    async def _online_broadcast(ev: str, pl: dict) -> None:
+        for sid in ctx.websocket_manager.iter_session_ids():
+            await ctx.websocket_manager.send_to_session(sid, ev, pl)
+
+    online_monitor = OnlineMonitor(
+        ctx.orchestrator.state,
+        broadcast_fn=_online_broadcast,
+    )
+    om_task = asyncio.create_task(online_monitor.run_forever())
+
     try:
         hot = start_hot_reload(ctx, app)
     except Exception as exc:
@@ -133,6 +144,12 @@ async def lifespan(app: FastAPI):
                 await wd_task
             except asyncio.CancelledError:
                 pass
+        online_monitor.stop()
+        om_task.cancel()
+        try:
+            await om_task
+        except asyncio.CancelledError:
+            pass
         if hot is not None:
             hot.stop()
         if ctx.game_observer is not None:
