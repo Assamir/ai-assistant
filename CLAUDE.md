@@ -11,13 +11,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Content root at runtime:** `c:\ai\asystent` (user data, models, config) — separate from this source repo
 - **Source repo:** `c:\code\_repos\antigravity\assystent`
 - **Language:** The assistant communicates in **Polish**. All command patterns, LLM prompts, system messages, and handler responses are in Polish. This is intentional and pervasive — do not "fix" Polish strings.
+- **Default assistant name:** `Aria` (from `config.general.assistant_name`).
+
+---
+
+## Environment Setup
+
+```bash
+# Create and activate Python virtual environment (Windows)
+python -m venv .venv
+.venv\Scripts\activate
+
+# Core dependencies
+pip install -r requirements.txt
+
+# Optional: adds EasyOCR for screen text recognition
+pip install -r requirements-vision.txt
+```
+
+Optional extras (install into the same venv):
+
+| Package | Enables |
+|---------|---------|
+| `pynput` | Backend global PTT hotkey (`audio.backend_ptt_listener_enabled`) |
+| `openwakeword` | Wakeword detection (`audio.wakeword_enabled`) |
+| `torch torchvision transformers accelerate` | Moondream2 VLM (`vlm.enabled: true`) |
+| `dxcam` | Fastest Windows screen capture (DXGI); without it, falls back to mss then pyautogui |
 
 ---
 
 ## Backend Commands
 
 ```bash
-# Run the backend server (from repo root)
+# Run the backend server (from repo root, with venv active)
 python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 
 # Run all tests
@@ -50,7 +76,7 @@ cd frontend
 npm run dev
 
 # Run with Electron shell (full app)
-npm run electron
+ASSYSTENT_DEV=1 npm run electron
 
 # Build distributable (client-only — no bundled Python)
 npm run electron:dist:client
@@ -58,6 +84,17 @@ npm run electron:dist:client
 # Build distributable (full — with bundled Python app)
 npm run electron:dist:full
 ```
+
+Frontend environment overrides (Vite):
+
+| Variable | Purpose |
+|----------|---------|
+| `VITE_API_BASE_URL` | Backend HTTP base URL (default: `http://127.0.0.1:8000`) |
+| `VITE_WS_URL` | WebSocket URL (default: derived from `window.location`) |
+| `VITE_VRM_URL` | VRM model path |
+| `VITE_CONFIG_PUT_TOKEN` | Token for `PUT /api/v1/config` |
+
+In Electron, `electron-main.cjs` injects `window.assystent = { wsUrl, apiUrl, vrmUrl, configPutToken }` to pass config into the renderer without env vars.
 
 ---
 
@@ -88,6 +125,10 @@ Key layers:
 ### Voice Pipeline
 
 `PTTHotkeyListener` (pynput, backend process) → `VoiceInputCoordinator` → `FasterWhisperSTT` → `ConversationOrchestrator` → `PiperTTS` → PCM chunks over WebSocket `audio_stream` events → frontend `AudioContext`.
+
+### Observer Loop
+
+`ObserverLoop` runs on a configurable interval. Each cycle: `DesktopScreenCapture` takes a screenshot → `SceneDeduper` computes dHash to skip unchanged frames → `DualVisionPipeline` (VLM + OCR) analyzes the screen → `ConversationOrchestrator` generates a comment → TTS or `text_overlay`. Screen capture falls back: DXcam (DXGI) → mss → pyautogui.
 
 ### Frontend
 
@@ -149,16 +190,20 @@ Cooldowns are tracked in `CooldownTracker` (in-memory, per `cmd_id`). Fuzzy fall
 
 ---
 
-## WebSocket Events
+## WebSocket Protocol
 
-The WS at `/ws` sends JSON frames: `{"event": "<name>", "payload": {...}}`. Frontend subscribes and reacts to:
+The WS at `/ws` exchanges JSON frames: `{"event": "<name>", "payload": {...}}`.
+
+### Backend → Frontend events
 
 | Event | Payload keys | Purpose |
 |-------|-------------|---------|
 | `visual_state` | `state` (idle/listening/thinking/speaking) | Drives avatar animation |
 | `emotion` | `emotion` | Sets avatar facial expression |
+| `assistant_reply_text` | `text` | Full assistant response text (before audio chunks) |
+| `stt_result` | `text`, `hint` | STT transcription result; `hint` carries error codes like `stt_unconfigured` |
 | `observer_comment` | `text`, `emotion`, `game` | Observer proactive comment |
-| `audio_stream` | `chunk_base64` | PCM audio chunks (streamed TTS) |
+| `audio_stream` | `chunk_base64` | Base64-encoded raw PCM audio chunks (streamed TTS) |
 | `audio_duck` | `target_volume`, `ramp_ms` | PTT ducking ramp signal |
 | `text_overlay` | `text` | Silent-mode text display |
 | `agent_activity` | `phase`, `tool`, `arguments_preview` | Tool call progress indicator |
@@ -166,6 +211,16 @@ The WS at `/ws` sends JSON frames: `{"event": "<name>", "payload": {...}}`. Fron
 | `system_state` | `state`, `health` | Hibernation / resume notifications |
 | `player_profile.league_hint` | `game_id`, `mismatch_hint`, etc. | League change suggestion |
 | `player_profile.league_changed` | `game`, `previous_league`, `league` | After PATCH to player-profile |
+
+### Frontend → Backend frames
+
+| Event | Payload keys | Purpose |
+|-------|-------------|---------|
+| `chat_text` | `text` | Send a text message to the orchestrator |
+| `ptt_start` | _(empty)_ | Signals microphone recording start (triggers visual state change) |
+| `ptt_end` | `audio` (base64 WAV, optional) | End recording; backend runs STT→LLM→TTS if audio present |
+| `ping` | _(empty)_ | Keepalive / connectivity check |
+| `frontend_ready` | _(empty)_ | Sent after connection opens; backend may emit initial state |
 
 ---
 
@@ -177,7 +232,7 @@ All routes are prefixed `/api/v1` (defined in `backend/api/routes.py`).
 |--------|------|---------|
 | GET | `/status` | Full health snapshot with component details |
 | GET | `/health` | Minimal health check |
-| GET/PUT | `/config` | Read or patch config.yaml (PUT requires `ASSYSTENT_CONFIG_PUT_TOKEN`) |
+| GET/PUT | `/config` | Read or patch config.yaml (PUT requires `X-Config-Put-Token` header when `ASSYSTENT_CONFIG_PUT_TOKEN` env var is set) |
 | GET | `/tools` | List registered MCP tools |
 | POST | `/voice/chat` | Text-in / text-out (supports SSE streaming) |
 | POST | `/voice/synthesize` | TTS: text → WAV |
@@ -194,7 +249,7 @@ All routes are prefixed `/api/v1` (defined in `backend/api/routes.py`).
 ## Testing Conventions
 
 - **All AI components are optional** — tests never require real models. `AppContext` fields like `stt_engine`, `tts_engine`, `vlm_engine` can be `None`.
-- **SQLite tests** use `migrated_db_path` fixture (temp file + migrations applied). ChromaDB tests use `chromadb.EphemeralClient()`.
+- **SQLite tests** use `migrated_db_path` fixture (temp file + migrations applied, defined in `tests/conftest.py`). ChromaDB tests use `chromadb.EphemeralClient()`.
 - **Async tests** work without `@pytest.mark.asyncio` because `asyncio_mode = auto` is set in `pytest.ini`.
 - **Slow/real-LLM tests** should be marked `@pytest.mark.slow` and skipped in CI.
 - Game screenshot fixtures go in `tests/fixtures/images/poe2/` and `tests/fixtures/images/stellaris/`.
@@ -203,7 +258,7 @@ All routes are prefixed `/api/v1` (defined in `backend/api/routes.py`).
 
 ## Key Conventions
 
-- **Emotion tags:** LLM responses begin with `[EMO:name]` (one of 16 emotions). `parse_emotion_tag()` in `backend/core/emotion_parser.py` strips the tag before TTS and returns the emotion name.
+- **Emotion tags:** LLM responses begin with `[EMO:name]` (one of 16 emotions: `happy`, `amused`, `proud`, `sympathetic`, `sad`, `disappointed`, `angry`, `disgusted`, `excited`, `scared`, `surprised`, `nervous`, `thinking`, `confused`, `nostalgic`, `sarcastic`). `parse_emotion_tag()` in `backend/core/emotion_parser.py` strips the tag before TTS.
 - **Observer `[SKIP]`:** Observer comment prompts return the literal string `[SKIP]` when the scene is uninteresting — the orchestrator detects this and suppresses TTS.
 - **Sandbox:** `backend/mcp/sandbox.py` — all file I/O in MCP tools validates that paths stay inside `content_root`.
 - **MCP cache key:** `SHA256(tool_name + canonical_json(params))` — sorted keys, no whitespace. See `backend/mcp/cache_key.py`.
@@ -211,6 +266,7 @@ All routes are prefixed `/api/v1` (defined in `backend/api/routes.py`).
 - **New AI adapter:** Subclass the relevant `Base*` ABC from `backend/core/interfaces.py`, add a `try_build_*` helper in `backend/api/app_context.py`, wire into `create_app_context()`.
 - **New MCP tool:** Implement and register in `backend/mcp/registry.py` or `backend/mcp/context_tools.py` (for tools needing `AppContext`).
 - **LM Studio FC mirror:** `ai_runtime.mirror_tool_results_as_user: true` duplicates every `role=tool` message as a `role=user` message — a workaround for local models (e.g. some Gemma presets) that ignore tool results in standard format.
+- **ConversationStore:** Keeps the last 40 messages per session (keyed by WS session UUID or REST `session_id`).
 
 ---
 
