@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { configPutHeaders } from "./apiBase";
 import {
   BUNDLED_VRM_FILENAMES,
   BUNDLED_VRM_SELECT_OTHER,
@@ -83,8 +84,10 @@ function StatusHealthView({ json }: { json: string }) {
   try { data = JSON.parse(json) as Record<string, unknown>; } catch { return <pre style={{ fontSize: 11, color: "#b8afc8" }}>{json}</pre>; }
 
   const overall = (data?.status as string) ?? "unknown";
-  const c = (data as { health?: { components?: Record<string, Record<string, unknown>> } })?.health?.components ?? {};
-  const cfg = (data as { health?: { config?: { resolved_yaml?: string | null } } })?.health?.config;
+  const healthRoot = (data as { health?: Record<string, unknown> }).health ?? {};
+  const c = (healthRoot.components as Record<string, Record<string, unknown>> | undefined) ?? {};
+  const qh = healthRoot.quiet_hours as { enabled?: boolean; active_now?: boolean; start?: string; end?: string } | undefined;
+  const cfg = healthRoot.config as { resolved_yaml?: string | null } | undefined;
   const overallColor = overall === "ok" || overall === "healthy" ? "#22c55e" : overall === "degraded" ? "#eab308" : "#6d6680";
 
   return (
@@ -98,6 +101,16 @@ function StatusHealthView({ json }: { json: string }) {
       <StatusBadge ok={(c.screen_capture as { capture_available?: boolean })?.capture_available ?? null} label="Zrzut ekranu" />
       <StatusBadge ok={(c.vision_pipeline as { available?: boolean })?.available ?? null} label="Potok wizji" />
       <StatusBadge ok={(c.memory as { enabled?: boolean })?.enabled ?? null} label="Pamięć semantyczna" />
+      {qh !== undefined && (
+        <div style={{ margin: "0.6rem 0 0", paddingTop: "0.55rem", borderTop: "1px solid #2a2438", fontSize: 12, color: "#c8c0dc" }}>
+          <strong style={{ color: "#e8e4f0" }}>Cisza nocna:</strong>{" "}
+          {!qh.enabled
+            ? "wyłączona (`quiet_hours_enabled: false`)"
+            : qh.active_now
+              ? `aktywna (${String(qh.start ?? "?")}–${String(qh.end ?? "?")})`
+              : `poza oknem (${String(qh.start ?? "?")}–${String(qh.end ?? "?")})`}
+        </div>
+      )}
       {cfg?.resolved_yaml && (
         <p style={{ margin: "0.6rem 0 0", fontSize: 11, color: "#6d6680", wordBreak: "break-all" }}>
           Konfiguracja: <code style={{ fontSize: 10 }}>{cfg.resolved_yaml}</code>
@@ -155,6 +168,11 @@ export function ConfigPanel({
   const [importBuildGame, setImportBuildGame] = useState("");
   const [importBuildStatus, setImportBuildStatus] = useState<string | null>(null);
   const [importBuildBusy, setImportBuildBusy] = useState(false);
+  const [qhEnabled, setQhEnabled] = useState(false);
+  const [qhStart, setQhStart] = useState("23:00");
+  const [qhEnd, setQhEnd] = useState("07:00");
+  const [qhBusy, setQhBusy] = useState(false);
+  const [qhMsg, setQhMsg] = useState<string | null>(null);
 
   // Auto-poll GET /api/v1/status every 5 s when the Status tab is open
   useEffect(() => {
@@ -172,6 +190,26 @@ export function ConfigPanel({
   React.useEffect(() => {
     setDraftApi(apiBaseUrl);
   }, [apiBaseUrl]);
+
+  useEffect(() => {
+    if (tab !== "more") return undefined;
+    let cancelled = false;
+    const base = apiBaseUrl.replace(/\/$/, "");
+    setQhMsg(null);
+    void fetch(`${base}/api/v1/config`)
+      .then((r) => r.json())
+      .then((d: { data?: Record<string, unknown> }) => {
+        if (cancelled || !d?.data) return;
+        const c = d.data;
+        setQhEnabled(Boolean(c.quiet_hours_enabled));
+        setQhStart(String(c.quiet_hours_start ?? "23:00"));
+        setQhEnd(String(c.quiet_hours_end ?? "07:00"));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, apiBaseUrl]);
 
   const wsDisplay =
     typeof window !== "undefined" && window.assystent?.wsUrl
@@ -580,6 +618,100 @@ export function ConfigPanel({
 
       {tab === "more" && (
         <div style={{ fontSize: 14, color: "#b8afc8", lineHeight: 1.55 }}>
+          <div style={{ marginBottom: "1rem", padding: "0.65rem 0.75rem", borderRadius: 8, border: "1px solid #2a2438", background: "#100d18" }}>
+            <div style={{ fontWeight: 600, color: "#e8e4f0", marginBottom: "0.35rem" }}>Credits</div>
+            <p style={{ margin: 0, fontSize: 12, color: "#8a8198", lineHeight: 1.55 }}>
+              Awatar VRM, biblioteki open-source i modele AI: zobacz plik <code style={{ fontSize: 11 }}>LICENSES.md</code> w{" "}
+              <strong>korzeniu repozytorium</strong> (folder projektu Assystent). Przy własnym modelu uzupełnij tam atrybucję przed dystrybucją.
+            </p>
+          </div>
+
+          <div style={{ marginBottom: "1rem", padding: "0.65rem 0.75rem", borderRadius: 8, border: "1px solid #2a2438", background: "#100d18" }}>
+            <div style={{ fontWeight: 600, color: "#e8e4f0", marginBottom: "0.35rem" }}>Internet i MCP</div>
+            <p style={{ margin: 0, fontSize: 12, color: "#8a8198", lineHeight: 1.55 }}>
+              Asystent domyślnie działa lokalnie. Żądania HTTP (DuckDuckGo <code style={{ fontSize: 11 }}>web_search</code>,{" "}
+              <code style={{ fontSize: 11 }}>web_scraper</code>) włączają się dopiero przy <code style={{ fontSize: 11 }}>mcp.enabled: true</code> w{" "}
+              <code style={{ fontSize: 11 }}>config.yaml</code>. Obserwator ekranu nie wywołuje wyszukiwania — sieć pojawia się w czacie (narzędzia LLM) lub
+              wybranych funkcjach (meta, import buildu). Limit częstotliwości: <code style={{ fontSize: 11 }}>mcp.web_search_calls_per_minute</code>. Lista hostów
+              dla scrapera: <code style={{ fontSize: 11 }}>mcp.scraper_allowed_hosts</code> (pusta = brak filtru). Szczegóły:{" "}
+              <code style={{ fontSize: 11 }}>docs/PORADNIK_UZYTKOWNIKA.md</code>.
+            </p>
+          </div>
+
+          <div style={{ marginBottom: "1rem", padding: "0.65rem 0.75rem", borderRadius: 8, border: "1px solid #2a2438", background: "#100d18" }}>
+            <div style={{ fontWeight: 600, color: "#e8e4f0", marginBottom: "0.35rem" }}>Cisza nocna (bez TTS)</div>
+            <p style={{ margin: "0 0 0.5rem", fontSize: 12, color: "#8a8198" }}>
+              Gdy włączone — w podanym oknie czasu asystent nie syntetyzuje mowy; tekst idzie na overlay. Czas lokalny komputera; okno może przechodzić przez północ (np. 23:00–07:00).
+            </p>
+            <label style={{ display: "flex", alignItems: "center", gap: "0.45rem", cursor: "pointer", marginBottom: "0.45rem", fontSize: 13 }}>
+              <input type="checkbox" checked={qhEnabled} onChange={(e) => setQhEnabled(e.target.checked)} />
+              Włącz <code style={{ fontSize: 11 }}>quiet_hours_enabled</code>
+            </label>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center", marginBottom: "0.35rem" }}>
+              <label style={{ fontSize: 12 }}>
+                Od{" "}
+                <input
+                  type="text"
+                  value={qhStart}
+                  onChange={(e) => setQhStart(e.target.value)}
+                  placeholder="23:00"
+                  style={{ ...inputStyle, width: "auto", minWidth: 72, marginLeft: 4 }}
+                />
+              </label>
+              <label style={{ fontSize: 12 }}>
+                Do{" "}
+                <input
+                  type="text"
+                  value={qhEnd}
+                  onChange={(e) => setQhEnd(e.target.value)}
+                  placeholder="07:00"
+                  style={{ ...inputStyle, width: "auto", minWidth: 72, marginLeft: 4 }}
+                />
+              </label>
+              <button
+                type="button"
+                disabled={qhBusy}
+                style={btnPrimary}
+                onClick={async () => {
+                  setQhBusy(true);
+                  setQhMsg(null);
+                  try {
+                    const base = apiBaseUrl.replace(/\/$/, "");
+                    const res = await fetch(`${base}/api/v1/config`, {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json", ...configPutHeaders() },
+                      body: JSON.stringify({
+                        patch: {
+                          quiet_hours_enabled: qhEnabled,
+                          quiet_hours_start: qhStart.trim(),
+                          quiet_hours_end: qhEnd.trim(),
+                        },
+                      }),
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) {
+                      const detail =
+                        typeof data === "object" && data && "detail" in data
+                          ? JSON.stringify((data as { detail: unknown }).detail)
+                          : res.statusText;
+                      setQhMsg(`Błąd ${res.status}: ${detail}`);
+                      return;
+                    }
+                    setQhMsg("Zapisano ciszę nocną — backend przeładowany.");
+                    void onFetchStatus();
+                  } catch (e) {
+                    setQhMsg(e instanceof Error ? e.message : String(e));
+                  } finally {
+                    setQhBusy(false);
+                  }
+                }}
+              >
+                {qhBusy ? "Zapis…" : "Zapisz do YAML"}
+              </button>
+            </div>
+            {qhMsg && <p style={{ margin: 0, fontSize: 12, color: qhMsg.startsWith("Zapisano") ? "#7de87d" : "#e87d7d" }}>{qhMsg}</p>}
+          </div>
+
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
             <button type="button" onClick={() => void onFetchStatus()} disabled={busyStatus} style={btnPrimary}>
               {busyStatus ? "Ładowanie…" : "Pobierz status"}

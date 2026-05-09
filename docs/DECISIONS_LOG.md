@@ -216,8 +216,8 @@ Ta sekcja utrzymuje zgodność między **decyzjami** a **kodem** (bez zmiany his
 | Monitor gry | DOK-09: `pygetwindow` + fallback `observer.monitor_index` | Backend: `DesktopScreenCapture` (DXcam / mss / pyautogui) + **indeks monitora**; **brak `pygetwindow`**. Electron: wybór wyświetlacza dla overlaya (IPC). |
 | Custom commands → MCP | Rozszerzenie `commands.yaml` (`action_type: mcp_tool_call`) | **Niewdrożone** w `backend/config` — brak pola `action_type` w schemacie custom komend. |
 | Wizard: pobieranie modeli | `GET /setup/download_progress`, WS `download_progress`, cancel | **Endpointów downloadu w backendzie brak** — kreator zakłada istniejące ścieżki / konfigurację. |
-| Quiet hours | Globalne (`general.quiet_hours` w CONFIG_SPEC) | `ConfigSchema`: **`quiet_hours_start` / `quiet_hours_end`** (top-level). Logika „ciszy nocnej” w runtime — weryfikować przed FAZą release. |
-| Credits / CC-BY | Sekcja Credits w Config + `LICENSES.md` | `LICENSES.md` w repo; **placeholder VRM** w CHANGELOG; dedykowana zakładka Credits w UI **opcjonalna / do domknięcia**. |
+| Quiet hours | Globalne (`general.quiet_hours` w CONFIG_SPEC) | `ConfigSchema`: **`quiet_hours_enabled`** + **`quiet_hours_start` / `quiet_hours_end`** (top-level). Runtime: wyciszenie TTS + overlay tekstu; status w `/api/v1/status` → `quiet_hours`. |
+| Credits / CC-BY | Sekcja Credits w Config + `LICENSES.md` | `LICENSES.md` — tabela bundled VRM z `frontend/resources/`; w UI zakładka **Więcej** → sekcja Credits z odsyłaczem do pliku. |
 
 **Niezmienione intencje:** env nadpisuje YAML, zero halucynacji w promptach, sandbox plików, offline-first, reguły PRD.
 

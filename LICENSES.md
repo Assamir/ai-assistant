@@ -68,10 +68,14 @@ This document lists open-source components used by Assystent and their licenses.
 
 ## Avatar (VRM)
 
-The default VRM avatar model is sourced from [VRoid Hub](https://hub.vroid.com/) under a **CC-BY** license.
-Attribution must be displayed in the application's Credits section and in this file once a specific model is selected.
+Modele dołączone do repozytorium w `frontend/resources/` (lista w UI: `frontend/src/vrmBundledCatalog.ts`):
 
-> **TODO:** Replace this placeholder with the actual model name, author, and VRoid Hub URL once the final avatar is chosen.
+| Plik | Źródło / uwagi | Licencja |
+| --- | --- | --- |
+| `AvatarSample_B.vrm` | Oficjalny przykład [VRoid Hub](https://hub.vroid.com/) (pixiv / VRoid) | Warunki dystrybucji VRoid Hub — typowo próbki CC0; **zweryfikuj przed komercyjną redystrybucją** |
+| `kaguya_watanuki.vrm`, `watanuki_kaguya_NR.vrm` | Nazewnictwo sugeruje model społecznościowy / VRoid — **potwierdź autora i licencję na stronie źródłowej** przed publikacją binarki | Zależnie od źródła (CC-BY, CC0, inne) |
+
+W panelu aplikacji (zakładka **Więcej**) znajduje się skrócone **Credits** z linkiem do tego pliku. Przy zmianie domyślnego avatara uzupełnij wiersz w tej tabeli i wpis w interfejsie.
 
 ---
 

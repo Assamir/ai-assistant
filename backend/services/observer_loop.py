@@ -316,7 +316,10 @@ class ObserverLoop:
                 "observer_comment",
                 {"text": spoken, "emotion": emotion, "game": game_name},
             )
-            if st.get("silent_mode"):
+            from backend.core.quiet_hours import quiet_hours_suppresses_voice
+
+            voice_suppressed = bool(st.get("silent_mode")) or quiet_hours_suppresses_voice(self._ctx.config)
+            if voice_suppressed:
                 await mgr.send_to_session(sid, "text_overlay", {"text": spoken})
                 continue
             if synth is None:

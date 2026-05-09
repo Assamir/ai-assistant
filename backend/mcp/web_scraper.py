@@ -7,16 +7,32 @@ from typing import Any, Dict
 
 import httpx
 
+from urllib.parse import urlparse
+
 from backend.mcp.sandbox import SandboxValidator, SandboxViolation
 
 _MAX_RESPONSE_BYTES = 2_000_000
 
 _use_playwright_fallback = False
+_scraper_allowed_hosts: frozenset[str] = frozenset()
 
 
-def configure_web_scraper(*, use_playwright_fallback: bool = False) -> None:
-    global _use_playwright_fallback
+def _normalize_host(h: str) -> str:
+    t = (h or "").strip().lower().removeprefix("http://").removeprefix("https://").split("/")[0]
+    if t.startswith("www."):
+        t = t[4:]
+    return t
+
+
+def configure_web_scraper(
+    *,
+    use_playwright_fallback: bool = False,
+    allowed_hosts: list[str] | None = None,
+) -> None:
+    global _use_playwright_fallback, _scraper_allowed_hosts
     _use_playwright_fallback = bool(use_playwright_fallback)
+    entries = [_normalize_host(x) for x in (allowed_hosts or []) if str(x).strip()]
+    _scraper_allowed_hosts = frozenset(e for e in entries if e)
 
 
 _TOOL_WEB_SCRAPER = {
@@ -87,24 +103,41 @@ async def _http_get_html(url: str) -> str:
 
 
 async def tool_web_scraper(url: str | None = None, **_: Any) -> Dict[str, Any]:
+    import time
+
+    from backend.mcp.network_audit import log_mcp_network_call
+
     raw = url.strip() if isinstance(url, str) else ""
+    audit_args: Dict[str, Any] = {"url": raw}
+    t0 = time.perf_counter()
+
+    def _audit_done(out: Dict[str, Any]) -> Dict[str, Any]:
+        dt = int((time.perf_counter() - t0) * 1000)
+        ok = bool(out.get("ok"))
+        log_mcp_network_call("web_scraper", arguments=audit_args, duration_ms=dt, success=ok)
+        return out
+
     if not raw:
-        return {"ok": False, "error": "pusty url"}
+        return _audit_done({"ok": False, "error": "pusty url"})
 
     validator = SandboxValidator(".")
     try:
         clean_url = validator.validate_url(raw)
     except SandboxViolation as exc:
-        return {"ok": False, "error": str(exc)}
+        return _audit_done({"ok": False, "error": str(exc)})
+
+    host = _normalize_host(urlparse(clean_url).hostname or "")
+    if _scraper_allowed_hosts and host not in _scraper_allowed_hosts:
+        return _audit_done({"ok": False, "error": "host_not_allowed", "host": host})
 
     try:
         html = await _http_get_html(clean_url)
     except httpx.TimeoutException:
-        return {"ok": False, "error": "timeout"}
+        return _audit_done({"ok": False, "error": "timeout"})
     except httpx.HTTPStatusError as exc:
-        return {"ok": False, "error": f"http {exc.response.status_code}"}
+        return _audit_done({"ok": False, "error": f"http {exc.response.status_code}"})
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return _audit_done({"ok": False, "error": str(exc)})
 
     text, extraction = _extract_main_text(html, clean_url)
     if (not text or len(text) < 100) and _use_playwright_fallback:
@@ -123,7 +156,7 @@ async def tool_web_scraper(url: str | None = None, **_: Any) -> Dict[str, Any]:
     }
     if not text:
         out["note"] = "brak tekstu — możliwa strona SPA (Playwright nie jest skonfigurowany)"
-    return out
+    return _audit_done(out)
 
 
 __all__ = ["_TOOL_WEB_SCRAPER", "_http_get_html", "configure_web_scraper", "tool_web_scraper"]

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from backend.api.app_context import AppContext
+from backend.core.quiet_hours import quiet_hours_suppresses_voice
 
 
 def build_health_snapshot(ctx: AppContext) -> Dict[str, Any]:
@@ -57,6 +58,12 @@ def build_health_snapshot(ctx: AppContext) -> Dict[str, Any]:
     return {
         "overall": overall,
         "components": components,
+        "quiet_hours": {
+            "enabled": getattr(ctx.config, "quiet_hours_enabled", False),
+            "start": ctx.config.quiet_hours_start,
+            "end": ctx.config.quiet_hours_end,
+            "active_now": quiet_hours_suppresses_voice(ctx.config),
+        },
         "config": {
             "resolved_yaml": ctx.resolved_config_path,
             "yaml_tracked": ctx.resolved_config_path is not None,

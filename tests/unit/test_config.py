@@ -16,6 +16,7 @@ def test_defaults():
     assert cfg.stt.language == "pl"
     assert cfg.observer.observer_type == "strategy"
     assert cfg.memory.enabled is False
+    assert cfg.quiet_hours_enabled is False
 
 
 def test_yaml_overrides_defaults(tmp_path):

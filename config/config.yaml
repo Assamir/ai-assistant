@@ -21,6 +21,12 @@ ocr:
 
 mcp:
   enabled: true
+  # Opcjonalnie ograniczenie web_scraper do wybranych domen (bez www w wpisie):
+  # scraper_allowed_hosts: ["maxroll.gg"]
+
+quiet_hours_enabled: false
+quiet_hours_start: "23:00"
+quiet_hours_end: "07:00"
 
 tts:
   piper_executable: "tools/piper/piper/piper.exe"

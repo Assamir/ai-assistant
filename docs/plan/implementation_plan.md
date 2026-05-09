@@ -2,7 +2,7 @@
 
 > **Status:** v1.3 — 2026-05-09 (zsynchronizowano z kodem; §1.3, T1/T3 checklist)
 > **Źródła:** Wszystkie 24 dokumenty DOK-01–DOK-16 + PRD 00-06
-> **Pliki towarzyszące:** [Fazy 2–3 + Testy + Modele](implementation_plan_part2.md) · [TEST_PLAN](TEST_PLAN.md) · [DEFINITION_OF_DONE](DEFINITION_OF_DONE.md) · [RISK_REGISTER](RISK_REGISTER.md) · [IMPLEMENTATION_ROADMAP](IMPLEMENTATION_ROADMAP.md)
+> **Pliki towarzyszące:** [Fazy 2–3 + Testy + Modele](implementation_plan_part2.md) · [TEST_PLAN](TEST_PLAN.md) · [DEFINITION_OF_DONE](DEFINITION_OF_DONE.md) · [RISK_REGISTER](RISK_REGISTER.md) · [IMPLEMENTATION_ROADMAP](IMPLEMENTATION_ROADMAP.md) · [FUTURE_IMPROVEMENTS](FUTURE_IMPROVEMENTS.md)
 
 ---
 

@@ -51,6 +51,38 @@ Ten dokument zbiera **ścieżki w repozytorium**, **kroki od zera do działając
 
 ---
 
+## Cisza nocna (`quiet_hours_*`)
+
+Asystent może **nie odtwarzać TTS** (głos z czatu PTT/tekstu, komentarze obserwatora, krótki WAV z REST `voice/process` / `voice/synthesize`) w zdefiniowanym oknie czasu — zamiast tego pojawia się tekst na overlayu (`text_overlay`), tak jak w trybie cichym obserwatora.
+
+- **`quiet_hours_enabled`** (`false` domyślnie): włącza logikę okna czasu.
+- **`quiet_hours_start`** / **`quiet_hours_end`**: format `HH:MM`, czas **lokalny** komputera; obsługiwane okno przez północ (np. `23:00`–`07:00`).
+- ENV: `ASSY_QUIET_HOURS_ENABLED`, `ASSY_QUIET_HOURS_START`, `ASSY_QUIET_HOURS_END`.
+- Stan „aktywna cisza teraz”: pole `quiet_hours` w odpowiedzi `GET /api/v1/status`.
+
+Obserwator nadal generuje komentarze tekstowo; wyłączony jest **dźwięk** (w tym ping przed komentarzem w godzinach ciszy).
+
+---
+
+## MCP i dostęp do internetu
+
+Projekt jest **offline-first**. Ruch HTTP poza LM Studio na localhost działa **tylko wtedy**, gdy:
+
+1. W konfiguracji **`mcp.enabled: true`** (ENV: `ASSY_MCP__ENABLED`).
+2. Opcjonalna lista **`mcp.tools_enabled`** nie wyklucza danego narzędzia (pusta lista = wszystkie zarejestrowane przy włączonym MCP).
+3. Narzędzia **`web_search`** i **`web_scraper`** nie są wywoływane z pętli obserwatora ekranu — sieć pojawia się przy **function calling** w turze czatu oraz w **jawnych ścieżkach** (np. dzienne meta, hint ligi, import buildu z URL).
+
+**Polityka krótka:**
+
+- Tryb offline (`online: false` w stanie orkiestratora) blokuje `web_search` / `web_scraper`.
+- Limit **`mcp.web_search_calls_per_minute`** obejmuje **łącznie** oba narzędzia (ochrona przed zalewem żądań).
+- **`mcp.scraper_allowed_hosts`**: opcjonalna lista hostów (np. `maxroll.gg`) — gdy niepusta, `web_scraper` akceptuje tylko te domeny (bez prefiksu `www.` w konfiguracji — dopasowanie jest normalizowane).
+- Logi backendu: wywołania sieciowe MCP zapisują **prefiks skrótu argumentów** (SHA-256), bez treści zapytania w plain text (`mcp_network_call`).
+
+Szczegóły backlogu produktowego: [docs/plan/FUTURE_IMPROVEMENTS.md](plan/FUTURE_IMPROVEMENTS.md).
+
+---
+
 ## Szybka ścieżka: co zrobić po kolei
 
 ### Faza A — jednorazowo na komputerze

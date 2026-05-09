@@ -331,6 +331,13 @@ class MCPConfig(BaseModel):
         le=168,
         description="Minimalny odstęp między checkami dla tej samej gry (gdy force=false).",
     )
+    scraper_allowed_hosts: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Opcjonalna lista dozwolonych hostów dla web_scraper (bez protokołu, np. maxroll.gg). "
+            "Pusta lista = brak dodatkowego filtru (tylko http/https)."
+        ),
+    )
 
 
 class ConfigSchema(BaseModel):
@@ -367,7 +374,11 @@ class ConfigSchema(BaseModel):
     # Semantic memory (T8)
     memory: MemoryConfig = MemoryConfig()
     
-    # Quiet hours (cross-midnight support)
+    # Quiet hours (cross-midnight support) — gdy `quiet_hours_enabled`, bez TTS w oknie czasu (tekst na overlay)
+    quiet_hours_enabled: bool = Field(
+        default=False,
+        description="Gdy True — w godzinach quiet_hours_* wyłączany jest TTS (czat, obserwator, REST voice); komunikat na overlay.",
+    )
     quiet_hours_start: str = "23:00"  # HH:MM format
     quiet_hours_end: str = "07:00"    # HH:MM format
     

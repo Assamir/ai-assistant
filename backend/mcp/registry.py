@@ -306,7 +306,7 @@ def build_default_tool_registry(
     from backend.mcp.web_search import _TOOL_WEB_SEARCH, tool_web_search
 
     mcp = mcp_cfg or MCPConfig()
-    configure_web_scraper(use_playwright_fallback=mcp.use_playwright_fallback)
+    configure_web_scraper(use_playwright_fallback=mcp.use_playwright_fallback, allowed_hosts=list(mcp.scraper_allowed_hosts))
     reg = ToolRegistry(
         db_path=str(db_path) if db_path else None,
         cache_ttl_seconds=mcp.cache_ttl_seconds,

@@ -67,6 +67,40 @@ async def test_web_scraper_cache_second_call(monkeypatch, migrated_db_path):
 
 
 @pytest.mark.asyncio
+async def test_web_scraper_host_allowlist(monkeypatch, migrated_db_path):
+    async def fake_get(_url: str) -> str:
+        return "<html><body>secret content here long enough for tests minimum threshold one two three four five</body></html>"
+
+    monkeypatch.setattr(web_scraper_mod, "_http_get_html", fake_get)
+
+    reg = build_default_tool_registry(
+        db_path=migrated_db_path,
+        mcp_cfg=MCPConfig(enabled=True, scraper_allowed_hosts=["example.com"]),
+    )
+    ok = await reg.invoke("web_scraper", {"url": "https://example.com/a"})
+    assert ok["ok"] is True
+
+    bad = await reg.invoke("web_scraper", {"url": "https://other.test/a"})
+    assert bad["ok"] is False
+    assert bad.get("error") == "host_not_allowed"
+
+
+@pytest.mark.asyncio
+async def test_web_scraper_host_allowlist_www_normalized(monkeypatch, migrated_db_path):
+    async def fake_get(_url: str) -> str:
+        return "<html><body>x</body></html>" * 50
+
+    monkeypatch.setattr(web_scraper_mod, "_http_get_html", fake_get)
+
+    reg = build_default_tool_registry(
+        db_path=migrated_db_path,
+        mcp_cfg=MCPConfig(enabled=True, scraper_allowed_hosts=["maxroll.gg"]),
+    )
+    res = await reg.invoke("web_scraper", {"url": "https://www.maxroll.gg/poe2"})
+    assert res["ok"] is True
+
+
+@pytest.mark.asyncio
 async def test_web_scraper_disabled_without_mcp():
     reg = build_default_tool_registry(mcp_cfg=MCPConfig(enabled=False))
     names = {t["function"]["name"] for t in reg.openai_tools()}

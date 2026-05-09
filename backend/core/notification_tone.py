@@ -32,3 +32,15 @@ def generate_ping_wav(
             frames += iv.to_bytes(2, byteorder="little", signed=True)
         wf.writeframes(bytes(frames))
     return buf.getvalue()
+
+
+def generate_silence_wav(*, duration_ms: int = 80, sample_rate: int = 22050) -> bytes:
+    """Krótki ciszy WAV (mono 16-bit) — REST/TTS podczas ciszy nocnej bez kosztu Piper."""
+    n = max(1, int(sample_rate * duration_ms / 1000))
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(b"\x00\x00" * n)
+    return buf.getvalue()

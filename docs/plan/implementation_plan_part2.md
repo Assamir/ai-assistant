@@ -1,7 +1,7 @@
 # Assystent — Plan Implementacji: Fazy 2–3, Testy, Modele AI
 
 > **Status:** v1.21 — 2026-05-09 (synchronizacja z kodem, CHANGELOG, DECISIONS_LOG)
-> **Kontekst:** [Plan główny (Faza 1)](implementation_plan.md) · [ENV_SETUP](../ENV_SETUP.md) · [TEST_PLAN](TEST_PLAN.md) · [DEFINITION_OF_DONE](DEFINITION_OF_DONE.md) · [RISK_REGISTER](RISK_REGISTER.md) · [ROADMAP](IMPLEMENTATION_ROADMAP.md)
+> **Kontekst:** [Plan główny (Faza 1)](implementation_plan.md) · [ENV_SETUP](../ENV_SETUP.md) · [TEST_PLAN](TEST_PLAN.md) · [DEFINITION_OF_DONE](DEFINITION_OF_DONE.md) · [RISK_REGISTER](RISK_REGISTER.md) · [ROADMAP](IMPLEMENTATION_ROADMAP.md) · [FUTURE_IMPROVEMENTS](FUTURE_IMPROVEMENTS.md)
 
 ---
 
@@ -14,21 +14,21 @@
 | **T6** Observer / gry     | 🟢 ~95% | VLM fallback, `game_detections`, auto league hint, auto session report (config), notification sound przed komentarzem                                                                                                                      |
 | **T7** MCP rozszerzenia   | 🟢 ~95% | Narzędzia + cache + rate; `tool_calls` w SQLite; mirror wyników narzędzi jako `user` (`ai_runtime.mirror_tool_results_as_user`)                                                                                                         |
 | **T8** Memory / profil    | 🟢 ~95% | CMD-19/20/08 → logika profilu; import buildu (CMD-22 + REST); archiwum; daily checks; FIFO w Chroma (`prune_*`) wg limitów                                                                                                                |
-| **T9–T14** Frontend       | 🟢 ~95% | NSIS (client/full), overlay, Status w panelu, sentence-streaming TTS po stronie audio, spring bones drugi pass. **Do rozważenia przed releasem:** rim/MToon, twardszy auth `PUT /config`, formalne benchmarki FPS/latency                 |
+| **T9–T14** Frontend       | 🟢 ~95% | NSIS (client/full), overlay, Status w panelu, sentence-streaming TTS po stronie audio, spring bones drugi pass. **Do rozważenia przed releasem:** twardszy auth `PUT /config`, formalne benchmarki FPS/latency ([FUTURE_IMPROVEMENTS.md](FUTURE_IMPROVEMENTS.md) IMP-04)                 |
 
 
 **Kamienie M2 i M3** — backend i klient są na poziomie „feature complete” wg `CHANGELOG [Unreleased]`; do **release**: smoke wizarda, uzupełnienie placeholdera VRM w `LICENSES.md`, pomiary wydajności (opcjonalnie dokument).
 
 **Zamknięte od v1.20:** komendy głosowe → REST (ligę/meta/podsumowanie sesji), crossfade/aura, README — patrz CHANGELOG.
 
-> **Następny krok (v1.21+):** opcjonalnie shader rim/MToon; **auth** dla panelu konfiguracji; **Credits** w UI / domknięcie atrybucji VRM (DECISIONS_LOG).
+> **Następny krok (v1.21+):** **auth** dla panelu konfiguracji; **Credits** w UI / domknięcie atrybucji VRM (DECISIONS_LOG). Backlog rozwojowy: [FUTURE_IMPROVEMENTS.md](FUTURE_IMPROVEMENTS.md).
 
 ---
 
 ## Pozostały zakres (aktualizacja 2026-05-09)
 
 - **Produkt / release:** wizard smoke, dokumentacja użytkowa (m.in. `PORADNIK_UZYTKOWNIKA.md`), wersjonowanie CHANGELOG przy tagu.
-- **Opcjonalnie:** shader na siatce VRM, dalsze polish spring bones, formalne metryki DoD (FPS, PTT→audio).
+- **Opcjonalnie:** dalszy polish animacji (spring bones), formalne metryki DoD (FPS, PTT→audio) — [FUTURE_IMPROVEMENTS.md](FUTURE_IMPROVEMENTS.md) IMP-04.
 - **Dokumentacja vs kod:** `pygetwindow` tylko w starych spec — rzeczywisty model: indeks monitora + Electron (`DECISIONS_LOG` § Stan implementacji); custom komendy YAML→MCP — **future**.
 
 ## 6. Faza 2 — Vision, MCP, Memory (T5–T8)

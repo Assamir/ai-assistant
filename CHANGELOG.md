@@ -6,9 +6,19 @@ All notable changes to this project are documented here. The format is inspired 
 
 ### Documentation
 
+- **`docs/PORADNIK_UZYTKOWNIKA.md`:** rozdziały „Cisza nocna” i „MCP i dostęp do internetu”.
+- **`LICENSES.md`:** sekcja Avatar (VRM) — atrybucja plików z `frontend/resources/` zamiast pojedynczego placeholdera.
+- **`docs/DECISIONS_LOG.md`:** zaktualizowany wiersz quiet hours (runtime + status HTTP).
+
 - **Plan i kryteria “done”:** zaktualizowano `docs/plan/DEFINITION_OF_DONE.md` (v1.1), `docs/plan/implementation_plan.md` (v1.3), `docs/plan/implementation_plan_part2.md` (v1.21) — zgodność ze stanem kodu i `CHANGELOG`. W `docs/DECISIONS_LOG.md` dodano § „Stan implementacji vs dokument (2026-05-09)” (rozjazdy: `pygetwindow`, custom MCP, endpointy downloadu wizarda, quiet hours, Credits).
 
 ### Added
+
+- **Cisza nocna (`quiet_hours_*`):** `quiet_hours_enabled` (domyślnie `false`), okno `quiet_hours_start` / `quiet_hours_end` — bez TTS, komunikat na `text_overlay` (WebSocket czat/PTT, obserwator bez pingu i bez syntezy). REST `voice/process` i `voice/synthesize` zwracają krótki ciszy WAV + nagłówek `X-Quiet-Hours: 1`. Stan w `GET /api/v1/status` → `health.quiet_hours`. Moduł `backend/core/quiet_hours.py`, testy `tests/unit/test_quiet_hours.py`.
+- **MCP — audyt sieciowy:** log `mcp_network_call` z czasem trwania i prefiksem digest argumentów (bez plain-text query) w `web_search` i `web_scraper` (`backend/mcp/network_audit.py`).
+- **`mcp.scraper_allowed_hosts`:** opcjonalna whitelist hostów dla `web_scraper` (normalizacja `www.`); pusta lista = dotychczasowe zachowanie.
+- **Panel konfiguracji:** zakładka „Więcej” — sekcje Credits (odsyłacz do `LICENSES.md`), Internet/MCP (podpowiedzi `mcp.enabled`, limity, scraper), formularz ciszy nocnej z zapisem `PUT /api/v1/config`. Zakładka Status — podgląd stanu ciszy nocnej z snapshotu health.
+- **`docs/plan/PERFORMANCE_BASELINE.md`:** szablon procedury pomiaru FPS i latencji PTT (do uzupełnienia ręcznie).
 
 - **`requirements-vision.txt`:** opcjonalny plik (`-r requirements.txt` + `easyocr`) dla OCR / analizy zrzutów; opisane w `config/config.yaml` i `docs/ENV_SETUP.md`.
 - **`ai_runtime.mirror_tool_results_as_user`:** opcjonalne dublowanie wyniku narzędzia jako wiadomość `user` (LM Studio / słaba obsługa `role: tool`); testy `tests/unit/test_orchestrator_tool_mirror.py`.

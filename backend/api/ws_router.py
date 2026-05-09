@@ -103,12 +103,18 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
 
 
     async def emit_chunks(text_body: str, emotion: str) -> None:
+        from backend.core.quiet_hours import quiet_hours_suppresses_voice
         from backend.core.tts_streaming import sentence_split
 
         synth = getattr(ctx, "tts_engine", None)
         trimmed = text_body.strip()
         if trimmed:
             await mgr.send_to_session(sid, "assistant_reply_text", {"text": trimmed})
+
+        qh = quiet_hours_suppresses_voice(ctx.config)
+        if trimmed and qh:
+            await mgr.send_to_session(sid, "text_overlay", {"text": trimmed})
+            return
 
         if trimmed and synth is not None:
             stride = max(512, getattr(ctx.config.tts, "chunk_bytes", 4096))
