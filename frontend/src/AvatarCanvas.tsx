@@ -15,29 +15,68 @@ import {
 
 const EMOTION_CROSSFADE_SEC = 0.42;
 
+// ---------------------------------------------------------------------------
+// Per-emotion body animation parameters
+// ---------------------------------------------------------------------------
+
+interface BodyParams {
+  swayAmpX: number;
+  swayAmpZ: number;
+  swayFreqX: number;
+  swayFreqZ: number;
+  headTiltZ: number;
+  headNodX: number;
+}
+
+const DEFAULT_BODY: BodyParams = {
+  swayAmpX: 0.01,
+  swayAmpZ: 0.0035,
+  swayFreqX: 0.95,
+  swayFreqZ: 0.42,
+  headTiltZ: 0,
+  headNodX: 0,
+};
+
+const EMOTION_BODY: Record<string, BodyParams> = {
+  neutral:      { swayAmpX: 0.010, swayAmpZ: 0.0035, swayFreqX: 0.95, swayFreqZ: 0.42, headTiltZ:  0.00, headNodX:  0.00 },
+  happy:        { swayAmpX: 0.012, swayAmpZ: 0.0050, swayFreqX: 1.10, swayFreqZ: 0.65, headTiltZ:  0.00, headNodX:  0.00 },
+  amused:       { swayAmpX: 0.012, swayAmpZ: 0.0050, swayFreqX: 1.10, swayFreqZ: 0.65, headTiltZ:  0.04, headNodX:  0.00 },
+  proud:        { swayAmpX: 0.010, swayAmpZ: 0.0040, swayFreqX: 0.80, swayFreqZ: 0.50, headTiltZ:  0.00, headNodX: -0.03 },
+  sympathetic:  { swayAmpX: 0.008, swayAmpZ: 0.0040, swayFreqX: 0.70, swayFreqZ: 0.40, headTiltZ:  0.03, headNodX:  0.00 },
+  sad:          { swayAmpX: 0.006, swayAmpZ: 0.0020, swayFreqX: 0.45, swayFreqZ: 0.25, headTiltZ:  0.00, headNodX:  0.05 },
+  disappointed: { swayAmpX: 0.005, swayAmpZ: 0.0020, swayFreqX: 0.40, swayFreqZ: 0.20, headTiltZ: -0.03, headNodX:  0.04 },
+  angry:        { swayAmpX: 0.013, swayAmpZ: 0.0040, swayFreqX: 1.20, swayFreqZ: 0.90, headTiltZ:  0.00, headNodX:  0.02 },
+  disgusted:    { swayAmpX: 0.010, swayAmpZ: 0.0040, swayFreqX: 0.90, swayFreqZ: 0.60, headTiltZ: -0.04, headNodX:  0.00 },
+  excited:      { swayAmpX: 0.018, swayAmpZ: 0.0080, swayFreqX: 1.50, swayFreqZ: 1.00, headTiltZ:  0.00, headNodX:  0.00 },
+  scared:       { swayAmpX: 0.015, swayAmpZ: 0.0050, swayFreqX: 2.20, swayFreqZ: 1.60, headTiltZ:  0.00, headNodX:  0.03 },
+  surprised:    { swayAmpX: 0.014, swayAmpZ: 0.0060, swayFreqX: 1.50, swayFreqZ: 1.00, headTiltZ:  0.00, headNodX: -0.04 },
+  nervous:      { swayAmpX: 0.013, swayAmpZ: 0.0050, swayFreqX: 1.80, swayFreqZ: 1.30, headTiltZ:  0.02, headNodX:  0.00 },
+  thinking:     { swayAmpX: 0.006, swayAmpZ: 0.0020, swayFreqX: 0.50, swayFreqZ: 0.30, headTiltZ:  0.06, headNodX:  0.01 },
+  confused:     { swayAmpX: 0.008, swayAmpZ: 0.0030, swayFreqX: 0.60, swayFreqZ: 0.40, headTiltZ:  0.05, headNodX:  0.02 },
+  nostalgic:    { swayAmpX: 0.007, swayAmpZ: 0.0030, swayFreqX: 0.50, swayFreqZ: 0.35, headTiltZ:  0.03, headNodX:  0.00 },
+  sarcastic:    { swayAmpX: 0.009, swayAmpZ: 0.0040, swayFreqX: 0.70, swayFreqZ: 0.50, headTiltZ: -0.04, headNodX:  0.00 },
+};
+
+const IDLE_SWAY_SPRING = 9;
+
+function randomBlinkDelay() {
+  return 2.5 + Math.random() * 5;
+}
+
 interface VrmRootProps {
   url: string;
   emotion: string;
   lipSyncLevel: number;
 }
 
-/** Wygładzone „sprężynowe” odchylenie tułowia od rest pose (mniej sztywny niż surowy sin/cos na klatkę). */
-const IDLE_SWAY_SPRING = 9;
-/** ~30% ciszej niż poprzednie stałe obrótki przy rest (subtelniejszy idle). */
-const IDLE_SWAY_AMP_X = 0.01;
-const IDLE_SWAY_AMP_Z = 0.0035;
-
-function randomBlinkDelay() {
-  return 2.5 + Math.random() * 5;
-}
-
 function VrmRoot({ url, emotion, lipSyncLevel }: VrmRootProps) {
   const vrmRef = useRef<VRM | null>(null);
   const idleBonesRef = useRef<{ bone: THREE.Object3D; rest: THREE.Quaternion }[]>([]);
+  const headBonesRef = useRef<{ bone: THREE.Object3D; rest: THREE.Quaternion }[]>([]);
   const idleSwayRef = useRef({ x: 0, z: 0 });
-  const nextBlinkRef = useRef(randomBlinkDelay());
-  const blinkPhaseRef = useRef<"open" | "closing" | "opening">("open");
-  const blinkValueRef = useRef(0);
+
+  // Smoothly interpolated body params (emotion transitions)
+  const bodyParamsCurRef = useRef<BodyParams>({ ...DEFAULT_BODY });
 
   const latestEmotionRef = useRef(emotion);
   latestEmotionRef.current = emotion;
@@ -48,6 +87,10 @@ function VrmRoot({ url, emotion, lipSyncLevel }: VrmRootProps) {
   const endSnapRef = useRef(resolveWeights(emotion));
   const lastRenderedRef = useRef(resolveWeights(emotion));
 
+  const nextBlinkRef = useRef(randomBlinkDelay());
+  const blinkPhaseRef = useRef<"open" | "closing" | "opening">("open");
+  const blinkValueRef = useRef(0);
+
   const gltf = useLoader(GLTFLoader, url, (loader) => {
     loader.register((parser) => new VRMLoaderPlugin(parser));
   });
@@ -56,12 +99,19 @@ function VrmRoot({ url, emotion, lipSyncLevel }: VrmRootProps) {
     const raw = gltf.userData.vrm as VRM | undefined;
     vrmRef.current = raw ?? null;
     idleBonesRef.current = [];
+    headBonesRef.current = [];
     if (raw?.humanoid) {
       const h = raw.humanoid;
       for (const name of ["chest", "spine", "hips"] as const) {
         const node = h.getNormalizedBoneNode(name);
         if (node) {
           idleBonesRef.current.push({ bone: node, rest: node.quaternion.clone() });
+        }
+      }
+      for (const name of ["neck", "head"] as const) {
+        const node = h.getNormalizedBoneNode(name);
+        if (node) {
+          headBonesRef.current.push({ bone: node, rest: node.quaternion.clone() });
         }
       }
     }
@@ -76,6 +126,7 @@ function VrmRoot({ url, emotion, lipSyncLevel }: VrmRootProps) {
     return () => {
       vrmRef.current = null;
       idleBonesRef.current = [];
+      headBonesRef.current = [];
       idleSwayRef.current = { x: 0, z: 0 };
       nextBlinkRef.current = randomBlinkDelay();
       blinkPhaseRef.current = "open";
@@ -110,9 +161,23 @@ function VrmRoot({ url, emotion, lipSyncLevel }: VrmRootProps) {
     }
     vrm.update(delta);
     const t = state.clock.elapsedTime;
+
+    // --- Smooth body params toward target emotion ---
+    const emoKey = normalizeEmotionKey(latestEmotionRef.current);
+    const targetBody = EMOTION_BODY[emoKey] ?? DEFAULT_BODY;
+    const cur = bodyParamsCurRef.current;
+    const bk = 1 - Math.exp(-delta * 1.5);
+    cur.swayAmpX += (targetBody.swayAmpX - cur.swayAmpX) * bk;
+    cur.swayAmpZ += (targetBody.swayAmpZ - cur.swayAmpZ) * bk;
+    cur.swayFreqX += (targetBody.swayFreqX - cur.swayFreqX) * bk;
+    cur.swayFreqZ += (targetBody.swayFreqZ - cur.swayFreqZ) * bk;
+    cur.headTiltZ += (targetBody.headTiltZ - cur.headTiltZ) * bk;
+    cur.headNodX += (targetBody.headNodX - cur.headNodX) * bk;
+
+    // --- Body sway (spring-damped) ---
     const sway = idleSwayRef.current;
-    const targetX = Math.sin(t * 0.95) * IDLE_SWAY_AMP_X;
-    const targetZ = Math.cos(t * 0.42) * IDLE_SWAY_AMP_Z;
+    const targetX = Math.sin(t * cur.swayFreqX) * cur.swayAmpX;
+    const targetZ = Math.cos(t * cur.swayFreqZ) * cur.swayAmpZ;
     const k = 1 - Math.exp(-delta * IDLE_SWAY_SPRING);
     sway.x += (targetX - sway.x) * k;
     sway.z += (targetZ - sway.z) * k;
@@ -121,11 +186,19 @@ function VrmRoot({ url, emotion, lipSyncLevel }: VrmRootProps) {
       bone.rotateX(sway.x);
       bone.rotateZ(sway.z);
     }
+
+    // --- Head animation: sway-follow + emotion tilt ---
+    for (const { bone, rest } of headBonesRef.current) {
+      bone.quaternion.copy(rest);
+      bone.rotateX(sway.x * 0.35 + cur.headNodX);
+      bone.rotateZ(sway.z * 0.25 + cur.headTiltZ);
+    }
+
+    // --- Emotion expression crossfade ---
     const em = vrm.expressionManager;
     if (!em) {
       return;
     }
-
     const rate = EMOTION_CROSSFADE_SEC > 1e-4 ? 1 / EMOTION_CROSSFADE_SEC : 1e6;
     blendRef.current = Math.min(1, blendRef.current + delta * rate);
     const u = easeOutCubic(blendRef.current);
@@ -135,15 +208,15 @@ function VrmRoot({ url, emotion, lipSyncLevel }: VrmRootProps) {
     for (const [name, w] of Object.entries(blended)) {
       em.setValue(name, w);
     }
-
     lastRenderedRef.current = blended;
 
+    // --- Lip sync ---
     const lip = lipSyncLevel > 0.035 ? Math.min(1, lipSyncLevel * 0.95) : 0;
     if (lip > 0) {
       em.setValue("aa", lip);
     }
 
-    // Idle blink — random interval, quick close/open
+    // --- Idle blink (random interval, quick close/open) ---
     if (blinkPhaseRef.current === "open") {
       nextBlinkRef.current -= delta;
       if (nextBlinkRef.current <= 0) {
@@ -189,7 +262,6 @@ const AURA_PALETTE: Record<
   surprised: { hemisphereSky: "#fff0d8", key: "#ffdc9a", fill: "#9ae0ff" },
 };
 
-/** Każdy klucz z `emotions.json` → rodzina palety (`normalizeEmotionKey` zwraca klucz z mapy emocji). */
 const AURA_FAMILY_BY_EMOTION: Record<string, keyof typeof AURA_PALETTE> = {
   neutral: "neutral",
   happy: "happy",
@@ -268,13 +340,24 @@ interface AvatarCanvasProps {
   vrmUrl: string;
   emotion: string;
   lipSyncLevel: number;
+  containerStyle?: React.CSSProperties;
 }
 
-export function AvatarCanvas({ vrmUrl, emotion, lipSyncLevel }: AvatarCanvasProps) {
+export function AvatarCanvas({ vrmUrl, emotion, lipSyncLevel, containerStyle }: AvatarCanvasProps) {
   const trimmed = vrmUrl.trim();
 
+  const defaultStyle: React.CSSProperties = {
+    width: "100%",
+    height: 340,
+    borderRadius: 10,
+    overflow: "hidden",
+    background: "linear-gradient(180deg, #1a1525 0%, #0d0b12 100%)",
+  };
+
+  const mergedStyle = containerStyle ? { ...defaultStyle, ...containerStyle } : defaultStyle;
+
   return (
-    <div style={{ width: "100%", height: 340, borderRadius: 10, overflow: "hidden", background: "linear-gradient(180deg, #1a1525 0%, #0d0b12 100%)" }}>
+    <div style={mergedStyle}>
       {trimmed ? (
         <Canvas
           dpr={[1, 2]}
@@ -301,7 +384,7 @@ export function AvatarCanvas({ vrmUrl, emotion, lipSyncLevel }: AvatarCanvasProp
         </Canvas>
       ) : (
         <div style={{ height: "100%", display: "grid", placeItems: "center", color: "#9b92af", fontSize: 14, padding: "0 1.5rem", textAlign: "center" }}>
-          Brak modelu VRM — ustaw adres w zakładce „Avatar” (np. URL do pliku .vrm).
+          Brak modelu VRM — ustaw adres w oknie konfiguracji.
         </div>
       )}
     </div>

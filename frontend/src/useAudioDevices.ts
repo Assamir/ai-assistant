@@ -7,6 +7,7 @@ export interface AudioDeviceInfo {
 
 export function useAudioDevices() {
   const [micDevices, setMicDevices] = useState<AudioDeviceInfo[]>([]);
+  const [speakerDevices, setSpeakerDevices] = useState<AudioDeviceInfo[]>([]);
 
   const refresh = useCallback(async () => {
     if (!navigator.mediaDevices?.enumerateDevices) {
@@ -18,11 +19,19 @@ export function useAudioDevices() {
         .filter((d) => d.kind === "audioinput")
         .map((d) => ({
           deviceId: d.deviceId,
-          label: d.label || (d.deviceId === "default" ? "Domyślny mikrofon" : d.deviceId),
+          label: d.label || (d.deviceId === "default" ? "Domyslny mikrofon" : d.deviceId),
+        }));
+      const speakers = devices
+        .filter((d) => d.kind === "audiooutput")
+        .map((d) => ({
+          deviceId: d.deviceId,
+          label: d.label || (d.deviceId === "default" ? "Domyslne glosniki" : d.deviceId),
         }));
       setMicDevices(mics);
+      setSpeakerDevices(speakers);
     } catch {
       setMicDevices([]);
+      setSpeakerDevices([]);
     }
   }, []);
 
@@ -32,5 +41,5 @@ export function useAudioDevices() {
     return () => navigator.mediaDevices?.removeEventListener("devicechange", refresh);
   }, [refresh]);
 
-  return { micDevices, refreshMicDevices: refresh };
+  return { micDevices, speakerDevices, refreshMicDevices: refresh };
 }

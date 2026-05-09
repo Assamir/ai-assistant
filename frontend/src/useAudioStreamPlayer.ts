@@ -20,11 +20,11 @@ function readStoredVolume(): number {
 type AudioCtxWithSink = AudioContext & { setSinkId?: (id: string) => Promise<void> };
 
 /**
- * Składa kolejne `audio_stream.chunk_base64` z WS (jeden WAV w Base64, pocięty na struny),
- * odtwarza przez Web Audio API i udostępnia poziom RMS do lip-sync.
- * Domyślne urządzenie wyjściowe: `setSinkId("")` gdy przeglądarka/Electron to wspiera.
+ * Sklada kolejne `audio_stream.chunk_base64` z WS (jeden WAV w Base64, pociety na struny),
+ * odtwarza przez Web Audio API i udostepnia poziom RMS do lip-sync.
+ * Domyslne urzadzenie wyjsciowe: `setSinkId("")` gdy przegladarka/Electron to wspiera.
  */
-export function useAudioStreamPlayer() {
+export function useAudioStreamPlayer(outputDeviceId?: string) {
   const bufferRef = useRef("");
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const genRef = useRef(0);
@@ -82,16 +82,18 @@ export function useAudioStreamPlayer() {
     interruptPlayback();
   }, [interruptPlayback]);
 
+  const sinkId = outputDeviceId?.trim() || "";
+
   const prime = useCallback(async () => {
     const ctx = audioCtxRef.current ?? new AudioContext({ latencyHint: "playback" });
     audioCtxRef.current = ctx;
     try {
       const c = ctx as AudioCtxWithSink;
       if (typeof c.setSinkId === "function") {
-        await c.setSinkId("");
+        await c.setSinkId(sinkId);
       }
     } catch {
-      /* starsze WebView / polityka — zostaw domyślne urządzenie systemowe */
+      /* starsze WebView / polityka */
     }
     try {
       await ctx.resume();
@@ -99,7 +101,16 @@ export function useAudioStreamPlayer() {
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [sinkId]);
+
+  useEffect(() => {
+    const ctx = audioCtxRef.current;
+    if (!ctx) return;
+    const c = ctx as AudioCtxWithSink;
+    if (typeof c.setSinkId === "function") {
+      c.setSinkId(sinkId).catch(() => {});
+    }
+  }, [sinkId]);
 
   const playFromWavBytes = useCallback(
     async (bytes: Uint8Array, myGen: number) => {
@@ -121,7 +132,7 @@ export function useAudioStreamPlayer() {
       try {
         const c = ctx as AudioCtxWithSink;
         if (typeof c.setSinkId === "function") {
-          await c.setSinkId("");
+          await c.setSinkId(sinkId);
         }
       } catch {
         /* ignore */

@@ -9,12 +9,21 @@
         margin: 0;
         background: #0f0c14;
       }
+      body.avatar-overlay {
+        background: transparent;
+      }
       @media (max-width: 880px) {
         .assystent-grid {
           grid-template-columns: 1fr !important;
         }
       }
     </style>
+    <script>
+      /* Avatar window: transparent body before React hydrates to prevent flash */
+      if (window.location.hash !== '#config') {
+        document.body.classList.add('avatar-overlay');
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

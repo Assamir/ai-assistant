@@ -21,8 +21,8 @@ let bundledBackendProc = null;
 // ---------------------------------------------------------------------------
 
 const STATE_FILE = path.join(app.getPath("userData"), "window-state.json");
-const DEFAULT_W = 520;
-const DEFAULT_H = 720;
+const DEFAULT_W = 400;
+const DEFAULT_H = 600;
 
 function loadWindowState() {
   try {
@@ -262,6 +262,11 @@ function createWindow() {
     x: typeof saved.x === "number" ? saved.x : undefined,
     y: typeof saved.y === "number" ? saved.y : undefined,
     show: true,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    resizable: true,
+    skipTaskbar: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,

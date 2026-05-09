@@ -20,6 +20,7 @@ import { joinResourcesPath } from "./piperVoicesPaths";
 const VRM_STORAGE_KEY = "assystent.vrmUrl";
 const API_BASE_STORAGE_KEY = "assystent.apiBaseUrl";
 const MIC_DEVICE_STORAGE_KEY = "assystent.micDeviceId";
+const SPEAKER_DEVICE_STORAGE_KEY = "assystent.outputDeviceId";
 
 function readInitialVrmUrl(): string {
   if (typeof window === "undefined") {
@@ -168,6 +169,7 @@ function observerHintsFromStatusJson(data: unknown): string[] {
 }
 
 const isConfigView = typeof window !== "undefined" && window.location.hash === "#config";
+const isElectron = typeof window !== "undefined" && !!window.assystent;
 
 export function App() {
   const [log, setLog] = useState<string[]>([]);
@@ -209,6 +211,9 @@ export function App() {
   const [micDeviceId, setMicDeviceId] = useState<string>(() =>
     typeof window !== "undefined" ? localStorage.getItem(MIC_DEVICE_STORAGE_KEY) ?? "" : "",
   );
+  const [outputDeviceId, setOutputDeviceId] = useState<string>(() =>
+    typeof window !== "undefined" ? localStorage.getItem(SPEAKER_DEVICE_STORAGE_KEY) ?? "" : "",
+  );
   const dragHandleRef = useRef<HTMLDivElement>(null);
   const pttCycleRunningRef = useRef(false);
   const pttReleasedEarlyRef = useRef(false);
@@ -239,8 +244,8 @@ export function App() {
     playbackError,
     outputVolume,
     setOutputVolume,
-  } = useAudioStreamPlayer();
-  const { micDevices, refreshMicDevices } = useAudioDevices();
+  } = useAudioStreamPlayer(outputDeviceId || undefined);
+  const { micDevices, speakerDevices, refreshMicDevices } = useAudioDevices();
   const { pttBusy, pttError, setPttError, pttArm, pttFinalize } = usePttRecorder({ deviceId: micDeviceId || undefined });
 
   useEffect(() => {
@@ -652,6 +657,276 @@ export function App() {
     );
   }
 
+  if (isElectron && !isConfigView) {
+    const dotColor = isSpeaking ? "#22c55e" : sleeping ? "#eab308" : "#7c3aed";
+    const overlayBtnBase: React.CSSProperties = {
+      padding: "0.3rem 0.65rem",
+      borderRadius: 6,
+      border: "1px solid #4a5568",
+      background: "rgba(30,25,42,0.8)",
+      color: "#b8afc8",
+      fontSize: 12,
+      cursor: "pointer",
+      flexShrink: 0,
+      userSelect: "none",
+    };
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          display: "flex",
+          flexDirection: "column",
+          background: "transparent",
+          userSelect: "none",
+        }}
+      >
+        {/* Drag handle */}
+        <div
+          ref={dragHandleRef}
+          title="Przeciągnij aby przesunąć okno"
+          style={{
+            height: 28,
+            background: "rgba(10,8,18,0.45)",
+            borderRadius: "10px 10px 0 0",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "grab",
+            flexShrink: 0,
+            color: "#5a5278",
+            fontSize: 11,
+            letterSpacing: "0.25rem",
+          }}
+        >
+          ···
+        </div>
+
+        {/* Avatar area */}
+        <div style={{ position: "relative", flex: 1, overflow: "hidden" }}>
+          <AvatarCanvas
+            vrmUrl={vrmUrl}
+            emotion={sleeping ? "neutral" : emotion}
+            lipSyncLevel={isSpeaking ? mouthLevel : 0}
+            containerStyle={{ width: "100%", height: "100%", background: "transparent", borderRadius: 0 }}
+          />
+
+          {/* Status dot */}
+          <div
+            style={{
+              position: "absolute",
+              top: 8,
+              right: 10,
+              width: 9,
+              height: 9,
+              borderRadius: "50%",
+              background: dotColor,
+              boxShadow: `0 0 6px ${dotColor}`,
+              pointerEvents: "none",
+            }}
+          />
+
+          {/* Profile banner */}
+          {profileBanner ? (
+            <div
+              style={{
+                position: "absolute",
+                top: 8,
+                left: 8,
+                right: 24,
+                padding: "0.5rem 0.75rem",
+                borderRadius: 8,
+                border: "1px solid #6b5b3e",
+                background: "rgba(212,168,90,0.14)",
+                backdropFilter: "blur(4px)",
+                color: "#f0e6d4",
+                fontSize: 12,
+                lineHeight: 1.4,
+              }}
+            >
+              <strong style={{ color: "#f5d799" }}>{profileBanner.title}</strong>
+              <div style={{ marginTop: "0.25rem" }}>{profileBanner.detail}</div>
+              <button
+                type="button"
+                onClick={dismissProfileBanner}
+                style={{
+                  marginTop: "0.35rem",
+                  padding: "0.2rem 0.5rem",
+                  fontSize: 11,
+                  borderRadius: 4,
+                  border: "1px solid #6b5b3e",
+                  background: "transparent",
+                  color: "#c8a870",
+                  cursor: "pointer",
+                }}
+              >
+                Zamknij
+              </button>
+            </div>
+          ) : null}
+
+          {/* Text subtitle overlay */}
+          {(assistantLine || observerLine) ? (
+            <div
+              style={{
+                position: "absolute",
+                bottom: 0,
+                left: 0,
+                right: 0,
+                padding: "0.5rem 0.75rem",
+                background: "rgba(10,8,18,0.68)",
+                color: "#eae6f8",
+                fontSize: 14,
+                lineHeight: 1.5,
+                textAlign: "center",
+                pointerEvents: "none",
+              }}
+            >
+              {assistantLine ?? observerLine}
+            </div>
+          ) : null}
+
+          {/* PTT error toast */}
+          {pttError ? (
+            <div
+              style={{
+                position: "absolute",
+                top: 36,
+                left: 8,
+                right: 8,
+                padding: "0.4rem 0.65rem",
+                borderRadius: 6,
+                background: "rgba(50,18,18,0.88)",
+                border: "1px solid #7a3030",
+                color: "#e898a8",
+                fontSize: 12,
+                lineHeight: 1.4,
+              }}
+            >
+              {pttError}
+            </div>
+          ) : null}
+        </div>
+
+        {/* Bottom control bar */}
+        <div
+          style={{
+            height: 50,
+            background: "rgba(10,8,18,0.78)",
+            backdropFilter: "blur(8px)",
+            display: "flex",
+            alignItems: "center",
+            paddingLeft: "0.45rem",
+            paddingRight: "0.45rem",
+            gap: "0.3rem",
+            flexShrink: 0,
+            borderRadius: "0 0 10px 10px",
+          }}
+        >
+          {/* PTT */}
+          <button
+            type="button"
+            disabled={!wsReady || pttBusy}
+            onPointerDown={(e) => {
+              if (!wsReady || pttBusy) return;
+              if (e.pointerType === "mouse" && e.button !== 0) return;
+              e.preventDefault();
+              const el = e.currentTarget;
+              if (el instanceof HTMLElement) { try { el.setPointerCapture(e.pointerId); } catch { /* ignore */ } }
+              handlePttDown();
+            }}
+            onPointerUp={(e) => {
+              if (e.pointerType === "mouse" && e.button !== 0) return;
+              e.preventDefault();
+              const el = e.currentTarget;
+              if (el instanceof HTMLElement) { try { if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId); } catch { /* ignore */ } }
+              handlePttUp();
+            }}
+            onPointerCancel={(e) => {
+              const el = e.currentTarget;
+              if (el instanceof HTMLElement) { try { if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId); } catch { /* ignore */ } }
+              handlePttUp();
+            }}
+            style={{
+              ...overlayBtnBase,
+              borderColor: "#5c4d8c",
+              background: pttBusy ? "rgba(44,36,64,0.9)" : "#2c2440",
+              color: "#e8e4f0",
+              padding: "0.3rem 0.8rem",
+              touchAction: "manipulation",
+            }}
+          >
+            {pttBusy ? "..." : "PTT"}
+          </button>
+
+          {/* Sleep/wake */}
+          <button
+            type="button"
+            disabled={!wsReady}
+            onClick={() => sendFrame("chat_text", { text: sleeping ? "obudź się" : "idź spać" })}
+            style={{
+              ...overlayBtnBase,
+              borderColor: sleeping ? "#7a6b3e" : "#4a5568",
+              background: sleeping ? "rgba(122,107,62,0.25)" : "rgba(30,25,42,0.8)",
+              color: sleeping ? "#d4b86a" : "#b8afc8",
+            }}
+          >
+            {sleeping ? "Obudź" : "Śpij"}
+          </button>
+
+          {/* Silent mode */}
+          <button
+            type="button"
+            disabled={!wsReady}
+            onClick={() => sendFrame("chat_text", { text: silentMode ? "możesz mówić" : "wycisz się" })}
+            style={{
+              ...overlayBtnBase,
+              borderColor: silentMode ? "#4a7b9b" : "#4a5568",
+              background: silentMode ? "rgba(74,123,155,0.25)" : "rgba(30,25,42,0.8)",
+              color: silentMode ? "#7ab8d4" : "#b8afc8",
+            }}
+          >
+            {silentMode ? "Cichy: WŁ" : "WYŁ"}
+          </button>
+
+          {/* Click-through */}
+          <button
+            type="button"
+            onClick={() => {
+              const next = !clickThrough;
+              window.assystent?.setClickThrough?.(next);
+              setClickThrough(next);
+            }}
+            style={{
+              ...overlayBtnBase,
+              borderColor: clickThrough ? "#4a9b6f" : "#4a5568",
+              background: clickThrough ? "rgba(74,155,111,0.25)" : "rgba(30,25,42,0.8)",
+              color: clickThrough ? "#7dd4a8" : "#b8afc8",
+            }}
+          >
+            {clickThrough ? "Klik: WŁ" : "Klik: WYŁ"}
+          </button>
+
+          <div style={{ flex: 1 }} />
+
+          {/* Config window */}
+          <button
+            type="button"
+            onClick={() => window.assystent?.openConfigWindow?.()}
+            style={{
+              ...overlayBtnBase,
+              padding: "0.3rem 0.6rem",
+              color: "#9a93b0",
+            }}
+            title="Otwórz konfigurację"
+          >
+            ⚙
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <main style={layout}>
       <h1 style={{ fontSize: "1.65rem", fontWeight: 600, margin: "0 0 0.25rem" }}>Assystent</h1>
@@ -730,7 +1005,8 @@ export function App() {
             }}
           >
             <label htmlFor="assystent-tts-volume" style={{ fontSize: 12, color: "#9a93b0", display: "block", marginBottom: "0.35rem" }}>
-              Głośność odpowiedzi (TTS) — domyślne urządzenie audio systemu
+              Głośność odpowiedzi (TTS)
+              {outputDeviceId ? ` — ${speakerDevices.find((d) => d.deviceId === outputDeviceId)?.label ?? outputDeviceId}` : " — domyślne urządzenie audio systemu"}
             </label>
             <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
               <input
@@ -1057,6 +1333,40 @@ export function App() {
                 </button>
               </div>
             </div>
+
+            {speakerDevices.length > 0 ? (
+              <div style={{ marginBottom: "0.75rem" }}>
+                <label htmlFor="assystent-speaker-select" style={{ display: "block", marginBottom: "0.3rem", fontSize: 12, color: "#9a93b0" }}>
+                  Głośniki wyjściowe (TTS)
+                </label>
+                <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+                  <select
+                    id="assystent-speaker-select"
+                    value={outputDeviceId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setOutputDeviceId(id);
+                      localStorage.setItem(SPEAKER_DEVICE_STORAGE_KEY, id);
+                    }}
+                    style={{
+                      flex: 1,
+                      maxWidth: 320,
+                      padding: "0.35rem 0.5rem",
+                      borderRadius: 6,
+                      border: "1px solid #3d3550",
+                      background: "#120f18",
+                      color: "#e8e4f0",
+                      fontSize: 12,
+                    }}
+                  >
+                    <option value="">Domyślne głośniki systemu</option>
+                    {speakerDevices.map((d) => (
+                      <option key={d.deviceId} value={d.deviceId}>{d.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            ) : null}
 
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
               <button
