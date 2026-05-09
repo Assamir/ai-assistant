@@ -211,6 +211,7 @@ export function App() {
   const [observerActive, setObserverActive] = useState(false);
   const [personas, setPersonas] = useState<PersonaInfo[]>([]);
   const [activePersona, setActivePersona] = useState("aria");
+  const [visualState, setVisualState] = useState<"idle" | "listening" | "thinking" | "speaking">("idle");
   const [micDeviceId, setMicDeviceId] = useState<string>(() =>
     typeof window !== "undefined" ? localStorage.getItem(MIC_DEVICE_STORAGE_KEY) ?? "" : "",
   );
@@ -279,6 +280,10 @@ export function App() {
       if (f.event === "audio_duck" && typeof f.payload.target_volume === "number") {
         const rampMs = typeof f.payload.ramp_ms === "number" ? f.payload.ramp_ms : 160;
         duck(f.payload.target_volume, rampMs);
+      }
+      if (f.event === "visual_state" && typeof f.payload.state === "string") {
+        const s = f.payload.state as "idle" | "listening" | "thinking" | "speaking";
+        setVisualState(s);
       }
       if (f.event === "stt_result") {
         setSttBlock({
@@ -713,7 +718,15 @@ export function App() {
   }
 
   if (isElectron && !isConfigView) {
-    const dotColor = isSpeaking ? "#22c55e" : sleeping ? "#eab308" : "#7c3aed";
+    const dotColor = sleeping
+      ? "#eab308"
+      : visualState === "speaking"
+      ? "#22c55e"
+      : visualState === "listening"
+      ? "#3b82f6"
+      : visualState === "thinking"
+      ? "#f59e0b"
+      : "#6b7280";
     const overlayBtnBase: React.CSSProperties = {
       padding: "0.3rem 0.65rem",
       borderRadius: 6,

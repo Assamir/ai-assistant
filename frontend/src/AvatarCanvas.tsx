@@ -194,6 +194,9 @@ function VrmRoot({ url, emotion, lipSyncLevel }: VrmRootProps) {
       bone.rotateZ(sway.z * 0.25 + cur.headTiltZ);
     }
 
+    // Second spring-bone pass so secondary bones react to our manual offsets above
+    vrm.springBoneManager?.update(delta);
+
     // --- Emotion expression crossfade ---
     const em = vrm.expressionManager;
     if (!em) {

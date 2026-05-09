@@ -98,6 +98,10 @@ export function ConfigPanel({
   const [draftVrm, setDraftVrm] = useState(vrmUrl);
   const [draftApi, setDraftApi] = useState(apiBaseUrl);
   const [intervalDraft, setIntervalDraft] = useState("30");
+  const [draftToken, setDraftToken] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem("assystent.configPutToken") ?? "" : "",
+  );
+  const [tokenSaved, setTokenSaved] = useState(false);
 
   React.useEffect(() => {
     setDraftVrm(vrmUrl);
@@ -197,6 +201,43 @@ export function ConfigPanel({
           </button>
           <p style={{ margin: "0.5rem 0 0", fontSize: 12, color: "#8a8198" }}>
             <code>GET /api/v1/status</code>, <code>PUT /api/v1/config</code>. Klucz <code>assystent.apiBaseUrl</code>.
+          </p>
+
+          <label htmlFor="config-put-token" style={{ display: "block", marginTop: "1.1rem", marginBottom: "0.35rem" }}>
+            Token PUT /config (opcjonalny)
+          </label>
+          <input
+            id="config-put-token"
+            type="password"
+            value={draftToken}
+            onChange={(e) => { setDraftToken(e.target.value); setTokenSaved(false); }}
+            placeholder="Zostaw puste gdy backend bez tokenu"
+            autoComplete="off"
+            style={inputStyle}
+          />
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: "0.5rem" }}>
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== "undefined") {
+                  if (draftToken.trim()) {
+                    localStorage.setItem("assystent.configPutToken", draftToken.trim());
+                  } else {
+                    localStorage.removeItem("assystent.configPutToken");
+                  }
+                }
+                setTokenSaved(true);
+              }}
+              style={btnPrimary}
+            >
+              Zapisz token
+            </button>
+            {tokenSaved ? (
+              <span style={{ fontSize: 12, color: "#a8e0c8" }}>Zapisano w localStorage</span>
+            ) : null}
+          </div>
+          <p style={{ margin: "0.4rem 0 0", fontSize: 12, color: "#8a8198" }}>
+            Wymagany gdy backend ma zmienną <code>ASSYSTENT_CONFIG_PUT_TOKEN</code>. Klucz <code>assystent.configPutToken</code>.
           </p>
         </div>
       )}

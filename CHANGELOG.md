@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format is inspired 
 
 ### Added
 
+- **Transparent frameless overlay window (F-AV-02):** Electron główne okno jest teraz `frame: false`, `transparent: true`, `alwaysOnTop: true`. Awatar zajmuje cały obszar okna z przezroczystym tłem. Pasek przeciągania (28 px) u góry; dolny pasek kontrolny (PTT, Śpij, Cichy, Klik-przez, ⚙). Overlay wyświetla napisy asystenta/obserwatora, toast PTT, baner profilu i kolorową kropkę stanu (szary/niebieski/amber/zielony = idle/listening/thinking/speaking).
+- **`visual_state` WS event handling:** Backend wysyła `visual_state` (`idle`|`listening`|`thinking`|`speaking`) przy każdej zmianie fazy. Frontend śledzi `visualState` i aktualizuje kolorową kropkę stanu w overlayowym widoku Electron.
+- **Emocjonalne animacje ciała (proceduralne):** `AvatarCanvas` ma teraz tabelę `EMOTION_BODY` z 17 zestawami parametrów (amplituda/częstotliwość kołysania X/Z, przechylenie głowy Z, skłon X). Parametry są spring-lerped między emocjami (`1 - exp(-delta * 1.5)`). Kości głowy (neck/head) animowane oddzielnie z 35%/25% amplitudy ciała + statyczne przesunięcia z emocji.
+- **Spring bones — drugi pass:** `vrm.springBoneManager?.update(delta)` wywoływane PO ręcznej manipulacji kościami ciała i głowy, dzięki czemu włosy/ubrania reagują na nasze kołysanie.
+- **Selektor urządzenia wejściowego (F-VO-06):** Dropdown mikrofonu w sekcji PTT; wybór zapisywany w `localStorage["assystent.micDeviceId"]`; przekazywany do `getUserMedia` jako `{ exact: deviceId }`.
+- **Selektor urządzenia wyjściowego (F-VO-07):** Dropdown głośników (gdy przeglądarka listuje `audiooutput`); zapisywany w `localStorage["assystent.outputDeviceId"]`; przekazywany do `AudioContext.setSinkId()` w `useAudioStreamPlayer`. Etykieta suwaka głośności pokazuje aktywne urządzenie.
+- **Idle blink (F-AV-05):** `AvatarCanvas` generuje losowe mrugnięcia co 2.5–7.5 s (zamknięcie 70 ms, otwarcie 90 ms) przez blendshape `blink` VRM.
+- **Audio duck przy PTT:** `useAudioStreamPlayer` eksportuje `duck(targetVolume, rampMs)` — płynne ściszanie TTS przez `GainNode.linearRampToValueAtTime` skalowane przez `outputVolume` użytkownika. `App.tsx` obsługuje zdarzenie WS `audio_duck` emitowane przez backend przy `ptt_start` (0.0) i `ptt_end` (1.0).
+- **CMD-21 — „zapomnij o X":** Komenda głosowa usuwająca chunki bazy wiedzy (`SemanticRecall.remove_knowledge_chunks_where`) według `source_path` = `{topic}.md` lub `{slug}.md`. Działa przez `orchestrator._semantic_recall`; zwraca liczbę usuniętych chunkó. REST: `DELETE /api/v1/knowledge?source_path=...` (503 gdy `memory.enabled: false`).
+- **Osobne okno konfiguracyjne (Electron):** `createConfigWindow()` otwiera standardowe okno `BrowserWindow` ładujące `index.html#config`. Dostępne z menu tray, przycisku ⚙ w dolnym pasku overlay i przycisku „Kreator startowy" w widoku przeglądarki.
+- **ConfigPanel — zakładki Obserwator i Persona:**
+  - *Obserwator* — wskaźniki stanu (aktywny/śpiący/cichy), przyciski toggle (obserwator/sen/tryb cichy), pole interwału z przyciskiem „Ustaw".
+  - *Persona* — lista plików `.md` z `GET /api/v1/personas` (id + display_name + aktywna), przycisk „Aktywuj" wysyłający `zmień personę na {id}`.
+- **Config PUT token w UI:** Pole hasła w zakładce Połączenie ConfigPanelu; zapisuje/usuwa `localStorage["assystent.configPutToken"]`.
+- **`GET /api/v1/personas`** — endpoint REST listujący pliki person z `personas/` (id, display_name) oraz aktywną personę z `orchestrator.state`.
+- **Testy CMD-21:** 6 przypadków (basic match, multiword topic, diacritics, empty-topic non-match, cmd_id, priority ordering).
+- **Testy `DELETE /api/v1/knowledge`:** 4 przypadki (503 brak memory, 200 z liczbą, source_path forwarded, zero-removed OK).
+
 - **Voice → REST commands (T8):** Trzy nowe komendy głosowe mapowane bezpośrednio na logikę REST:
   - `CMD-19` — „sprawdź hint ligi" / „sprawdź ligę" → wywołuje `analyze_league_hint` dla aktywnej gry; informuje głosowo o zgodności lub rozbieżności z profilem.
   - `CMD-20` — „sprawdź meta" / „co nowego w grze" → wywołuje `run_daily_meta_check_for_game`; informuje o nowościach lub braku zmian.
