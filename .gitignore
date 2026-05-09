@@ -38,6 +38,7 @@ tools/*piper*.zip
 
 # Frontend (T9)
 frontend/node_modules/
+frontend/node_modules._*/
 frontend/dist/
 electron-release-out/
 frontend/release/

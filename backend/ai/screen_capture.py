@@ -103,7 +103,19 @@ def _mss_probe_ok() -> bool:
         import mss
 
         with mss.MSS() as sct:
-            return len(sct.monitors) > 1
+            if len(sct.monitors) < 2:
+                return False
+            region = sct.monitors[1]
+            shot = sct.grab(region)
+            if shot is None:
+                return False
+            w = getattr(shot, "width", None)
+            h = getattr(shot, "height", None)
+            if w is None and hasattr(shot, "size"):
+                size = getattr(shot, "size")
+                if isinstance(size, (tuple, list)) and len(size) >= 2:
+                    w, h = int(size[0]), int(size[1])
+            return bool(w and h and w > 0 and h > 0)
     except Exception:
         return False
 

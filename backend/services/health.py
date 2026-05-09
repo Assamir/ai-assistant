@@ -20,12 +20,15 @@ def build_health_snapshot(ctx: AppContext) -> Dict[str, Any]:
     breaker = getattr(ctx.llm_client, "_breaker", None)
     cb_state = getattr(breaker, "state", None) if breaker else None
     cb_failures = int(getattr(breaker, "failure_count", 0)) if breaker else 0
+    llm_url = (ctx.config.llm.api_base_url or "").strip()
+    llm_available = bool(llm_url) and cb_state != "OPEN"
 
     components = {
         "llm": {
             "circuit_breaker": cb_state,
             "failure_count": cb_failures,
             "api_base_url": ctx.config.llm.api_base_url,
+            "available": llm_available,
         },
         "stt": {"available": ctx.stt_engine is not None},
         "tts": {"available": ctx.tts_engine is not None},

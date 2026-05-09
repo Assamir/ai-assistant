@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import sys
+from unittest.mock import MagicMock
+
 import pytest
 
 from backend.ai.screen_capture import (
     MINIMAL_PNG_BYTES,
     MockScreenCapture,
     ScreenCaptureError,
+    _mss_probe_ok,
     parse_dxcam_output_info,
 )
 from backend.config.schema import MonitorInfo
@@ -29,6 +33,45 @@ def test_parse_dxcam_output_info_sample():
     assert mons[0].is_primary is True
     assert mons[1].index == 1
     assert mons[1].is_primary is False
+
+
+def test_mss_probe_ok_requires_successful_grab(monkeypatch):
+    class FakeShot:
+        width = 100
+        height = 50
+
+    class FakeSct:
+        monitors = [{"top": 0, "left": 0, "width": 1, "height": 1}, {"top": 0, "left": 0, "width": 100, "height": 50}]
+
+        def grab(self, region):
+            return FakeShot()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    m = MagicMock()
+    m.MSS.return_value = FakeSct()
+    monkeypatch.setitem(sys.modules, "mss", m)
+    assert _mss_probe_ok() is True
+
+
+def test_mss_probe_ok_fails_when_only_virtual_monitor(monkeypatch):
+    class FakeSct:
+        monitors = [{"top": 0, "left": 0, "width": 1, "height": 1}]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    m = MagicMock()
+    m.MSS.return_value = FakeSct()
+    monkeypatch.setitem(sys.modules, "mss", m)
+    assert _mss_probe_ok() is False
 
 
 @pytest.mark.asyncio

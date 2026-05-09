@@ -54,6 +54,21 @@ async def test_api_status_contains_phase(httpx_async: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_api_status_health_payload_shape(httpx_async: AsyncClient):
+    """Panel Status czyta health.overall oraz components (m.in. llm.available)."""
+    res = await httpx_async.get("/api/v1/status")
+    assert res.status_code == 200
+    body = res.json()
+    health = body.get("health") or {}
+    assert health.get("overall") in ("healthy", "degraded")
+    comp = health.get("components") or {}
+    assert "llm" in comp
+    assert isinstance(comp["llm"].get("available"), bool)
+    assert "memory" in body
+    assert "enabled" in body["memory"]
+
+
+@pytest.mark.asyncio
 async def test_api_player_profile_endpoint(httpx_async: AsyncClient):
     res = await httpx_async.get("/api/v1/player-profile")
     assert res.status_code == 200

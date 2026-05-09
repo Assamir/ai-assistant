@@ -67,9 +67,19 @@ const tabs: { id: ConfigTabId; label: string }[] = [
   { id: "status", label: "Status" },
 ];
 
-function StatusBadge({ ok, label }: { ok: boolean | null; label: string }) {
-  const color = ok === null ? "#6d6680" : ok ? "#22c55e" : "#ef4444";
-  const text = ok === null ? "—" : ok ? "OK" : "brak";
+function StatusBadge({
+  ok,
+  label,
+  whenFalse = "bad",
+}: {
+  ok: boolean | null;
+  label: string;
+  /** `off` = celowo wyłączone w konfiguracji (szary), `bad` = brak / błąd (czerwony). */
+  whenFalse?: "bad" | "off";
+}) {
+  const color =
+    ok === null ? "#6d6680" : ok ? "#22c55e" : whenFalse === "off" ? "#6d6680" : "#ef4444";
+  const text = ok === null ? "—" : ok ? "OK" : whenFalse === "off" ? "wył." : "brak";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.3rem 0" }}>
       <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0, display: "inline-block" }} />
@@ -83,24 +93,36 @@ function StatusHealthView({ json }: { json: string }) {
   let data: Record<string, unknown> | null = null;
   try { data = JSON.parse(json) as Record<string, unknown>; } catch { return <pre style={{ fontSize: 11, color: "#b8afc8" }}>{json}</pre>; }
 
-  const overall = (data?.status as string) ?? "unknown";
   const healthRoot = (data as { health?: Record<string, unknown> }).health ?? {};
   const c = (healthRoot.components as Record<string, Record<string, unknown>> | undefined) ?? {};
+  /** GET /status zwraca stan w `health.overall`, nie w root `status` (to ma /health). */
+  const overall = (healthRoot.overall as string) ?? (data.status as string) ?? "unknown";
   const qh = healthRoot.quiet_hours as { enabled?: boolean; active_now?: boolean; start?: string; end?: string } | undefined;
   const cfg = healthRoot.config as { resolved_yaml?: string | null } | undefined;
   const overallColor = overall === "ok" || overall === "healthy" ? "#22c55e" : overall === "degraded" ? "#eab308" : "#6d6680";
+
+  const llm = c.llm as { available?: boolean; circuit_breaker?: string | null; api_base_url?: string } | undefined;
+  let llmOk: boolean | null =
+    llm && typeof llm.available === "boolean" ? llm.available : null;
+  if (llmOk === null && llm && typeof llm.api_base_url === "string" && llm.api_base_url.length > 0) {
+    llmOk = llm.circuit_breaker !== "OPEN";
+  }
+
+  const memRoot = (data as { memory?: { enabled?: boolean } }).memory;
+  const memCfg = memRoot?.enabled ?? (c.memory as { enabled?: boolean } | undefined)?.enabled;
+  const memoryOk: boolean | null = memCfg === undefined ? null : !!memCfg;
 
   return (
     <div>
       <div style={{ marginBottom: "0.6rem", fontWeight: 600, color: overallColor }}>
         Status: {overall}
       </div>
-      <StatusBadge ok={(c.llm as { available?: boolean })?.available ?? null} label="LLM" />
+      <StatusBadge ok={llmOk} label="LLM" />
       <StatusBadge ok={(c.stt as { available?: boolean })?.available ?? null} label="STT (rozpoznawanie)" />
       <StatusBadge ok={(c.tts as { available?: boolean })?.available ?? null} label="TTS (synteza mowy)" />
       <StatusBadge ok={(c.screen_capture as { capture_available?: boolean })?.capture_available ?? null} label="Zrzut ekranu" />
       <StatusBadge ok={(c.vision_pipeline as { available?: boolean })?.available ?? null} label="Potok wizji" />
-      <StatusBadge ok={(c.memory as { enabled?: boolean })?.enabled ?? null} label="Pamięć semantyczna" />
+      <StatusBadge ok={memoryOk} whenFalse="off" label="Pamięć semantyczna" />
       {qh !== undefined && (
         <div style={{ margin: "0.6rem 0 0", paddingTop: "0.55rem", borderTop: "1px solid #2a2438", fontSize: 12, color: "#c8c0dc" }}>
           <strong style={{ color: "#e8e4f0" }}>Cisza nocna:</strong>{" "}
