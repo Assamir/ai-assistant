@@ -1,4 +1,4 @@
-const { contextBridge } = require("electron");
+const { contextBridge, ipcRenderer } = require("electron");
 
 const wsUrl =
   process.env.ASSYSTENT_WS_URL ||
@@ -19,4 +19,5 @@ contextBridge.exposeInMainWorld("assystent", {
   vrmUrl,
   apiUrl,
   configPutToken,
+  setClickThrough: (enabled) => ipcRenderer.send("click_through", enabled),
 });

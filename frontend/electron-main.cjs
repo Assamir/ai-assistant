@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, session } = require("electron");
+const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, ipcMain, session } = require("electron");
 
 /** Bez tego Chromium w Electron często zatrzymuje `AudioContext` / TTS dopóki użytkownik nie „obudzi” audio gestem. */
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
@@ -175,18 +175,28 @@ app.whenReady().then(() => {
   }
   spawnBundledBackend();
   createWindow();
+
+  ipcMain.on("click_through", (_event, enabled) => {
+    if (mainWindow) {
+      mainWindow.setIgnoreMouseEvents(!!enabled, { forward: true });
+    }
+  });
+
   try {
     globalShortcut.register("CommandOrControl+Shift+A", () => {
-      const w = BrowserWindow.getFocusedWindow() || mainWindow;
-      if (w && !w.webContents.isDevToolsOpened()) {
-        w.webContents.openDevTools({ mode: "detach" });
+      if (mainWindow) {
+        if (mainWindow.isVisible()) {
+          mainWindow.hide();
+        } else {
+          mainWindow.show();
+          mainWindow.focus();
+        }
       }
     });
     globalShortcut.register("CommandOrControl+Shift+S", () => {
-      const w = BrowserWindow.getFocusedWindow() || mainWindow;
-      if (w) {
-        w.show();
-        w.focus();
+      if (mainWindow) {
+        mainWindow.show();
+        mainWindow.focus();
       }
     });
   } catch (_) {

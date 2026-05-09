@@ -265,6 +265,12 @@ export function App() {
         const o = f.payload.text.trim();
         setObserverLine(o || null);
       }
+      if (f.event === "window_click_through_on") {
+        window.assystent?.setClickThrough?.(true);
+      }
+      if (f.event === "window_click_through_off") {
+        window.assystent?.setClickThrough?.(false);
+      }
       if (f.event === "agent_activity") {
         const tool = typeof f.payload.tool === "string" ? f.payload.tool : "(?)";
         const phase = typeof f.payload.phase === "string" ? f.payload.phase : "";

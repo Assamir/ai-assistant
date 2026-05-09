@@ -14,5 +14,6 @@ interface Window {
     vrmUrl?: string;
     apiUrl?: string;
     configPutToken?: string;
+    setClickThrough?: (enabled: boolean) => void;
   };
 }
