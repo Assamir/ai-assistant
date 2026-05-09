@@ -89,6 +89,18 @@ async def test_mcp_t04_offline_web_search():
 
 
 @pytest.mark.asyncio
+async def test_generate_document_absent_when_mcp_disabled(tmp_path, migrated_db_path):
+    reg = build_default_tool_registry(
+        db_path=migrated_db_path,
+        mcp_cfg=MCPConfig(enabled=False),
+        content_root=str(tmp_path),
+    )
+    names = {t["function"]["name"] for t in reg.openai_tools()}
+    assert "generate_document" not in names
+    assert "web_search" in names
+
+
+@pytest.mark.asyncio
 async def test_generate_document_writes_under_content_root(tmp_path, migrated_db_path):
     reg = build_default_tool_registry(
         db_path=migrated_db_path,

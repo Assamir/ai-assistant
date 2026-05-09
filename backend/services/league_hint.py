@@ -59,12 +59,11 @@ async def analyze_league_hint(ctx: AppContext, game_id: str) -> dict[str, Any]:
         return {"ok": False, "error": "game_not_in_profile"}
 
     prof_league = (entry.league or "").strip()
-    mcp = ctx.config.mcp
-    if not mcp.enabled or not _web_search_available(ctx.tool_registry):
+    if not _web_search_available(ctx.tool_registry):
         return {
             "ok": False,
             "error": "web_search_unavailable",
-            "hint": "Włącz MCP i narzędzie web_search.",
+            "hint": "Narzędzie web_search nie jest zarejestrowane (nieprawidłowy stan aplikacji).",
         }
 
     query = _hint_search_query(gid)

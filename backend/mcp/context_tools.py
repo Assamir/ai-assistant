@@ -139,7 +139,7 @@ def register_screen_capture_tool(ctx: Any) -> None:
 def register_context_dependent_mcp_tools(ctx: Any) -> None:
     """Po zbudowaniu AppContext — narzędzia zależne od capture/VLM.
 
-    `screen_capture` musi być zarejestrowane także gdy `mcp.enabled: false` (tylko wyłącza web_search itd.).
+    `screen_capture` musi być zarejestrowane także gdy `mcp.enabled: false` (flaga dotyczy głównie ``generate_document``; web_search/web_scraper są zawsze w rejestrze).
     """
     register_screen_capture_tool(ctx)
 

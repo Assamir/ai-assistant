@@ -52,7 +52,20 @@ async def test_web_search_cache_second_call(monkeypatch, migrated_db_path):
 
 
 @pytest.mark.asyncio
-async def test_web_search_disabled_without_mcp():
+async def test_web_search_always_registered_even_when_mcp_disabled():
     reg = build_default_tool_registry(mcp_cfg=MCPConfig(enabled=False))
     names = sorted(t["function"]["name"] for t in reg.openai_tools())
-    assert "web_search" not in names
+    assert "web_search" in names
+
+
+@pytest.mark.asyncio
+async def test_tools_enabled_whitelist_keeps_web_tools(migrated_db_path):
+    """Lista tools_enabled nie usuwa web_search / web_scraper (rdzeń produktu)."""
+    reg = build_default_tool_registry(
+        db_path=migrated_db_path,
+        mcp_cfg=MCPConfig(enabled=True, tools_enabled=["calculator"]),
+    )
+    names = {t["function"]["name"] for t in reg.openai_tools()}
+    assert "web_search" in names
+    assert "web_scraper" in names
+    assert "calculator" in names

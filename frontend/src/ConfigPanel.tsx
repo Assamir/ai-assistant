@@ -629,11 +629,11 @@ export function ConfigPanel({
           <div style={{ marginBottom: "1rem", padding: "0.65rem 0.75rem", borderRadius: 8, border: "1px solid #2a2438", background: "#100d18" }}>
             <div style={{ fontWeight: 600, color: "#e8e4f0", marginBottom: "0.35rem" }}>Internet i MCP</div>
             <p style={{ margin: 0, fontSize: 12, color: "#8a8198", lineHeight: 1.55 }}>
-              Asystent domyślnie działa lokalnie. Żądania HTTP (DuckDuckGo <code style={{ fontSize: 11 }}>web_search</code>,{" "}
-              <code style={{ fontSize: 11 }}>web_scraper</code>) włączają się dopiero przy <code style={{ fontSize: 11 }}>mcp.enabled: true</code> w{" "}
-              <code style={{ fontSize: 11 }}>config.yaml</code>. Obserwator ekranu nie wywołuje wyszukiwania — sieć pojawia się w czacie (narzędzia LLM) lub
-              wybranych funkcjach (meta, import buildu). Limit częstotliwości: <code style={{ fontSize: 11 }}>mcp.web_search_calls_per_minute</code>. Lista hostów
-              dla scrapera: <code style={{ fontSize: 11 }}>mcp.scraper_allowed_hosts</code> (pusta = brak filtru). Szczegóły:{" "}
+              Asystent działa lokalnie (offline-first), ale <strong>wyszukiwanie i scraper WWW są zawsze w rejestrze MCP</strong> dla LLM — przy braku sieci narzędzia zwracają błąd, zamiast znikać z listy. Flaga{" "}
+              <code style={{ fontSize: 11 }}>mcp.enabled</code> dotyczy tylko{" "}
+              <code style={{ fontSize: 11 }}>generate_document</code>. Limit częstotliwości:{" "}
+              <code style={{ fontSize: 11 }}>mcp.web_search_calls_per_minute</code>. Lista hostów dla scrapera:{" "}
+              <code style={{ fontSize: 11 }}>mcp.scraper_allowed_hosts</code> (pusta = brak filtru). Szczegóły:{" "}
               <code style={{ fontSize: 11 }}>docs/PORADNIK_UZYTKOWNIKA.md</code>.
             </p>
           </div>

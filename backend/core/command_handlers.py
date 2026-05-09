@@ -183,7 +183,7 @@ async def check_league_hint_handler(ctx: OrchestratorContext, params: Dict[str, 
         err = out.get("error", "error")
         msg_map = {
             "game_not_in_profile": f"Gra {game_id!r} nie jest w profilu gracza.",
-            "web_search_unavailable": "Wyszukiwarka jest wyłączona. Włącz MCP i narzędzie web_search.",
+            "web_search_unavailable": "Wyszukiwarka nie jest dostępna w tej sesji (brak narzędzia web_search w rejestrze).",
             "search_failed": "Wyszukiwanie nie powiodło się.",
         }
         return CommandExecutionResult(

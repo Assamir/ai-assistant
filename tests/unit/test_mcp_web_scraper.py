@@ -101,7 +101,7 @@ async def test_web_scraper_host_allowlist_www_normalized(monkeypatch, migrated_d
 
 
 @pytest.mark.asyncio
-async def test_web_scraper_disabled_without_mcp():
+async def test_web_scraper_always_registered_even_when_mcp_disabled():
     reg = build_default_tool_registry(mcp_cfg=MCPConfig(enabled=False))
     names = {t["function"]["name"] for t in reg.openai_tools()}
-    assert "web_scraper" not in names
+    assert "web_scraper" in names

@@ -303,7 +303,13 @@ class MemoryConfig(BaseModel):
 
 
 class MCPConfig(BaseModel):
-    enabled: bool = True
+    enabled: bool = Field(
+        default=True,
+        description=(
+            "Włącza narzędzie ``generate_document`` (zapis plików pod content_root). "
+            "``web_search`` i ``web_scraper`` są zawsze rejestrowane dla LLM — dostępność sieciowa zależy od połączenia i limitów."
+        ),
+    )
     tools_enabled: List[str] = Field(default_factory=list)
     cache_ttl_seconds: int = Field(
         default=3600,

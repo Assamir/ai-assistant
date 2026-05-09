@@ -157,14 +157,14 @@ async def run_daily_meta_check_for_game(
     query = _build_search_query(gid, entry.league or "", entry.game_version or "")
     summary: str
     has_changes: bool
-    if mcp.enabled and _web_search_available(ctx.tool_registry):
+    if _web_search_available(ctx.tool_registry):
         raw = await ctx.tool_registry.invoke("web_search", {"query": query}, system_state=None)
         if not isinstance(raw, dict):
             summary, has_changes = f"unexpected web_search response: {type(raw).__name__}", False
         else:
             summary, has_changes = _summarize_search(raw)
     else:
-        summary = "skipped web_search (mcp disabled or tool not registered)"
+        summary = "skipped web_search (narzędzie niedostępne w rejestrze)"
         has_changes = False
 
     root = Path(ctx.config.general.content_root).expanduser().resolve()

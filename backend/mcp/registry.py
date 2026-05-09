@@ -317,18 +317,21 @@ def build_default_tool_registry(
     reg.register("random_choice", _TOOL_RANDOM_CHOICE, tool_random_choice)
     reg.register("dice_roll", _TOOL_DICE_ROLL, tool_dice_roll)
     reg.register("format_duration", _TOOL_FORMAT_DURATION, tool_format_duration)
+    # Sieć (DDG + HTTP): zawsze w rejestrze — offline-first = degradacja przy braku sieci, nie wyłączenie narzędzi.
+    reg.register("web_search", _TOOL_WEB_SEARCH, tool_web_search)
+    reg.register("web_scraper", _TOOL_WEB_SCRAPER, tool_web_scraper)
     if mcp.enabled:
-        reg.register("web_search", _TOOL_WEB_SEARCH, tool_web_search)
-        reg.register("web_scraper", _TOOL_WEB_SCRAPER, tool_web_scraper)
         gen_fn = make_tool_generate_document(str(content_root or "."))
         reg.register("generate_document", _TOOL_GENERATE_DOCUMENT, gen_fn)
 
+    # tools_enabled nie może usunąć kalkulatora/czasu ani narzędzi sieciowych (rdzeń produktu).
+    _always_keep = frozenset({"get_current_time", "calculator", "web_search", "web_scraper"})
     whitelist = frozenset(mcp.tools_enabled) if mcp.tools_enabled else None
     if whitelist:
         unwanted = [
             nm
             for nm in tuple(reg._tools.keys())
-            if nm not in whitelist and nm not in ("get_current_time", "calculator")
+            if nm not in whitelist and nm not in _always_keep
         ]
         for nm in unwanted:
             reg.unregister(nm)

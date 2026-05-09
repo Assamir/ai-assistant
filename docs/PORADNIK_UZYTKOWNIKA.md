@@ -66,10 +66,10 @@ Obserwator nadal generuje komentarze tekstowo; wyłączony jest **dźwięk** (w 
 
 ## MCP i dostęp do internetu
 
-Projekt jest **offline-first**. Ruch HTTP poza LM Studio na localhost działa **tylko wtedy**, gdy:
+Projekt jest **offline-first** (pipeline głosowy, LLM lokalny i gra działają bez sieci), przy czym **przeszukiwanie internetu jest funkcją kluczową**: narzędzia **`web_search`** i **`web_scraper`** są **zawsze rejestrowane** dla LLM (nie zależą od `mcp.enabled`). Brak połączenia lub tryb offline w runtime powoduje **degradację** (wynik narzędzia z błędem), a nie ukrycie narzędzia przed modelem.
 
-1. W konfiguracji **`mcp.enabled: true`** (ENV: `ASSY_MCP__ENABLED`).
-2. Opcjonalna lista **`mcp.tools_enabled`** nie wyklucza danego narzędzia (pusta lista = wszystkie zarejestrowane przy włączonym MCP).
+1. **`mcp.enabled`** (`true` domyślnie): włącza wyłącznie **`generate_document`** (zapis plików Markdown/HTML pod `content_root`). Nie wyłącza DuckDuckGo ani HTTP scrapera.
+2. Lista **`mcp.tools_enabled`** może ograniczyć opcjonalne narzędzia — **`web_search`** i **`web_scraper`** oraz **`get_current_time`** / **`calculator`** nie są przez nią usuwane (rdzeń produktu).
 3. Narzędzia **`web_search`** i **`web_scraper`** nie są wywoływane z pętli obserwatora ekranu — sieć pojawia się przy **function calling** w turze czatu oraz w **jawnych ścieżkach** (np. dzienne meta, hint ligi, import buildu z URL).
 
 **Polityka krótka:**
