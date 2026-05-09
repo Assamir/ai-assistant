@@ -218,7 +218,11 @@ export function App() {
   const [outputDeviceId, setOutputDeviceId] = useState<string>(() =>
     typeof window !== "undefined" ? localStorage.getItem(SPEAKER_DEVICE_STORAGE_KEY) ?? "" : "",
   );
+  const [overlayInputOpen, setOverlayInputOpen] = useState(false);
+  const [overlayDraft, setOverlayDraft] = useState("");
+
   const dragHandleRef = useRef<HTMLDivElement>(null);
+  const subtitleClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pttCycleRunningRef = useRef(false);
   const pttReleasedEarlyRef = useRef(false);
   const pttReleaseRef = useRef<(() => void) | null>(null);
@@ -261,6 +265,23 @@ export function App() {
     return () => window.removeEventListener("pointerdown", unlock);
   }, [primeAudio]);
 
+  const scheduleSubtitleClear = useCallback(() => {
+    if (subtitleClearTimerRef.current !== null) {
+      clearTimeout(subtitleClearTimerRef.current);
+    }
+    subtitleClearTimerRef.current = setTimeout(() => {
+      subtitleClearTimerRef.current = null;
+      setAssistantLine(null);
+      setObserverLine(null);
+    }, 8000);
+  }, []);
+
+  useEffect(() => () => {
+    if (subtitleClearTimerRef.current !== null) {
+      clearTimeout(subtitleClearTimerRef.current);
+    }
+  }, []);
+
   const onFrame = useCallback(
     (f: WsFrame) => {
       if (f.event === "emotion" && typeof f.payload.emotion === "string") {
@@ -272,6 +293,7 @@ export function App() {
       ) {
         const line = f.payload.text.trim();
         setAssistantLine(line || null);
+        if (line) scheduleSubtitleClear();
       }
       if (f.event === "audio_stream" && typeof f.payload.chunk_base64 === "string") {
         void primeAudio();
@@ -295,6 +317,7 @@ export function App() {
         const o = f.payload.text.trim();
         setObserverLine(o || null);
         setObserverActive(true);
+        if (o) scheduleSubtitleClear();
       }
       if (f.event === "window_click_through_on") {
         window.assystent?.setClickThrough?.(true);
@@ -343,7 +366,7 @@ export function App() {
         `${new Date().toISOString().slice(11, 19)} ← ${f.event}`,
       ]);
     },
-    [feedAudioChunk, duck, primeAudio],
+    [feedAudioChunk, duck, primeAudio, scheduleSubtitleClear],
   );
 
   const { status, sendFrame } = useWebSocket({
@@ -794,6 +817,28 @@ export function App() {
             }}
           />
 
+          {/* Disconnection indicator */}
+          {!wsReady ? (
+            <div
+              style={{
+                position: "absolute",
+                top: 8,
+                left: "50%",
+                transform: "translateX(-50%)",
+                padding: "0.2rem 0.7rem",
+                borderRadius: 6,
+                background: "rgba(50,18,18,0.88)",
+                border: "1px solid #7a3030",
+                color: "#e898a8",
+                fontSize: 11,
+                pointerEvents: "none",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Brak połączenia — łączenie…
+            </div>
+          ) : null}
+
           {/* Profile banner */}
           {profileBanner ? (
             <div
@@ -879,16 +924,91 @@ export function App() {
         {/* Bottom control bar */}
         <div
           style={{
-            height: 50,
             background: "rgba(10,8,18,0.78)",
             backdropFilter: "blur(8px)",
+            display: "flex",
+            flexDirection: "column",
+            flexShrink: 0,
+            borderRadius: "0 0 10px 10px",
+          }}
+        >
+        {overlayInputOpen ? (
+          <div
+            style={{
+              display: "flex",
+              gap: "0.3rem",
+              padding: "0.4rem 0.45rem 0",
+            }}
+          >
+            <input
+              // eslint-disable-next-line jsx-a11y/no-autofocus
+              autoFocus
+              type="text"
+              value={overlayDraft}
+              onChange={(e) => setOverlayDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  const t = overlayDraft.trim();
+                  if (t && wsReady) {
+                    void primeAudio();
+                    stopAudio();
+                    sendFrame("chat_text", { text: t });
+                    setOverlayDraft("");
+                    setOverlayInputOpen(false);
+                  }
+                }
+                if (e.key === "Escape") {
+                  setOverlayInputOpen(false);
+                  setOverlayDraft("");
+                }
+              }}
+              placeholder="Napisz… (Enter wyślij, Esc zamknij)"
+              disabled={!wsReady}
+              style={{
+                flex: 1,
+                padding: "0.35rem 0.55rem",
+                borderRadius: 6,
+                border: "1px solid #4a3f62",
+                background: "rgba(15,12,22,0.92)",
+                color: "#eae6f8",
+                fontSize: 13,
+                fontFamily: "inherit",
+                outline: "none",
+              }}
+            />
+            <button
+              type="button"
+              disabled={!wsReady || !overlayDraft.trim()}
+              onClick={() => {
+                const t = overlayDraft.trim();
+                if (t && wsReady) {
+                  void primeAudio();
+                  stopAudio();
+                  sendFrame("chat_text", { text: t });
+                  setOverlayDraft("");
+                  setOverlayInputOpen(false);
+                }
+              }}
+              style={{
+                ...overlayBtnBase,
+                borderColor: "#5c4d8c",
+                background: "#2c2440",
+                color: "#e8e4f0",
+              }}
+            >
+              Wyślij
+            </button>
+          </div>
+        ) : null}
+        <div
+          style={{
+            height: 50,
             display: "flex",
             alignItems: "center",
             paddingLeft: "0.45rem",
             paddingRight: "0.45rem",
             gap: "0.3rem",
-            flexShrink: 0,
-            borderRadius: "0 0 10px 10px",
           }}
         >
           {/* PTT */}
@@ -975,6 +1095,22 @@ export function App() {
             {clickThrough ? "Klik: WŁ" : "Klik: WYŁ"}
           </button>
 
+          {/* Text input toggle */}
+          <button
+            type="button"
+            onClick={() => { setOverlayInputOpen((v) => !v); setOverlayDraft(""); }}
+            style={{
+              ...overlayBtnBase,
+              borderColor: overlayInputOpen ? "#6b4d9b" : "#4a5568",
+              background: overlayInputOpen ? "rgba(74,36,120,0.28)" : "rgba(30,25,42,0.8)",
+              color: overlayInputOpen ? "#c8a8f0" : "#b8afc8",
+              padding: "0.3rem 0.55rem",
+            }}
+            title="Wpisz wiadomość tekstową"
+          >
+            ✎
+          </button>
+
           <div style={{ flex: 1 }} />
 
           {/* Config window */}
@@ -990,6 +1126,7 @@ export function App() {
           >
             ⚙
           </button>
+        </div>
         </div>
       </div>
     );
