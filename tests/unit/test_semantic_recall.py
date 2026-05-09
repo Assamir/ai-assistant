@@ -91,7 +91,7 @@ def test_prune_conversations_chroma_removes_oldest():
     except Exception:
         pytest.skip("chromadb not usable")
 
-    sr = SemanticRecall(max_conversations=3)
+    sr = SemanticRecall(max_conversations=3, collection_prefix="t_removes_oldest")
     for i in range(5):
         sr.add_conversation_chunks(ids=[f"c{i}"], documents=[f"doc_{i}"])
     count = sr._conv.count()
@@ -104,7 +104,7 @@ def test_prune_conversations_chroma_noop_when_under_limit():
     except Exception:
         pytest.skip("chromadb not usable")
 
-    sr = SemanticRecall(max_conversations=10)
+    sr = SemanticRecall(max_conversations=10, collection_prefix="t_noop_under_limit")
     sr.add_conversation_chunks(ids=["a", "b"], documents=["x", "y"])
     assert sr._conv.count() == 2
 

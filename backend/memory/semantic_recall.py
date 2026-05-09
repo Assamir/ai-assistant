@@ -51,6 +51,7 @@ class SemanticRecall:
         *,
         persist_directory: str | None = None,
         max_conversations: int = 10_000,
+        collection_prefix: str = "",
     ) -> None:
         self._mode: str = "chroma"
         self._conv_docs: List[str] = []
@@ -62,6 +63,7 @@ class SemanticRecall:
         self._max_conversations: int = max(0, int(max_conversations))
         self._conv: Any = None
         self._kb: Any = None
+        _pfx = f"{collection_prefix}_" if collection_prefix else ""
         try:
             import chromadb  # type: ignore[import-untyped]
 
@@ -71,11 +73,11 @@ class SemanticRecall:
                 self._client = chromadb.EphemeralClient()
 
             self._conv = self._client.get_or_create_collection(
-                name="conversations",
+                name=f"{_pfx}conversations",
                 metadata={"hnsw:space": "cosine"},
             )
             self._kb = self._client.get_or_create_collection(
-                name="knowledge_base",
+                name=f"{_pfx}knowledge_base",
                 metadata={"hnsw:space": "cosine"},
             )
         except Exception:
