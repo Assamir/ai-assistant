@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format is inspired 
 
 ## [Unreleased]
 
+### Documentation
+
+- **Plan i kryteria “done”:** zaktualizowano `docs/plan/DEFINITION_OF_DONE.md` (v1.1), `docs/plan/implementation_plan.md` (v1.3), `docs/plan/implementation_plan_part2.md` (v1.21) — zgodność ze stanem kodu i `CHANGELOG`. W `docs/DECISIONS_LOG.md` dodano § „Stan implementacji vs dokument (2026-05-09)” (rozjazdy: `pygetwindow`, custom MCP, endpointy downloadu wizarda, quiet hours, Credits).
+
 ### Added
 
 - **`requirements-vision.txt`:** opcjonalny plik (`-r requirements.txt` + `easyocr`) dla OCR / analizy zrzutów; opisane w `config/config.yaml` i `docs/ENV_SETUP.md`.

@@ -1,6 +1,6 @@
 # Assystent — Pełny Plan Implementacji
 
-> **Status:** v1.2 — 2026-05-04 (sekcja „Stan wdrożenia” + checklist Fazy 1)
+> **Status:** v1.3 — 2026-05-09 (zsynchronizowano z kodem; §1.3, T1/T3 checklist)
 > **Źródła:** Wszystkie 24 dokumenty DOK-01–DOK-16 + PRD 00-06
 > **Pliki towarzyszące:** [Fazy 2–3 + Testy + Modele](implementation_plan_part2.md) · [TEST_PLAN](TEST_PLAN.md) · [DEFINITION_OF_DONE](DEFINITION_OF_DONE.md) · [RISK_REGISTER](RISK_REGISTER.md) · [IMPLEMENTATION_ROADMAP](IMPLEMENTATION_ROADMAP.md)
 
@@ -30,15 +30,15 @@
 | 4   | PROMPT_SPEC używa `tiktoken` ale nie ma go w requirements.txt                                                | DOK-05 vs DOK-02           | Dodaj `tiktoken>=0.7.0` lub zastąp approx. tokenizerem             |
 | 5   | `librosa` wymagane przez EMOTION_SPEC §10.1 TTS modulation — brak w requirements                             | DOK-06 vs DOK-02           | Dodaj `librosa>=0.10.0` i `soundfile>=0.12.0`                      |
 | 6   | DB_SCHEMA definiuje 14 tabel ale MEMORY_SPEC repositories pokrywają tylko ~10                                | DOK-04 vs DOK-11           | Uzupełnić brakujące: `KnowledgeRepository`, `DailyCheckRepository` |
-| 7   | Quiet hours: CONFIG_SPEC mówi "start może być > end (overflow)" ale walidator sprawdza tylko format HH:MM    | DOK-03 §2.4                | Implementacja musi obsłużyć cross-midnight                         |
+| 7   | Quiet hours: CONFIG_SPEC (`general.quiet_hours`) vs kod (`quiet_hours_start` / `quiet_hours_end` w `ConfigSchema`) | DOK-03 vs `schema.py`     | Ujednolicić dokument lub schemat; cross-midnight: pola + komentarz w schema |
 
 
 ### 1.3 Brakujące elementy w istniejących dokumentach
 
-- **Orchestrator** — brak dedykowanej specyfikacji klasy `Orchestrator` (rozproszony między DOK-05, DOK-07, DOK-08)
-- **Streaming pipeline** — DOK-08 §9 definiuje algorytm ale brak integracji z WebSocket z DOK-04
-- **Health check aggregation** — API-plan definiuje `/health` i `/status` ale brak logiki agregacji stanów komponentów
-- **Graceful shutdown** — brak procedury zamykania (save session, close DB, stop observer)
+- **Orchestrator** — brak dedykowanej specyfikacji klasy `ConversationOrchestrator` (logika rozproszona między DOK-05, DOK-07, DOK-08 i kodem)
+- **Streaming TTS / audio** — zdania są syntetyzowane strumieniowo (`tts_streaming`, WS `audio_stream`) zgodnie z intencją DOK-08
+- **Health check aggregation** — **zaimplementowane:** `build_health_snapshot` + `GET /api/v1/status` i `/api/v1/health` (frontend: zakładka Status)
+- **Graceful shutdown** — **zaimplementowane** w `lifespan` (watchdog, observer, połączenia)
 
 ---
 
@@ -264,14 +264,14 @@ sequenceDiagram
 
 ## 5. Faza 1 — Backend Core (T1–T4)
 
-### 5.0 Stan wdrożenia w repo (2026-05-04)
+### 5.0 Stan wdrożenia w repo (2026-05-09)
 
 
 | Tydzień | Ocena  | Uwagi                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **T1**  | ✅ ~90% | Środowisko i struktura katalogów, `ConfigLoader` + `tests/unit/test_config.py`, klasy bazowe i `MigrationRunner`, repozytoria na `aiosqlite`. Plan wspominał `StorageBackend`/`SQLiteBackend` — w kodzie jest bezpośredni dostęp przez repozytoria (bez osobnej warstwy „StorageBackend”). Liczba tabel w `001_initial.sql`: 12 tabel domenowych + `schema_migrations` (należy zweryfikować względem pełnego DB_SCHEMA 14×). |
+| **T1**  | ✅ ~92% | Środowisko, `ConfigLoader`, repozytoria `aiosqlite`, `MigrationRunner` (`001_initial.sql` + `002_tool_calls_turn_sequence.sql`). **PUT /api/v1/config** zapisuje zwalidowany YAML. Bez warstwy `StorageBackend` — CRUD przez repozytoria. 12 tabel domenowych + `schema_migrations` w `001_initial.sql`. |
 | **T2**  | ✅ ~95% | `LMStudioClient`, `FasterWhisperSTT`, `PiperTTS`, testy. `VoiceInputCoordinator` + duck WS z backendu; `**PTTHotkeyListener` (pynput)** opcjonalnie (`audio.backend_ptt_listener_enabled`). `**WakewordDetector`** — openWakeWord lazy-load, domyślnie `hey_jarvis`, `detect_in_chunk()`; mikrofon ciągły → kolejny krok integracji.                                                                                         |
-| **T3**  | ✅ ~85% | `PromptBuilder`, `PersonaLoader`, tiktoken, `parse_emotion_tag`, `CommandMatcher`, `ConversationOrchestrator` ze statusem fazy i narzędziami (limit z config). REST + WebSocket (`WebSocketManager` w `app_context`), testy API/WS/SSE. MCP: rejestr + czas + kalkulator + `random_choice` / `dice_roll` / `format_duration` (poza minimalnym zakresem planu).                                                               |
+| **T3**  | ✅ ~90% | Jak wyżej; **22** wbudowane komendy (`CMD-01`…`CMD-22`), m.in. import buildu, forget KB, league hint, daily check. REST + WebSocket, MCP rozszerzone.                                                                                                                                                                                                                                                                                                                |
 | **T4**  | ✅ ~85% | Watchdog + recovery + hot-reload + health snapshot + DB pod `{content_root}/data/`; smoke wydajności mock pipeline. FPS w grze / pełny PTT UI — poza zakresem backend-only.                                                                                                                                                                                                                                                  |
 
 
@@ -292,7 +292,7 @@ sequenceDiagram
 - `[x]` `backend/config/schema.py` — Pydantic V2 models (z DOK-03)
 - `[x]` `backend/config/loader.py` — hierarchia: defaults < yaml < env
 - `[x]` Walidacja semantyczna (cross-field)
-- `[ ]` Zapis znormalizowanej konfiguracji (nie zweryfikowano wyczerpująco)
+- `[x]` Zapis znormalizowanej konfiguracji — `PUT /api/v1/config`: merge → `ConfigSchema.model_validate` → `yaml.safe_dump`
 - `[~]` Unit testy config — `tests/unit/test_config.py` (pełna liczba „15” nie assertowana w docs)
 - **Model:** Gemini 2.5 Pro — complex Pydantic schemas
 
@@ -371,7 +371,7 @@ sequenceDiagram
 - `[x]` `parse_emotion_tag()` (z DOK-06 §8)
 - `[x]` `CommandMatcher` — normalize, regex match, fuzzy (z DOK-07)
 - `[x]` `CooldownTracker`, `ConfirmationSession` (w `command_matching`)
-- `[~]` Handler registry + builtin handlers — zaimplementowane; liczba „16” nie zweryfikowana w tym dokumencie
+- `[x]` Handler registry + builtin handlers — **22** reguły dopasowania (`command_matching.py`) + `_builtin_registry`
 - `[x]` Testy — `tests/unit/test_command_matcher.py`, `test_emotion_parser.py`
 - **Model:** Gemini 2.5 Pro — regex + NLP matching
 

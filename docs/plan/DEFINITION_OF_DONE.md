@@ -1,7 +1,9 @@
 # DOK-14: DEFINITION_OF_DONE.md — Kryteria Akceptacji per Faza
 
-> **Status:** v1.0 — 2026-05-02
+> **Status:** v1.1 — 2026-05-09 (zsynchronizowano ze stanem repo i `CHANGELOG.md`)
 > **Materiały źródłowe:** PRD_06_IMPLEMENTATION.md, TEST_PLAN.md
+>
+> **Legenda:** `[x]` spełnione w kodzie · `[~]` częściowe / wymaga pomiaru lub ręcznego demo · `[ ]` brak / ponad MVP
 
 ---
 
@@ -9,50 +11,45 @@
 
 ### A) Code Complete
 
-- [ ] FastAPI app startuje (`uvicorn backend.main:app`)
-- [ ] Config loader: defaults < yaml < env, walidacja, zapis normalized
-- [ ] Interfejsy bazowe: `BaseLLMClient`, `BaseSTTEngine`, `BaseTTSEngine`, `BaseVLMAnalyzer`
-- [ ] `GPUScheduler` — priority queue z mutex, aging
-- [ ] `CircuitBreaker` — 3 states, persistence, TTL
-- [ ] `LMStudioClient` — streaming, function calling, circuit breaker
-- [ ] `FasterWhisperSTT` — confidence thresholds, GPU scheduler
-- [ ] `PiperTTS` — subprocess, emotion modulation (speed/pitch)
-- [ ] `WakewordDetector` — openWakeWord, fallback "Hey Jarvis"
-- [ ] `AudioCapture` — PTT (pynput), wakeword switch
-- [ ] `Orchestrator` — voice→command?→LLM→TTS pipeline
-- [ ] `PromptBuilder` — section assembly, token budget trimming
-- [ ] `EmotionParser` — `[EMO:tag]` extraction + validation
-- [ ] `CommandMatcher` — regex exact + fuzzy (Levenshtein ≤ 2)
-- [ ] 16 builtin command handlers
-- [ ] `SessionWatchdog` — hibernation detection, crash recovery
-- [ ] REST API: `/health`, `/status`, `/config`
-- [ ] WebSocket: multiplexed events (emotion, audio, state)
-- [ ] MCP: `get_current_time`, `calculator`
-- [ ] SQLite: 14 tabel, migration runner, WAL mode
-- [ ] File watcher: hot-reload config + personas
+- [x] FastAPI app startuje (`uvicorn backend.main:app`)
+- [x] Config loader: defaults → YAML → env (`ASSY_`), walidacja Pydantic; `PUT /api/v1/config` zapisuje zwalidowany `model_dump` do YAML
+- [x] Interfejsy bazowe: `BaseLLMClient`, `BaseSTTEngine`, `BaseTTSEngine`, `BaseVLMAnalyzer`
+- [x] `GPUScheduler` — kolejka priorytetów (STT/LLM/TTS/VLM)
+- [x] `CircuitBreaker` — stany i integracja z LLM
+- [x] `LMStudioClient` — streaming SSE, function calling, circuit breaker
+- [x] `FasterWhisperSTT` — progi pewności, GPU scheduler
+- [x] `PiperTTS` — subprocess (w tym `asyncio.to_thread` na Windows), modulacja emocji (`tts_emotion.py`)
+- [x] `WakewordDetector` — openWakeWord, degradacja bez pakietu
+- [x] Wejście audio PTT — `PTTHotkeyListener` (pynput, opcjonalnie) + `VoiceInputCoordinator`; **nie** osobna klasa `AudioCapture` (nagrywanie WAV przez frontend)
+- [x] `ConversationOrchestrator` — komendy → LLM → narzędzia → TTS / stany wizualne
+- [x] `PromptBuilder`, `parse_emotion_tag`, `CommandMatcher` (regex + fuzzy dla CMD-01)
+- [x] **22** wbudowane reguły komend (`CMD-01` … `CMD-22` w `command_matching.py`), nie 16
+- [x] `SessionWatchdog`, recovery sesji, integracja z health
+- [x] REST: `/health`, `/status` (agregacja `build_health_snapshot`), `/config`, endpointy voice i player-profile wg `routes.py`
+- [x] WebSocket: multi-event (`emotion`, `audio_stream`, `visual_state`, `audio_duck`, itd.)
+- [x] MCP: m.in. `get_current_time`, `calculator` + rejestr rozszerzalny
+- [x] SQLite: migracje `001_initial.sql` + `002_*`, runner, tabele domenowe + `schema_migrations` (12 tabel biznesowych + migracje; `002` relaksuje `tool_calls`)
+- [x] Hot-reload: `watchdog` na config i persony
+- [ ] Warstwa `StorageBackend` / `SQLiteBackend` — **świadomie pominięta**; dostęp przez repozytoria
 
 ### B) Testy
 
-- [ ] ≥80% unit test coverage (backend/core)
-- [ ] Testy GPU-T-01→04, CB-T-01→06, WD-T-01→04 passing
-- [ ] Testy CMD-T-01→11 passing
-- [ ] ≥8 integration testów API passing
-- [ ] Brak failing tests w `pytest tests/`
+- [~] ≥80% pokrycia `backend/core` — **nie utrzymywany automatyczny próg w CI**; wymaga `pytest --cov` do weryfikacji
+- [~] Testy GPU-T / CB-T / WD-T / CMD-T — część w repo; pełna zgodność z listą TEST_PLAN nie jest tu potwierdzona liczbowo
+- [x] Zestaw testów integracyjnych API/WS (`tests/integration/`)
+- [~] `pytest tests/` — utrzymywane w dev; brak gwarancji „zero fail” poza lokalnym/CI bez sprawdzenia
 
 ### C) Performance
 
-- [ ] FPS impact < 5% (z grą vs bez)
-- [ ] PTT→first audio < 3s (benchmark)
-- [ ] Latency measurement documented
+- [ ] FPS wpływ < 5% (gra z vs bez asystenta) — **pomiar manualny / niedokumentowany**
+- [ ] PTT → pierwsze audio < 3 s — **end-to-end zależny od frontendu; nie zmierzone formalnie**
+- [ ] Opóźnienia udokumentowane w raporcie wydajności
 
 ### D) Acceptance Demos (manual)
 
-- [ ] Demo 1: PTT → mówisz "Która godzina?" → asystent odpowiada głosem z poprawnym czasem
-- [ ] Demo 2: PTT → "Ile to jest 450 plus 78 razy 1.35?" → poprawna odpowiedź
-- [ ] Demo 3: PTT → "Idź spać" → odpowiedź + state change
-- [ ] Demo 4: PTT → "Obudź się" → przywrócenie
-- [ ] Demo 5: Zmiana `config.yaml` → asystent mówi "Przeładowałem konfigurację"
-- [ ] Demo 6: Kill backend → restart → crash detection log
+- [~] Demo 1–4: ścieżki istnieją; **wymagają potwierdzenia na środowisku użytkownika**
+- [~] Demo 5: reload konfiguracji — hot-reload jest; dokładna fraza głosowa zależy od handlera / TTS
+- [x] Demo 6: recovery po crashu — logika `recover_stale_sessions` + testy recovery
 
 ---
 
@@ -60,43 +57,28 @@
 
 ### A) Code Complete
 
-- [ ] `ScreenCapture` — DXcam + pyautogui fallback
-- [ ] `Moondream2VLM` — GPU scheduler P4
-- [ ] `EasyOCR` — dual pipeline (VLM+OCR), trigger keywords
-- [ ] `GameDetector` — kaskadowy: process→VLM→manual
-- [ ] `GameProfile` loader + hot-reload
-- [ ] `ObserverLoop` — skip conditions, backpressure, pause/resume
-- [ ] `CommentRateLimiter`, diversity check (cosine)
-- [ ] `web_search` — DuckDuckGo + rate limiter + cache
-- [ ] `web_scraper` — trafilatura + Playwright fallback
-- [ ] `generate_document` — MD + HTML (dark theme)
-- [ ] `screen_capture` tool — on-demand + cursor crop
-- [ ] `SandboxValidator` — path + URL validation
-- [ ] `MCPCache` — SHA256 keys, TTL per tool, stampede prevention
-- [ ] ChromaDB: 2 kolekcje (conversations, knowledge_base)
-- [ ] `SemanticRecall` — embed, query, dedup
-- [ ] `KnowledgeIngester` — chunking, folder watcher, re-ingestion
-- [ ] `PlayerProfileRepository` — YAML source, snapshots
-- [ ] ChromaDB FIFO rotation (10k limit)
-- [ ] Backup/restore (zip), auto-archive logs (.7z)
-- [ ] Daily meta check, season reset detection
-- [ ] Online mode detector (30s interval)
+- [x] Zrzut ekranu: DXcam → mss → pyautogui (`DesktopScreenCapture`), wybór monitora przez indeks
+- [x] `Moondream2VLM` (opcjonalnie), kolejka GPU P4
+- [x] EasyOCR opcjonalnie (`requirements-vision.txt`), dual pipeline z VLM
+- [x] `GameObserver` / wykrywanie gry (proces + VLM fallback + profil ręczny)
+- [x] Profile gier + hot-reload
+- [x] `ObserverLoop`, SceneDeduper (dHash), współdziałanie z PTT
+- [~] Ograniczenie tempa komentarzy / różnorodność — częściowo (kolejki, dedupe); „cosine” jak w starej spec może się różnić
+- [x] `web_search`, `web_scraper`, `generate_document`, `screen_capture`, sandbox, cache MCP
+- [x] Chroma: dwie kolekcje semantyczne; `SemanticRecall`, `KnowledgeIngester`; FIFO przez `prune_*` / limity konfiguracyjne
+- [x] `PlayerProfileRepository`, daily meta, league hint, archiwum profilu (REST + WS)
+- [~] Backup ZIP / logi .7z / „season reset” — sprawdź `command_handlers` / MCP; nie wszystkie zdania DoD v1.0 są 1:1 z kodem
+- [x] Tryb online / rate limiting MCP — zgodnie z konfiguracją
+
+**Uwaga:** W **DECISIONS_LOG** zapisano `pygetwindow` dla monitora gry — **w backendzie nie używamy** tej biblioteki; działa `monitor_index` + lista monitorów (Electron: wybór wyświetlacza overlaya).
 
 ### B) Testy
 
-- [ ] Testy OBS-T-01→04, RL-T-01→03, CACHE-T-01→04 passing
-- [ ] Testy MCP-T-01→13 passing
-- [ ] Integration: observer→VLM→comment→TTS→DB
-- [ ] Integration: web_search→cache→LLM→document
+- [~] OBS / RL / CACHE / MCP — testy jednostkowe i integracyjne istnieją; pełna mapa ID z TEST_PLAN nieverifikowana tu
 
 ### C) Acceptance Demos
 
-- [ ] Demo 1: Uruchom PoE2 → "Zacznij obserwować" → komentarz głosowy
-- [ ] Demo 2: "Co widzisz na ekranie?" → analiza VLM+OCR
-- [ ] Demo 3: "Jaki jest topowy build LA?" → web_search → odpowiedź
-- [ ] Demo 4: "Porównaj buildy LA i TS, zrób raport HTML" → dokument
-- [ ] Demo 5: "Gram teraz TankMasterem" → zmiana profilu
-- [ ] Demo 6: "Zrób backup" → ZIP w backups/
+- [~] Demo 1–6 — możliwe przy skonfigurowanym LM Studio, grze i MCP; status **manual**
 
 ---
 
@@ -104,54 +86,42 @@
 
 ### A) Code Complete
 
-- [ ] Electron: frameless, transparent, AOT, system tray
-- [ ] React: Avatar3D component, Config Panel, Setup Wizard
-- [ ] Three.js + three-vrm: VRM loading, capabilities scan
-- [ ] 16 emocji: blendshapes + aura + body animations
-- [ ] Emotion state machine: blend-in, hold, fade-out, conflict resolution
-- [ ] Lip-sync: Web Audio RMS→aa blendshape
-- [ ] Idle animations: breathing, blinking, sway
-- [ ] Audio player: PCM decode, queue, duck (<200ms)
-- [ ] WebSocket client: reconnect z backoff, event dispatch
-- [ ] Config Panel: 7 tabs, debounced save
-- [ ] Setup Wizard: 6 steps
-- [ ] Global hotkeys: Ctrl+Shift+A (toggle), Ctrl+Shift+S (settings)
-- [ ] Click-through toggle (voice + UI)
-- [ ] Drag & drop positioning, save position
-- [ ] Text overlay (silent mode)
-- [ ] `emotions.json` loaded at startup
+- [x] Electron: overlay przezroczysty, tray, osobne okno konfiguracji, IPC
+- [x] React: awatar (`AvatarCanvas`), Config Panel (w tym zakładka Status, Obserwator, Persona, itd.), Setup Wizard
+- [x] Three.js + VRM, crossfade emocji, AuraLights, idle (mruganie, kołysanie), spring bones (aktualizacja po animacji ciała)
+- [x] Mapowanie emocji z `emotions.json` (17 stanów / palety w aurze)
+- [x] Lip-sync (RMS → blendshape), odtwarzacz PCM, duck przy PTT
+- [x] WebSocket: reconnect z backoff, zdarzenia (w tym `visual_state`, profil gracza)
+- [x] Panel konfiguracji: wiele zakładek, debounced PUT, token do `PUT /config`
+- [x] Kreator startowy (`SetupWizard.tsx`)
+- [~] Globalne hotkeys — sprawdź `electron-main.cjs` / skróty z dokumentacji; mogą się różnić od Ctrl+Shift+A/S z pierwotnego DoD
+- [x] Click-through (komenda + UI), text overlay (tryb cichy)
+- [x] Pozycja / rozmiar okna (persist typowego stanu — weryfikacja w kodzie Electron)
+- [ ] Dedykowana sekcja **Credits** z atrybucją VRM w panelu — **DECISIONS_LOG** wymaga; w UI może być tylko pośrednio (README / `LICENSES.md`)
 
 ### B) Testy
 
-- [ ] Testy EMO-01→07 (frontend unit)
-- [ ] WebSocket reconnect test (kill→reconnect→state sync)
-- [ ] VRM loading test (capabilities scan correct)
+- [~] Testy emocji / frontend — część logiki w `emotionBlend.ts`; pełna lista EMO-01→07 niepotwierdzona
+- [ ] Automatyczny test reconnect WebSocket — opcjonalny
+- [~] Ładowanie VRM — ręczne / środowiskowe
 
 ### C) Performance
 
-- [ ] Frontend GPU <2%, memory <300MB
-- [ ] Avatar 60fps (visible), 30fps (minimized)
-- [ ] Startup <5s (Electron launch→avatar visible)
+- [ ] Budżety FPS / RAM / startup z DoD v1.0 — **nieweryfikowane formalnie**
 
 ### D) Acceptance Demos
 
-- [ ] Demo 1: Full pipeline: PTT→response→avatar animacja+głos
-- [ ] Demo 2: Observer: awatar komentuje grę z emocją
-- [ ] Demo 3: 16 emocji: trigger każdą, weryfikuj wizualizację
-- [ ] Demo 4: Lip-sync: TTS audio → usta się ruszają
-- [ ] Demo 5: Config Panel: zmiana persona, interwał, volume — live
-- [ ] Demo 6: Setup Wizard od zera na czystym systemie
+- [~] Demo 1–6 — zależne od sprzętu; wizard i pełny pipeline dostępne w buildzie
 
 ### E) Pre-release Checklist
 
-- [ ] Backup/restore tested
-- [ ] Crash recovery tested (kill -9 → restart → resume)
-- [ ] Sandbox audit: wszystkie ścieżki w whitelist
-- [ ] Performance baseline documented
-- [ ] LICENSES.md complete (VRM attributions)
-- [ ] README.md complete
-- [ ] CHANGELOG.md up to date
+- [~] Backup / crash recovery — logika backendu + testy częściowe; pełny runbook użytkownika w `docs/`
+- [x] Sandbox audit — testy `tests/unit/test_sandbox_audit.py` (CHANGELOG)
+- [ ] Performance baseline — dokument opisowy / benchmarki
+- [~] `LICENSES.md` — istnieje; **placeholder atrybucji modelu VRM** do uzupełnienia (CHANGELOG)
+- [x] README z linkami do poradnika użytkownika
+- [~] `CHANGELOG.md` — sekcja `[Unreleased]` bogata; przed wydaniem — podbić wersję i datę
 
 ---
 
-*Dokument: DOK-14 DEFINITION_OF_DONE.md v1.0 — 2026-05-02*
+*Dokument: DOK-14 DEFINITION_OF_DONE.md v1.1 — 2026-05-09*

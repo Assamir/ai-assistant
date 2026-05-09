@@ -1,6 +1,6 @@
 # Decyzje Projektowe — Odpowiedzi na Pytania z Planu Pre-Implementation
 
-> **Status:** v1.1 — Komplet decyzji z sesji 2026-04-27 (wszystkie pytania zamknięte)
+> **Status:** v1.2 — Komplet decyzji z sesji 2026-04-27; § „Stan implementacji” 2026-05-09
 > **Cel dokumentu:** Single source of truth dla decyzji podjętych w trakcie generowania planu PRE_IMPLEMENTATION_PLAN.md.
 > **Użycie:** Załącz ten dokument **do każdego promptu** generującego dokumentację (DOK-01 … DOK-16). Zapobiega niespójnościom i ponownemu zadawaniu pytań.
 
@@ -204,6 +204,22 @@ Te reguły są nienegocjowalne i muszą być uwzględnione w **każdym** dokumen
   - Autor: VRoid Team / pixiv (najwyższe zaufanie do trwałości linku)
 - **Atrybucja:** plik `c:\ai\asystent\LICENSES.md` — nazwa modelu, autor, URL, licencja CC0/CC-BY
 - **Audit przed releasem:** sprawdzić czy URL modelu nadal aktywny + licencja niezmieniona
+
+---
+
+## Stan implementacji vs dokument (2026-05-09)
+
+Ta sekcja utrzymuje zgodność między **decyzjami** a **kodem** (bez zmiany historycznych tabel powyżej).
+
+| Obszar | Decyzja / zapis w tym pliku | Rzeczywista implementacja |
+|--------|-----------------------------|---------------------------|
+| Monitor gry | DOK-09: `pygetwindow` + fallback `observer.monitor_index` | Backend: `DesktopScreenCapture` (DXcam / mss / pyautogui) + **indeks monitora**; **brak `pygetwindow`**. Electron: wybór wyświetlacza dla overlaya (IPC). |
+| Custom commands → MCP | Rozszerzenie `commands.yaml` (`action_type: mcp_tool_call`) | **Niewdrożone** w `backend/config` — brak pola `action_type` w schemacie custom komend. |
+| Wizard: pobieranie modeli | `GET /setup/download_progress`, WS `download_progress`, cancel | **Endpointów downloadu w backendzie brak** — kreator zakłada istniejące ścieżki / konfigurację. |
+| Quiet hours | Globalne (`general.quiet_hours` w CONFIG_SPEC) | `ConfigSchema`: **`quiet_hours_start` / `quiet_hours_end`** (top-level). Logika „ciszy nocnej” w runtime — weryfikować przed FAZą release. |
+| Credits / CC-BY | Sekcja Credits w Config + `LICENSES.md` | `LICENSES.md` w repo; **placeholder VRM** w CHANGELOG; dedykowana zakładka Credits w UI **opcjonalna / do domknięcia**. |
+
+**Niezmienione intencje:** env nadpisuje YAML, zero halucynacji w promptach, sandbox plików, offline-first, reguły PRD.
 
 ---
 
