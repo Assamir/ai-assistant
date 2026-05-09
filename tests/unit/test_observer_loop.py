@@ -139,9 +139,13 @@ def test_process_observer_skip_variants():
 
 
 def test_comments_too_similar():
-    assert ObserverLoop._comments_too_similar("To samo", "to samo", 0.9)
-    assert not ObserverLoop._comments_too_similar("a", "b", 0.9)
-    assert not ObserverLoop._comments_too_similar("", "x", 0.9)
+    assert ObserverLoop._comments_too_similar("To samo", ["to samo"], 0.9)
+    assert not ObserverLoop._comments_too_similar("a", ["b"], 0.9)
+    assert not ObserverLoop._comments_too_similar("", ["x"], 0.9)
+    # returns False when recent list is empty
+    assert not ObserverLoop._comments_too_similar("something", [], 0.9)
+    # catches similarity against any of the last N comments
+    assert ObserverLoop._comments_too_similar("To samo", ["unrelated", "to samo", "also unrelated"], 0.9)
 
 
 @pytest.mark.asyncio

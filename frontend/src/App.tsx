@@ -199,6 +199,7 @@ export function App() {
   const [sttBlock, setSttBlock] = useState<{ text: string; hint: string | null } | null>(null);
   const [observerLine, setObserverLine] = useState<string | null>(null);
   const [activityFeed, setActivityFeed] = useState<string[]>([]);
+  const [clickThrough, setClickThrough] = useState(false);
   const pttCycleRunningRef = useRef(false);
   const pttReleasedEarlyRef = useRef(false);
   const pttReleaseRef = useRef<(() => void) | null>(null);
@@ -267,9 +268,11 @@ export function App() {
       }
       if (f.event === "window_click_through_on") {
         window.assystent?.setClickThrough?.(true);
+        setClickThrough(true);
       }
       if (f.event === "window_click_through_off") {
         window.assystent?.setClickThrough?.(false);
+        setClickThrough(false);
       }
       if (f.event === "agent_activity") {
         const tool = typeof f.payload.tool === "string" ? f.payload.tool : "(?)";
@@ -929,6 +932,23 @@ export function App() {
             </div>
 
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !clickThrough;
+                  window.assystent?.setClickThrough?.(next);
+                  setClickThrough(next);
+                }}
+                title={clickThrough ? "Kliknięcia przechodzą przez awatar (kliknij aby wyłączyć)" : "Awatar blokuje kliknięcia (kliknij aby włączyć klik-przez)"}
+                style={{
+                  ...btnSecondary,
+                  borderColor: clickThrough ? "#4a9b6f" : "#4a5568",
+                  background: clickThrough ? "rgba(74,155,111,0.18)" : undefined,
+                  color: clickThrough ? "#7dd4a8" : undefined,
+                }}
+              >
+                Klik-przez: {clickThrough ? "WŁ" : "WYŁ"}
+              </button>
               <button
                 type="button"
                 onClick={() => {

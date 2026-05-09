@@ -73,6 +73,7 @@ class ObserverLoop:
         self._dhash_window: deque[int] = deque(maxlen=3)
         self._last_game_snapshot: str | None = None
         self._last_comment_monotonic: float | None = None
+        self._recent_comments: deque[str] = deque(maxlen=3)
 
     @property
     def is_running(self) -> bool:
@@ -101,6 +102,7 @@ class ObserverLoop:
             self._deduper.reset()
             self._dhash_window.clear()
             self._last_comment_monotonic = None
+            self._recent_comments.clear()
             self._last_game_snapshot = g or None
 
     def _interval_seconds(self) -> float:
@@ -161,11 +163,14 @@ class ObserverLoop:
         return (time.monotonic() - self._last_comment_monotonic) < cfg.min_comment_interval_seconds
 
     @staticmethod
-    def _comments_too_similar(a: str, b: str, threshold: float) -> bool:
-        if threshold <= 0 or not a or not b:
+    def _comments_too_similar(candidate: str, recent: list[str], threshold: float) -> bool:
+        if threshold <= 0 or not candidate or not recent:
             return False
-        r = difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio()
-        return r >= threshold
+        cl = candidate.lower()
+        return any(
+            difflib.SequenceMatcher(None, cl, r.lower()).ratio() >= threshold
+            for r in recent
+        )
 
     async def _loop(self) -> None:
         while self._running:
@@ -285,12 +290,12 @@ class ObserverLoop:
         if not spoken:
             return
 
-        prev_comment = str(st.get("last_observer_comment") or "").strip()
         th = self._ctx.config.observer.comment_similarity_skip_threshold
-        if prev_comment and self._comments_too_similar(spoken, prev_comment, th):
+        if self._comments_too_similar(spoken, list(self._recent_comments), th):
             return
 
         st["last_observer_comment"] = spoken
+        self._recent_comments.append(spoken)
 
         await self._persist_observer_comment(spoken, emotion)
 
