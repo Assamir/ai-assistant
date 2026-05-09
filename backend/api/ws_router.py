@@ -73,6 +73,33 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
                     await ctx.websocket_manager.send_to_session(_sid, ev, pl)
 
             asyncio.create_task(_run_backup(_root, broadcast_fn=_bcast))
+        if name == "reload_config":
+            _cfg_path = getattr(ctx, "resolved_config_path", None)
+            if _cfg_path:
+                try:
+                    from backend.config.loader import ConfigLoader as _CL
+                    from backend.services.runtime_config import apply_reload_configuration as _arc
+                    from backend.services.config_hot_reload import _broadcast_reload as _br
+                    _new_cfg = _CL().load_config(_cfg_path)
+                    await _arc(ctx, _new_cfg)
+                    await _br(ctx, "config")
+                except Exception as _exc:
+                    _logger.warning("Manual reload_config failed: %s", _exc)
+        if name == "open_documents":
+            import subprocess as _sp
+            import sys as _sys
+            from pathlib import Path as _Path
+            _docs = _Path(ctx.config.general.content_root).expanduser() / "documents"
+            _docs.mkdir(parents=True, exist_ok=True)
+            try:
+                if _sys.platform == "win32":
+                    _sp.Popen(["explorer", str(_docs)], shell=False)
+                elif _sys.platform == "darwin":
+                    _sp.Popen(["open", str(_docs)])
+                else:
+                    _sp.Popen(["xdg-open", str(_docs)])
+            except Exception as _exc:
+                _logger.warning("open_documents failed: %s", _exc)
 
 
     async def emit_chunks(text_body: str, emotion: str) -> None:
