@@ -1089,6 +1089,14 @@ Przed pierwszym uruchomieniem backendu, upewnij się:
 | `ASSY_OBSERVER__AUTO_LEAGUE_HINT_ON_GAME_DETECTED` | `1` / `true` | Po zdarzeniu `game_detected`, gdy backend zna `**game_id`** profilu (klucz w `player_profile.yaml`), uruchamiany jest `check-league-hint`; przy rozbieżności z wynikiem `web_search` nadawane jest WS `player_profile.league_hint`. W YAML: `observer.auto_league_hint_on_game_detected: true`. Wymaga włączonego MCP z narzędziem `web_search`; gdy MCP wyłączone lub brak dopasowania profilu, nic się nie dzieje (bez błędu w UI). |
 
 
+**Observer — auto-raport sesji po zakończeniu gry (F-DOC-05):**
+
+| ENV | Wartość | Skutek |
+| --- | ------- | ------ |
+| `ASSY_OBSERVER__AUTO_SESSION_REPORT` | `1` / `true` | Po zdarzeniu `game_detected { active: false }` backend emituje `auto_session_report_start` do wszystkich aktywnych sesji WS; frontend wysyła automatycznie „podsumuj sesję" (CMD-08). W YAML: `observer.auto_session_report: true`. |
+| `ASSY_OBSERVER__AUTO_SESSION_REPORT_MIN_TURNS` | liczba (domyślnie `3`) | Minimalna liczba wiadomości w sesji, powyżej której raport jest generowany. |
+
+
 ### 11.3 Frontend / Electron (preload)
 
 
