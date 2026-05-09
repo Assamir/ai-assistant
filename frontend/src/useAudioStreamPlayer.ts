@@ -223,6 +223,20 @@ export function useAudioStreamPlayer(outputDeviceId?: string) {
     }
   }, [outputVolume]);
 
+  const duck = useCallback(
+    (targetVolume: number, rampMs: number) => {
+      const g = liveGainRef.current;
+      const ctx = audioCtxRef.current;
+      if (!g || !ctx) return;
+      const effective = Math.max(0, Math.min(1, targetVolume)) * outputVolume;
+      const rampSec = Math.max(0.005, rampMs / 1000);
+      g.gain.cancelScheduledValues(ctx.currentTime);
+      g.gain.setValueAtTime(g.gain.value, ctx.currentTime);
+      g.gain.linearRampToValueAtTime(effective, ctx.currentTime + rampSec);
+    },
+    [outputVolume],
+  );
+
   const feedAudioChunk = useCallback(
     (chunk: string) => {
       if (!bufferRef.current) {
@@ -267,6 +281,7 @@ export function useAudioStreamPlayer(outputDeviceId?: string) {
 
   return {
     feedAudioChunk,
+    duck,
     isSpeaking,
     mouthLevel,
     stop,

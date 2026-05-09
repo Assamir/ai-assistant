@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { configPutHeaders, normalizeApiBaseUrl, readApiBaseUrl } from "./apiBase";
 import { AvatarCanvas } from "./AvatarCanvas";
-import { ConfigPanel, type ConfigTabId } from "./ConfigPanel";
+import { ConfigPanel, type ConfigTabId, type PersonaInfo } from "./ConfigPanel";
 import { SetupWizard, SETUP_WIZARD_STORAGE_KEY, hasSetupWizardDismissed } from "./SetupWizard";
 import { useAudioDevices } from "./useAudioDevices";
 import { useAudioStreamPlayer } from "./useAudioStreamPlayer";
@@ -208,6 +208,9 @@ export function App() {
   const [clickThrough, setClickThrough] = useState(false);
   const [sleeping, setSleeping] = useState(false);
   const [silentMode, setSilentMode] = useState(false);
+  const [observerActive, setObserverActive] = useState(false);
+  const [personas, setPersonas] = useState<PersonaInfo[]>([]);
+  const [activePersona, setActivePersona] = useState("aria");
   const [micDeviceId, setMicDeviceId] = useState<string>(() =>
     typeof window !== "undefined" ? localStorage.getItem(MIC_DEVICE_STORAGE_KEY) ?? "" : "",
   );
@@ -237,6 +240,7 @@ export function App() {
 
   const {
     feedAudioChunk,
+    duck,
     isSpeaking,
     mouthLevel,
     stop: stopAudio,
@@ -272,6 +276,10 @@ export function App() {
         void primeAudio();
         feedAudioChunk(f.payload.chunk_base64);
       }
+      if (f.event === "audio_duck" && typeof f.payload.target_volume === "number") {
+        const rampMs = typeof f.payload.ramp_ms === "number" ? f.payload.ramp_ms : 160;
+        duck(f.payload.target_volume, rampMs);
+      }
       if (f.event === "stt_result") {
         setSttBlock({
           text: typeof f.payload.text === "string" ? f.payload.text : "",
@@ -281,6 +289,7 @@ export function App() {
       if (f.event === "observer_comment" && typeof f.payload.text === "string") {
         const o = f.payload.text.trim();
         setObserverLine(o || null);
+        setObserverActive(true);
       }
       if (f.event === "window_click_through_on") {
         window.assystent?.setClickThrough?.(true);
@@ -329,7 +338,7 @@ export function App() {
         `${new Date().toISOString().slice(11, 19)} ← ${f.event}`,
       ]);
     },
-    [feedAudioChunk, primeAudio],
+    [feedAudioChunk, duck, primeAudio],
   );
 
   const { status, sendFrame } = useWebSocket({
@@ -340,6 +349,38 @@ export function App() {
   const push = useCallback((line: string) => {
     setLog((prev) => [...prev.slice(-40), `${new Date().toISOString().slice(11, 19)} ${line}`]);
   }, []);
+
+  const fetchPersonas = useCallback(async () => {
+    try {
+      const res = await fetch(`${apiBase.replace(/\/$/, "")}/api/v1/personas`);
+      if (!res.ok) return;
+      const data = (await res.json()) as { personas: PersonaInfo[]; active: string };
+      setPersonas(data.personas ?? []);
+      setActivePersona(data.active ?? "aria");
+    } catch {
+      /* backend not yet available */
+    }
+  }, [apiBase]);
+
+  const handleSendCommand = useCallback(
+    (text: string) => {
+      void primeAudio();
+      stopAudio();
+      sendFrame("chat_text", { text });
+      // Optimistic observer state update
+      if (/obserwuj|obserwator/i.test(text)) {
+        setObserverActive(/zacznij|uruchom/i.test(text));
+      }
+      if (/persona/i.test(text)) {
+        const m = /zmień personę na (\S+)/i.exec(text);
+        if (m) {
+          setActivePersona(m[1]);
+          setTimeout(() => void fetchPersonas(), 500);
+        }
+      }
+    },
+    [sendFrame, stopAudio, primeAudio, fetchPersonas],
+  );
 
   const wsReady = status === "open";
 
@@ -486,6 +527,12 @@ export function App() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!wsReady) return undefined;
+    void fetchPersonas();
+    return undefined;
+  }, [wsReady, fetchPersonas]);
+
   const fetchStatus = useCallback(async () => {
     setBusyStatus(true);
     setStatusError(null);
@@ -618,41 +665,49 @@ export function App() {
     [],
   );
 
+  const sharedConfigPanelProps = {
+    wsStatus: status,
+    profileWsActive: profileBanner !== null,
+    vrmUrl,
+    onVrmSave: saveVrmUrl,
+    apiBaseUrl: apiBase,
+    onApiBaseSave: saveApiBase,
+    onFetchStatus: fetchStatus,
+    statusJson,
+    statusError,
+    busyStatus,
+    piperResourcesRoot: piperResourcesRootDraft,
+    onPiperResourcesRootChange: setPiperResourcesRootDraft,
+    piperExecutable: piperExecutableDraft,
+    onPiperExecutableChange: setPiperExecutableDraft,
+    selectedPiperVoiceId,
+    onSelectedPiperVoiceIdChange: (id: string) => {
+      setSelectedPiperVoiceId(id);
+      if (typeof window !== "undefined") {
+        localStorage.setItem(PIPER_VOICE_ID_LS, id);
+      }
+    },
+    onApplyPiperVoice: applyPiperVoice,
+    ttsVoiceSpeed,
+    onTtsVoiceSpeedChange: setTtsVoiceSpeed,
+    onApplyTtsSpeed: applyTtsSpeed,
+    busyConfig,
+    configMessage,
+    observerActive,
+    sleeping,
+    silentMode,
+    wsReady,
+    onSendCommand: handleSendCommand,
+    personas,
+    activePersona,
+    onRefreshPersonas: fetchPersonas,
+  };
+
   if (isConfigView) {
     return (
       <main style={{ ...layout, maxWidth: 680 }}>
         <h1 style={{ fontSize: "1.4rem", fontWeight: 600, margin: "0 0 1rem" }}>Konfiguracja Assystenta</h1>
-        <ConfigPanel
-          tab={configTab}
-          onTab={setConfigTab}
-          wsStatus={status}
-          profileWsActive={profileBanner !== null}
-          vrmUrl={vrmUrl}
-          onVrmSave={saveVrmUrl}
-          apiBaseUrl={apiBase}
-          onApiBaseSave={saveApiBase}
-          onFetchStatus={fetchStatus}
-          statusJson={statusJson}
-          statusError={statusError}
-          busyStatus={busyStatus}
-          piperResourcesRoot={piperResourcesRootDraft}
-          onPiperResourcesRootChange={setPiperResourcesRootDraft}
-          piperExecutable={piperExecutableDraft}
-          onPiperExecutableChange={setPiperExecutableDraft}
-          selectedPiperVoiceId={selectedPiperVoiceId}
-          onSelectedPiperVoiceIdChange={(id) => {
-            setSelectedPiperVoiceId(id);
-            if (typeof window !== "undefined") {
-              localStorage.setItem(PIPER_VOICE_ID_LS, id);
-            }
-          }}
-          onApplyPiperVoice={applyPiperVoice}
-          ttsVoiceSpeed={ttsVoiceSpeed}
-          onTtsVoiceSpeedChange={setTtsVoiceSpeed}
-          onApplyTtsSpeed={applyTtsSpeed}
-          busyConfig={busyConfig}
-          configMessage={configMessage}
-        />
+        <ConfigPanel tab={configTab} onTab={setConfigTab} {...sharedConfigPanelProps} />
       </main>
     );
   }
@@ -1456,37 +1511,7 @@ export function App() {
           </section>
         </div>
 
-        <ConfigPanel
-          tab={configTab}
-          onTab={setConfigTab}
-          wsStatus={status}
-          profileWsActive={profileBanner !== null}
-          vrmUrl={vrmUrl}
-          onVrmSave={saveVrmUrl}
-          apiBaseUrl={apiBase}
-          onApiBaseSave={saveApiBase}
-          onFetchStatus={fetchStatus}
-          statusJson={statusJson}
-          statusError={statusError}
-          busyStatus={busyStatus}
-          piperResourcesRoot={piperResourcesRootDraft}
-          onPiperResourcesRootChange={setPiperResourcesRootDraft}
-          piperExecutable={piperExecutableDraft}
-          onPiperExecutableChange={setPiperExecutableDraft}
-          selectedPiperVoiceId={selectedPiperVoiceId}
-          onSelectedPiperVoiceIdChange={(id) => {
-            setSelectedPiperVoiceId(id);
-            if (typeof window !== "undefined") {
-              localStorage.setItem(PIPER_VOICE_ID_LS, id);
-            }
-          }}
-          onApplyPiperVoice={applyPiperVoice}
-          ttsVoiceSpeed={ttsVoiceSpeed}
-          onTtsVoiceSpeedChange={setTtsVoiceSpeed}
-          onApplyTtsSpeed={applyTtsSpeed}
-          busyConfig={busyConfig}
-          configMessage={configMessage}
-        />
+        <ConfigPanel tab={configTab} onTab={setConfigTab} {...sharedConfigPanelProps} />
       </div>
 
       <p style={{ marginTop: "1.5rem", fontSize: 12, color: "#6d6680" }}>

@@ -8,7 +8,12 @@ import {
 } from "./vrmBundledCatalog";
 import { BUNDLED_PIPER_VOICES } from "./piperVoicesCatalog";
 
-export type ConfigTabId = "connection" | "avatar" | "more";
+export type ConfigTabId = "connection" | "avatar" | "observer" | "persona" | "more";
+
+export interface PersonaInfo {
+  id: string;
+  display_name: string;
+}
 
 interface ConfigPanelProps {
   tab: ConfigTabId;
@@ -36,11 +41,23 @@ interface ConfigPanelProps {
   onApplyTtsSpeed: () => Promise<void>;
   busyConfig: boolean;
   configMessage: string | null;
+  // Observer tab
+  observerActive?: boolean;
+  sleeping?: boolean;
+  silentMode?: boolean;
+  wsReady?: boolean;
+  onSendCommand?: (text: string) => void;
+  // Persona tab
+  personas?: PersonaInfo[];
+  activePersona?: string;
+  onRefreshPersonas?: () => void;
 }
 
 const tabs: { id: ConfigTabId; label: string }[] = [
   { id: "connection", label: "Połączenie" },
   { id: "avatar", label: "Avatar" },
+  { id: "observer", label: "Obserwator" },
+  { id: "persona", label: "Persona" },
   { id: "more", label: "Więcej" },
 ];
 
@@ -69,9 +86,18 @@ export function ConfigPanel({
   onApplyTtsSpeed,
   busyConfig,
   configMessage,
+  observerActive = false,
+  sleeping = false,
+  silentMode = false,
+  wsReady = false,
+  onSendCommand,
+  personas = [],
+  activePersona = "aria",
+  onRefreshPersonas,
 }: ConfigPanelProps) {
   const [draftVrm, setDraftVrm] = useState(vrmUrl);
   const [draftApi, setDraftApi] = useState(apiBaseUrl);
+  const [intervalDraft, setIntervalDraft] = useState("30");
 
   React.useEffect(() => {
     setDraftVrm(vrmUrl);
@@ -226,6 +252,154 @@ export function ConfigPanel({
               <code>assystent.vrmUrl</code>
             </span>
           </div>
+        </div>
+      )}
+
+      {tab === "observer" && (
+        <div style={{ fontSize: 14, lineHeight: 1.6 }}>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.85rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+              <span
+                style={{
+                  display: "inline-block",
+                  width: 9,
+                  height: 9,
+                  borderRadius: "50%",
+                  background: observerActive ? "#22c55e" : "#6b7280",
+                  boxShadow: observerActive ? "0 0 5px #22c55e" : "none",
+                }}
+              />
+              <span style={{ color: "#b8afc8", fontSize: 13 }}>
+                {observerActive ? "Obserwator aktywny" : "Obserwator zatrzymany"}
+              </span>
+            </div>
+            {sleeping ? (
+              <span style={{ fontSize: 12, color: "#d4b86a", padding: "0.1rem 0.45rem", borderRadius: 4, border: "1px solid #7a6b3e", background: "rgba(122,107,62,0.18)" }}>
+                Asystent śpi
+              </span>
+            ) : null}
+            {silentMode ? (
+              <span style={{ fontSize: 12, color: "#7ab8d4", padding: "0.1rem 0.45rem", borderRadius: 4, border: "1px solid #4a7b9b", background: "rgba(74,123,155,0.18)" }}>
+                Tryb cichy
+              </span>
+            ) : null}
+          </div>
+
+          <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+            <button
+              type="button"
+              disabled={!wsReady}
+              onClick={() => onSendCommand?.(observerActive ? "przestań obserwować" : "zacznij obserwować")}
+              style={observerActive ? { ...btnPrimary, background: "#3d2a2a", borderColor: "#7a3a3a" } : btnPrimary}
+            >
+              {observerActive ? "Zatrzymaj obserwatora" : "Uruchom obserwatora"}
+            </button>
+            <button
+              type="button"
+              disabled={!wsReady}
+              onClick={() => onSendCommand?.(sleeping ? "obudź się" : "idź spać")}
+              style={{ ...btnPrimary, background: sleeping ? "#2a2a1e" : "#1e2a2a", borderColor: sleeping ? "#7a7a3a" : "#3a5a5a" }}
+            >
+              {sleeping ? "Obudź" : "Śpij"}
+            </button>
+            <button
+              type="button"
+              disabled={!wsReady}
+              onClick={() => onSendCommand?.(silentMode ? "możesz mówić" : "wycisz się")}
+              style={{ ...btnPrimary, background: silentMode ? "#1e2a34" : "#1e2a2a", borderColor: silentMode ? "#4a7b9b" : "#3a5a5a" }}
+            >
+              {silentMode ? "Wyłącz tryb cichy" : "Włącz tryb cichy"}
+            </button>
+          </div>
+
+          <div style={{ marginBottom: "0.75rem" }}>
+            <label style={{ display: "block", marginBottom: "0.3rem", fontSize: 13, color: "#b8afc8" }}>
+              Interwał obserwatora (sekundy)
+            </label>
+            <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+              <input
+                type="number"
+                min={5}
+                max={600}
+                value={intervalDraft}
+                onChange={(e) => setIntervalDraft(e.target.value)}
+                style={{ ...inputStyle, maxWidth: 100 }}
+              />
+              <button
+                type="button"
+                disabled={!wsReady}
+                onClick={() => {
+                  const n = parseInt(intervalDraft, 10);
+                  if (!Number.isNaN(n) && n >= 5) {
+                    onSendCommand?.(`ustaw interwał na ${n} sekund`);
+                  }
+                }}
+                style={btnPrimary}
+              >
+                Ustaw
+              </button>
+            </div>
+            <p style={{ margin: "0.3rem 0 0", fontSize: 12, color: "#6d6680" }}>
+              Komenda: <code style={{ fontSize: 11 }}>ustaw interwał na N sekund</code>. Minimum 5s.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {tab === "persona" && (
+        <div style={{ fontSize: 14, lineHeight: 1.6 }}>
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginBottom: "0.75rem" }}>
+            <span style={{ fontSize: 13, color: "#b8afc8" }}>
+              Aktywna: <strong style={{ color: "#d4ccec" }}>{activePersona}</strong>
+            </span>
+            <button type="button" onClick={() => onRefreshPersonas?.()} style={{ ...btnPrimary, padding: "0.25rem 0.6rem", fontSize: 12 }}>
+              ↺ Odśwież
+            </button>
+          </div>
+
+          {personas.length === 0 ? (
+            <p style={{ color: "#7a7390", fontSize: 13 }}>
+              Brak plików person w <code style={{ fontSize: 11 }}>personas/</code>. Dodaj plik <code style={{ fontSize: 11 }}>aria.md</code> z frontmatter YAML.
+            </p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+              {personas.map((p) => (
+                <div
+                  key={p.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "0.45rem 0.7rem",
+                    borderRadius: 7,
+                    border: `1px solid ${p.id === activePersona ? "#8b7bb8" : "#2a2438"}`,
+                    background: p.id === activePersona ? "#2a2438" : "#100d18",
+                  }}
+                >
+                  <div>
+                    <span style={{ color: "#e8e4f0", fontWeight: p.id === activePersona ? 600 : 400 }}>{p.display_name}</span>
+                    <span style={{ marginLeft: "0.5rem", fontSize: 12, color: "#6d6680" }}>{p.id}</span>
+                    {p.id === activePersona ? (
+                      <span style={{ marginLeft: "0.4rem", fontSize: 11, color: "#9b7fd6" }}>● aktywna</span>
+                    ) : null}
+                  </div>
+                  {p.id !== activePersona ? (
+                    <button
+                      type="button"
+                      disabled={!wsReady}
+                      onClick={() => onSendCommand?.(`zmień personę na ${p.id}`)}
+                      style={{ ...btnPrimary, padding: "0.25rem 0.65rem", fontSize: 12 }}
+                    >
+                      Aktywuj
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+          <p style={{ margin: "0.75rem 0 0", fontSize: 12, color: "#6d6680" }}>
+            Pliki person: <code style={{ fontSize: 11 }}>{"{content_root}"}/personas/*.md</code>. Zmiany pliku wczytają się bez restartu.
+          </p>
         </div>
       )}
 

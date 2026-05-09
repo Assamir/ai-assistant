@@ -462,6 +462,24 @@ async def api_knowledge_delete(dep: Deps, source_path: str):
     return {"ok": True, "removed": removed, "source_path": source_path}
 
 
+@router.get("/personas")
+async def api_personas(dep: Deps):
+    """Lista plików person dostępnych w personas/ oraz aktywna persona."""
+    pl = dep.persona_loader
+    personas = []
+    try:
+        for p in sorted(pl._dir.glob("*.md")):
+            try:
+                loaded = pl.load(p.stem)
+                personas.append({"id": p.stem, "display_name": loaded.frontmatter.display_name})
+            except Exception:
+                personas.append({"id": p.stem, "display_name": p.stem})
+    except Exception:
+        pass
+    active = dep.orchestrator.state.get("active_persona") or "aria"
+    return {"personas": personas, "active": active}
+
+
 @router.get('/tools')
 async def api_tools(dep: Deps):
     """Lista zarejestrowanych narzedzi MCP dostepnych dla LLM."""

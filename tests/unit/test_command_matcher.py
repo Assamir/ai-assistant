@@ -200,3 +200,47 @@ def test_cmd_t15_silent_mode_off_fuzzy_phrasing():
 def test_segments_split():
 
     assert len(split_command_segments("a i b")) == 2
+
+
+# --- CMD-21: forget_knowledge ---
+
+def test_cmd21_basic():
+    m = CommandMatcher(fuzzy=False).match_one("zapomnij o budowach")
+    assert m is not None
+    assert m.builtin_action == "forget_knowledge"
+    assert m.params.get("topic") == "budowach"
+
+
+def test_cmd21_cmd_id():
+    m = CommandMatcher(fuzzy=False).match_one("zapomnij o strategii")
+    assert m is not None
+    assert m.cmd_id == "CMD-21"
+
+
+def test_cmd21_multiword_topic():
+    m = CommandMatcher(fuzzy=False).match_one("zapomnij o path of exile")
+    assert m is not None
+    assert m.builtin_action == "forget_knowledge"
+    assert m.params.get("topic") == "path of exile"
+
+
+def test_cmd21_polish_diacritics_stripped():
+    # normalize strips ą→a, ę→e etc.; "wzmocnieniach" stays as is
+    m = CommandMatcher(fuzzy=False).match_one("zapomnij o wzmocnieniach")
+    assert m is not None
+    assert m.builtin_action == "forget_knowledge"
+    assert "wzmocnieniach" in (m.params.get("topic") or "")
+
+
+def test_cmd21_no_topic_no_match():
+    # "zapomnij o" alone — pattern requires at least one \w char after "o "
+    m = CommandMatcher(fuzzy=False).match_one("zapomnij o")
+    assert m is None or m.builtin_action != "forget_knowledge"
+
+
+def test_cmd21_priority_below_sleep():
+    # Sleep (priority 89) must beat forget_knowledge (priority 38)
+    rules = builtin_rules_ordered()
+    sleep_rule = next(r for r in rules if r.cmd_id == "CMD-01")
+    forget_rule = next(r for r in rules if r.cmd_id == "CMD-21")
+    assert sleep_rule.priority > forget_rule.priority
