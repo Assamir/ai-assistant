@@ -434,6 +434,24 @@ async def api_daily_checks_list(dep: Deps, game: str | None = None, limit: int =
     return {"checks": rows}
 
 
+@router.post("/backup")
+async def api_backup_run(dep: Deps):
+    """Tworzy kopię zapasową content_root jako ZIP."""
+    from pathlib import Path
+    from backend.services.backup_service import run_backup
+
+    root = Path(dep.config.general.content_root).expanduser()
+
+    async def _bcast(ev: str, pl: dict) -> None:
+        for sid in dep.websocket_manager.iter_session_ids():
+            await dep.websocket_manager.send_to_session(sid, ev, pl)
+
+    result = await run_backup(root, broadcast_fn=_bcast)
+    if not result.get("ok"):
+        raise HTTPException(status_code=500, detail={"code": "BACKUP_FAILED", "error": result.get("error")})
+    return result
+
+
 @router.get('/tools')
 async def api_tools(dep: Deps):
     """Lista zarejestrowanych narzedzi MCP dostepnych dla LLM."""

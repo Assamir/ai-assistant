@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json as _json
 import logging
@@ -61,6 +62,17 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
             from backend.services.game_detection_tracking import sync_game_detections_on_observer_command
 
             await sync_game_detections_on_observer_command(ctx, name)
+        if name == "backup_request":
+            from pathlib import Path as _Path
+            from backend.services.backup_service import run_backup as _run_backup
+
+            _root = _Path(ctx.config.general.content_root).expanduser()
+
+            async def _bcast(ev: str, pl: dict) -> None:
+                for _sid in ctx.websocket_manager.iter_session_ids():
+                    await ctx.websocket_manager.send_to_session(_sid, ev, pl)
+
+            asyncio.create_task(_run_backup(_root, broadcast_fn=_bcast))
 
 
     async def emit_chunks(text_body: str, emotion: str) -> None:
