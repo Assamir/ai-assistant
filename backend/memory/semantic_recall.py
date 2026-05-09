@@ -46,12 +46,20 @@ def _recall_memory_order(documents: List[str], query: str, k: int) -> List[str]:
 class SemanticRecall:
     """Dwie kolekcje: `conversations`, `knowledge_base` (DOK-11)."""
 
-    def __init__(self, *, persist_directory: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        persist_directory: str | None = None,
+        max_conversations: int = 10_000,
+    ) -> None:
         self._mode: str = "chroma"
         self._conv_docs: List[str] = []
+        self._conv_metas: List[Mapping[str, Any]] = []
+        self._conv_ingest_seq: int = 0
         self._kb_docs: List[str] = []
         self._kb_metas: List[Mapping[str, Any]] = []
         self._ingest_seq: int = 0
+        self._max_conversations: int = max(0, int(max_conversations))
         self._conv: Any = None
         self._kb: Any = None
         try:
@@ -85,12 +93,33 @@ class SemanticRecall:
     def knowledge_base(self) -> Any:
         return self._kb
 
-    def add_conversation_chunks(self, *, ids: Sequence[str], documents: Sequence[str]) -> None:
+    def add_conversation_chunks(
+        self,
+        *,
+        ids: Sequence[str],
+        documents: Sequence[str],
+        metadatas: Sequence[Mapping[str, Any]] | None = None,
+    ) -> None:
         if self._mode == "memory":
-            self._conv_docs.extend(str(d) for d in documents)
+            for i, d in enumerate(documents):
+                self._conv_ingest_seq += 1
+                m: dict[str, Any] = dict(metadatas[i]) if metadatas is not None and i < len(metadatas) else {}
+                m["ingest_seq"] = self._conv_ingest_seq
+                self._conv_docs.append(str(d))
+                self._conv_metas.append(m)
+            if self._max_conversations > 0:
+                self.prune_conversations(self._max_conversations)
             return
         embs = [_hash_embedding(d) for d in documents]
-        self._conv.add(ids=list(ids), documents=list(documents), embeddings=embs)
+        meta_list: list[dict[str, Any]] = []
+        for i in range(len(documents)):
+            self._conv_ingest_seq += 1
+            m = dict(metadatas[i]) if metadatas is not None and i < len(metadatas) else {}
+            m["ingest_seq"] = self._conv_ingest_seq
+            meta_list.append(m)
+        self._conv.add(ids=list(ids), documents=list(documents), embeddings=embs, metadatas=meta_list)
+        if self._max_conversations > 0:
+            self.prune_conversations(self._max_conversations)
 
     def add_knowledge_chunks(
         self,
@@ -174,6 +203,37 @@ class SemanticRecall:
         drop_ids = [doc_id for _, doc_id in indexed[:to_drop]]
         if drop_ids:
             self._kb.delete(ids=drop_ids)
+
+    def prune_conversations(self, max_documents: int) -> None:
+        """FIFO po ``ingest_seq`` — utrzymuje co najwyżej ``max_documents`` chunków w conversations."""
+        if max_documents < 0:
+            return
+        if self._mode == "memory":
+            overflow = len(self._conv_docs) - max_documents
+            if overflow > 0:
+                del self._conv_docs[0:overflow]
+                del self._conv_metas[0:overflow]
+            return
+        data = self._conv.get(include=["metadatas"])
+        ids = data.get("ids") or []
+        if len(ids) <= max_documents:
+            return
+        metas_raw = data.get("metadatas") or []
+        indexed: list[tuple[int, str]] = []
+        for i, doc_id in enumerate(ids):
+            m = metas_raw[i] if i < len(metas_raw) else None
+            seq = 0
+            if isinstance(m, dict):
+                try:
+                    seq = int(m.get("ingest_seq") or 0)
+                except (TypeError, ValueError):
+                    seq = 0
+            indexed.append((seq, doc_id))
+        indexed.sort(key=lambda x: x[0])
+        to_drop = len(ids) - max_documents
+        drop_ids = [doc_id for _, doc_id in indexed[:to_drop]]
+        if drop_ids:
+            self._conv.delete(ids=drop_ids)
 
     def recall_conversations(self, query: str, k: int = 4) -> List[str]:
         if self._mode == "memory":
