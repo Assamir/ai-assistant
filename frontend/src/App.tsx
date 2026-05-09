@@ -200,6 +200,8 @@ export function App() {
   const [observerLine, setObserverLine] = useState<string | null>(null);
   const [activityFeed, setActivityFeed] = useState<string[]>([]);
   const [clickThrough, setClickThrough] = useState(false);
+  const [sleeping, setSleeping] = useState(false);
+  const [silentMode, setSilentMode] = useState(false);
   const pttCycleRunningRef = useRef(false);
   const pttReleasedEarlyRef = useRef(false);
   const pttReleaseRef = useRef<(() => void) | null>(null);
@@ -273,6 +275,15 @@ export function App() {
       if (f.event === "window_click_through_off") {
         window.assystent?.setClickThrough?.(false);
         setClickThrough(false);
+      }
+      if (f.event === "avatar_hide") {
+        setSleeping(true);
+      }
+      if (f.event === "avatar_show") {
+        setSleeping(false);
+      }
+      if (f.event === "silent_mode") {
+        setSilentMode(!!f.payload.enabled);
       }
       if (f.event === "agent_activity") {
         const tool = typeof f.payload.tool === "string" ? f.payload.tool : "(?)";
@@ -932,6 +943,34 @@ export function App() {
             </div>
 
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+              <button
+                type="button"
+                disabled={!wsReady}
+                onClick={() => sendFrame("chat_text", { text: sleeping ? "obudź się" : "idź spać" })}
+                title={sleeping ? "Asystent śpi — kliknij aby obudzić" : "Kliknij aby uśpić asystenta"}
+                style={{
+                  ...btnSecondary,
+                  borderColor: sleeping ? "#7a6b3e" : "#4a5568",
+                  background: sleeping ? "rgba(122,107,62,0.18)" : undefined,
+                  color: sleeping ? "#d4b86a" : undefined,
+                }}
+              >
+                {sleeping ? "Obudź" : "Śpij"}
+              </button>
+              <button
+                type="button"
+                disabled={!wsReady}
+                onClick={() => sendFrame("chat_text", { text: silentMode ? "możesz mówić" : "wycisz się" })}
+                title={silentMode ? "Tryb cichy — asystent pokazuje tekst zamiast mówić (kliknij aby wyłączyć)" : "Kliknij aby włączyć tryb cichy"}
+                style={{
+                  ...btnSecondary,
+                  borderColor: silentMode ? "#4a7b9b" : "#4a5568",
+                  background: silentMode ? "rgba(74,123,155,0.18)" : undefined,
+                  color: silentMode ? "#7ab8d4" : undefined,
+                }}
+              >
+                Cichy: {silentMode ? "WŁ" : "WYŁ"}
+              </button>
               <button
                 type="button"
                 onClick={() => {
