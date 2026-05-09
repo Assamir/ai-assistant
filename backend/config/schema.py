@@ -251,6 +251,16 @@ class ObserverConfig(BaseModel):
         default=True,
         description="Czy odtwarzać krótki ping przed komentarzem obserwatora (F-VO-09).",
     )
+    auto_session_report: bool = Field(
+        default=False,
+        description="Po zatrzymaniu gry automatycznie wyzwól podsumowanie sesji (CMD-08) dla aktywnych klientów WS.",
+    )
+    auto_session_report_min_turns: int = Field(
+        default=3,
+        ge=1,
+        le=100,
+        description="Minimalna liczba wiadomości w sesji, żeby uruchomić auto-raport.",
+    )
 
 
 class MonitorInfo(BaseModel):

@@ -220,6 +220,9 @@ export function App() {
   );
   const [overlayInputOpen, setOverlayInputOpen] = useState(false);
   const [overlayDraft, setOverlayDraft] = useState("");
+  const [displays, setDisplays] = useState<Array<{ id: number; label: string; isPrimary: boolean }>>([]);
+  const [selectedDisplayId, setSelectedDisplayId] = useState<number | null>(null);
+  const [autoSessionReportPending, setAutoSessionReportPending] = useState(false);
 
   const dragHandleRef = useRef<HTMLDivElement>(null);
   const subtitleClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -361,6 +364,9 @@ export function App() {
           profileBannerTimer.current = setTimeout(() => setProfileBanner(null), 16_000);
         }
       }
+      if (f.event === "auto_session_report_start") {
+        setAutoSessionReportPending(true);
+      }
       setLog((prev) => [
         ...prev.slice(-40),
         `${new Date().toISOString().slice(11, 19)} ← ${f.event}`,
@@ -411,6 +417,12 @@ export function App() {
   );
 
   const wsReady = status === "open";
+
+  useEffect(() => {
+    if (!autoSessionReportPending || !wsReady) return;
+    setAutoSessionReportPending(false);
+    sendFrame("chat_text", { text: "podsumuj sesję" });
+  }, [autoSessionReportPending, wsReady, sendFrame]);
 
   const [ttsDiag, setTtsDiag] = useState<{
     checked: boolean;
@@ -561,6 +573,17 @@ export function App() {
     return undefined;
   }, [wsReady, fetchPersonas]);
 
+  useEffect(() => {
+    if (!window.assystent?.getDisplays) return;
+    void window.assystent.getDisplays().then((list) => {
+      setDisplays(list);
+      const primary = list.find((d) => d.isPrimary);
+      if (primary && selectedDisplayId === null) setSelectedDisplayId(primary.id);
+    }).catch(() => undefined);
+  // run once on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const fetchStatus = useCallback(async () => {
     setBusyStatus(true);
     setStatusError(null);
@@ -693,6 +716,11 @@ export function App() {
     [],
   );
 
+  const handleSetDisplay = useCallback((id: number) => {
+    setSelectedDisplayId(id);
+    window.assystent?.setDisplay?.(id);
+  }, []);
+
   const sharedConfigPanelProps = {
     wsStatus: status,
     profileWsActive: profileBanner !== null,
@@ -729,6 +757,9 @@ export function App() {
     personas,
     activePersona,
     onRefreshPersonas: fetchPersonas,
+    displays,
+    selectedDisplayId,
+    onSetDisplay: handleSetDisplay,
   };
 
   if (isConfigView) {

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, ipcMain, session } = require("electron");
+const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, ipcMain, session, screen } = require("electron");
 
 /** Bez tego Chromium w Electron często zatrzymuje `AudioContext` / TTS dopóki użytkownik nie „obudzi" audio gestem. */
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
@@ -354,6 +354,24 @@ app.whenReady().then(() => {
 
   ipcMain.on("tray_health", (_event, health) => {
     updateTrayHealth(typeof health === "string" ? health : "unknown");
+  });
+
+  ipcMain.handle("get-displays", () => {
+    return screen.getAllDisplays().map((d) => ({
+      id: d.id,
+      label: `${d.isPrimary ? "Główny — " : ""}${d.bounds.width}×${d.bounds.height} (${d.bounds.x}, ${d.bounds.y})`,
+      bounds: d.bounds,
+      isPrimary: d.isPrimary,
+    }));
+  });
+
+  ipcMain.on("set-display", (_event, displayId) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const displays = screen.getAllDisplays();
+    const target = displays.find((d) => d.id === displayId) || displays.find((d) => d.isPrimary) || displays[0];
+    if (!target) return;
+    const { width, height } = mainWindow.getBounds();
+    mainWindow.setBounds({ x: target.bounds.x, y: target.bounds.y, width, height });
   });
 
   try {

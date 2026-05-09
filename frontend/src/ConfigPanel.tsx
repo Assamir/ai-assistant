@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   BUNDLED_VRM_FILENAMES,
   BUNDLED_VRM_SELECT_OTHER,
@@ -8,7 +8,7 @@ import {
 } from "./vrmBundledCatalog";
 import { BUNDLED_PIPER_VOICES } from "./piperVoicesCatalog";
 
-export type ConfigTabId = "connection" | "avatar" | "observer" | "persona" | "more";
+export type ConfigTabId = "connection" | "avatar" | "observer" | "persona" | "more" | "status";
 
 export interface PersonaInfo {
   id: string;
@@ -51,6 +51,10 @@ interface ConfigPanelProps {
   personas?: PersonaInfo[];
   activePersona?: string;
   onRefreshPersonas?: () => void;
+  // Monitor selection (F-UI-02)
+  displays?: Array<{ id: number; label: string; isPrimary: boolean }>;
+  selectedDisplayId?: number | null;
+  onSetDisplay?: (id: number) => void;
 }
 
 const tabs: { id: ConfigTabId; label: string }[] = [
@@ -59,7 +63,49 @@ const tabs: { id: ConfigTabId; label: string }[] = [
   { id: "observer", label: "Obserwator" },
   { id: "persona", label: "Persona" },
   { id: "more", label: "Więcej" },
+  { id: "status", label: "Status" },
 ];
+
+function StatusBadge({ ok, label }: { ok: boolean | null; label: string }) {
+  const color = ok === null ? "#6d6680" : ok ? "#22c55e" : "#ef4444";
+  const text = ok === null ? "—" : ok ? "OK" : "brak";
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.3rem 0" }}>
+      <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0, display: "inline-block" }} />
+      <span style={{ color: "#b8afc8", minWidth: 110 }}>{label}</span>
+      <span style={{ color, fontSize: 12 }}>{text}</span>
+    </div>
+  );
+}
+
+function StatusHealthView({ json }: { json: string }) {
+  let data: Record<string, unknown> | null = null;
+  try { data = JSON.parse(json) as Record<string, unknown>; } catch { return <pre style={{ fontSize: 11, color: "#b8afc8" }}>{json}</pre>; }
+
+  const overall = (data?.status as string) ?? "unknown";
+  const c = (data as { health?: { components?: Record<string, Record<string, unknown>> } })?.health?.components ?? {};
+  const cfg = (data as { health?: { config?: { resolved_yaml?: string | null } } })?.health?.config;
+  const overallColor = overall === "ok" || overall === "healthy" ? "#22c55e" : overall === "degraded" ? "#eab308" : "#6d6680";
+
+  return (
+    <div>
+      <div style={{ marginBottom: "0.6rem", fontWeight: 600, color: overallColor }}>
+        Status: {overall}
+      </div>
+      <StatusBadge ok={(c.llm as { available?: boolean })?.available ?? null} label="LLM" />
+      <StatusBadge ok={(c.stt as { available?: boolean })?.available ?? null} label="STT (rozpoznawanie)" />
+      <StatusBadge ok={(c.tts as { available?: boolean })?.available ?? null} label="TTS (synteza mowy)" />
+      <StatusBadge ok={(c.screen_capture as { capture_available?: boolean })?.capture_available ?? null} label="Zrzut ekranu" />
+      <StatusBadge ok={(c.vision_pipeline as { available?: boolean })?.available ?? null} label="Potok wizji" />
+      <StatusBadge ok={(c.memory as { enabled?: boolean })?.enabled ?? null} label="Pamięć semantyczna" />
+      {cfg?.resolved_yaml && (
+        <p style={{ margin: "0.6rem 0 0", fontSize: 11, color: "#6d6680", wordBreak: "break-all" }}>
+          Konfiguracja: <code style={{ fontSize: 10 }}>{cfg.resolved_yaml}</code>
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function ConfigPanel({
   tab,
@@ -94,6 +140,9 @@ export function ConfigPanel({
   personas = [],
   activePersona = "aria",
   onRefreshPersonas,
+  displays = [],
+  selectedDisplayId = null,
+  onSetDisplay,
 }: ConfigPanelProps) {
   const [draftVrm, setDraftVrm] = useState(vrmUrl);
   const [draftApi, setDraftApi] = useState(apiBaseUrl);
@@ -106,6 +155,15 @@ export function ConfigPanel({
   const [importBuildGame, setImportBuildGame] = useState("");
   const [importBuildStatus, setImportBuildStatus] = useState<string | null>(null);
   const [importBuildBusy, setImportBuildBusy] = useState(false);
+
+  // Auto-poll GET /api/v1/status every 5 s when the Status tab is open
+  useEffect(() => {
+    if (tab !== "status") return;
+    void onFetchStatus();
+    const id = setInterval(() => { void onFetchStatus(); }, 5000);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
 
   React.useEffect(() => {
     setDraftVrm(vrmUrl);
@@ -503,6 +561,23 @@ export function ConfigPanel({
         </div>
       )}
 
+      {tab === "status" && (
+        <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
+            <span style={{ fontSize: 12, color: "#6d6680" }}>Auto-odśwież co 5 s</span>
+            {busyStatus && <span style={{ fontSize: 11, color: "#a78bfa" }}>Ładowanie…</span>}
+          </div>
+          {statusError && (
+            <p style={{ color: "#f0a8a8", fontSize: 13, margin: "0 0 0.75rem" }}>{statusError}</p>
+          )}
+          {statusJson ? (
+            <StatusHealthView json={statusJson} />
+          ) : !statusError ? (
+            <p style={{ color: "#6d6680", fontSize: 13 }}>Brak danych — łączenie z backendem…</p>
+          ) : null}
+        </div>
+      )}
+
       {tab === "more" && (
         <div style={{ fontSize: 14, color: "#b8afc8", lineHeight: 1.55 }}>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
@@ -614,6 +689,31 @@ export function ConfigPanel({
           </div>
           {configMessage && (
             <p style={{ margin: "0.5rem 0 0", fontSize: 13, color: "#a8e0c8" }}>{configMessage}</p>
+          )}
+
+          {displays.length > 0 && (
+            <>
+              <p style={{ margin: "1rem 0 0.35rem", color: "#e8e4f0" }}>Okno overlaya — monitor</p>
+              <select
+                value={selectedDisplayId ?? ""}
+                onChange={(e) => {
+                  const id = Number(e.target.value);
+                  if (!Number.isNaN(id)) onSetDisplay?.(id);
+                }}
+                style={{ ...inputStyle, cursor: "pointer" }}
+              >
+                {displays.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.label}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
+          {displays.length === 0 && typeof window !== "undefined" && !!window.assystent && (
+            <p style={{ margin: "1rem 0 0", fontSize: 12, color: "#6d6680" }}>
+              Ładowanie listy monitorów…
+            </p>
           )}
         </div>
       )}

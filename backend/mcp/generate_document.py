@@ -9,6 +9,30 @@ from typing import Any, Dict
 
 from backend.mcp.sandbox import SandboxValidator, SandboxViolation
 
+try:
+    import markdown as _md_lib
+
+    def _md_to_html(text: str) -> str:
+        html = _md_lib.markdown(
+            text,
+            extensions=["tables", "fenced_code", "nl2br"],
+        )
+        # convert <pre><code class="language-mermaid">…</code></pre>
+        # to <div class="mermaid">…</div> so mermaid.js renders it
+        html = re.sub(
+            r'<pre><code class="language-mermaid">(.*?)</code></pre>',
+            lambda m: f'<div class="mermaid">{m.group(1)}</div>',
+            html,
+            flags=re.DOTALL,
+        )
+        return html
+
+except ImportError:
+    def _md_to_html(text: str) -> str:
+        escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        return f"<pre style='white-space:pre-wrap'>{escaped}</pre>"
+
+
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="pl">
 <head>
@@ -22,11 +46,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   th,td { border:1px solid #3f3f5f; padding:0.5rem 1rem; text-align:left; }
   th { background:#2d2d4e; }
   code { background:#2d2d4e; padding:0.1em 0.4em; border-radius:4px; }
+  pre code { background:transparent; padding:0; }
+  pre { background:#2d2d4e; padding:1rem; border-radius:6px; overflow-x:auto; }
+  blockquote { border-left:3px solid #a78bfa; margin:0; padding-left:1rem; color:#b8b0d0; }
+  .mermaid { background:#2d2d4e; border-radius:6px; padding:1rem; margin:1rem 0; }
   @media print { body { background:white; color:black; } }
 </style>
 </head>
 <body>
 {{CONTENT}}
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'dark' });</script>
 </body>
 </html>"""
 
@@ -92,7 +122,8 @@ def make_tool_generate_document(content_root: str):
         except SandboxViolation as exc:
             return {"ok": False, "error": str(exc)}
         if fmt == "html":
-            full_content = HTML_TEMPLATE.replace("{{CONTENT}}", body).replace("{{TITLE}}", t)
+            html_body = _md_to_html(body)
+            full_content = HTML_TEMPLATE.replace("{{CONTENT}}", html_body).replace("{{TITLE}}", t)
         else:
             full_content = body
         try:

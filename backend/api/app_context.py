@@ -437,7 +437,24 @@ def make_game_emitter(ctx: AppContext):
             await ctx.websocket_manager.send_to_session(sid, event_name, dict(payload))
         if event_name == "game_detected":
             await _maybe_auto_league_hint_after_game_detected(ctx, payload)
+            await _maybe_auto_session_report_after_game_stopped(ctx, payload)
     return _emit
+
+
+async def _maybe_auto_session_report_after_game_stopped(ctx: AppContext, payload: Mapping[str, Any]) -> None:
+    """Gdy gra się kończy i `observer.auto_session_report` jest włączone — emituje `auto_session_report_start` do aktywnych sesji WS."""
+    if payload.get("active"):
+        return
+    if not ctx.config.observer.auto_session_report:
+        return
+    session_ids = list(ctx.websocket_manager._by_session.keys())
+    if not session_ids:
+        return
+    for sid in session_ids:
+        try:
+            await ctx.websocket_manager.send_to_session(sid, "auto_session_report_start", {})
+        except Exception:
+            _logger.debug("auto_session_report_start send failed for session %s", sid)
 
 
 async def _maybe_auto_league_hint_after_game_detected(ctx: AppContext, payload: Mapping[str, Any]) -> None:

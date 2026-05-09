@@ -22,4 +22,6 @@ contextBridge.exposeInMainWorld("assystent", {
   setClickThrough: (enabled) => ipcRenderer.send("click_through", enabled),
   setTrayHealth: (health) => ipcRenderer.send("tray_health", health),
   openConfigWindow: () => ipcRenderer.send("open_config_window"),
+  getDisplays: () => ipcRenderer.invoke("get-displays"),
+  setDisplay: (id) => ipcRenderer.send("set-display", id),
 });
