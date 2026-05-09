@@ -16,6 +16,33 @@ let currentHealth = "unknown";
 let bundledBackendProc = null;
 
 // ---------------------------------------------------------------------------
+// Window state persistence — saves/restores {x, y, width, height}
+// ---------------------------------------------------------------------------
+
+const STATE_FILE = path.join(app.getPath("userData"), "window-state.json");
+const DEFAULT_W = 520;
+const DEFAULT_H = 720;
+
+function loadWindowState() {
+  try {
+    const s = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+    if (
+      typeof s.width === "number" && s.width > 100 &&
+      typeof s.height === "number" && s.height > 100
+    ) {
+      return s;
+    }
+  } catch (_) { /* first run or corrupt — use defaults */ }
+  return { width: DEFAULT_W, height: DEFAULT_H };
+}
+
+function saveWindowState(bounds) {
+  try {
+    fs.writeFileSync(STATE_FILE, JSON.stringify(bounds), "utf8");
+  } catch (_) { /* ignore — non-critical */ }
+}
+
+// ---------------------------------------------------------------------------
 // Tray icon PNG generation (no external deps — pure Node.js zlib + CRC32)
 // ---------------------------------------------------------------------------
 
@@ -195,9 +222,12 @@ function stopBundledBackend() {
 }
 
 function createWindow() {
+  const saved = loadWindowState();
   mainWindow = new BrowserWindow({
-    width: 520,
-    height: 720,
+    width: saved.width || DEFAULT_W,
+    height: saved.height || DEFAULT_H,
+    x: typeof saved.x === "number" ? saved.x : undefined,
+    y: typeof saved.y === "number" ? saved.y : undefined,
     show: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -205,6 +235,18 @@ function createWindow() {
       backgroundThrottling: false,
     },
   });
+
+  let _saveTimer = null;
+  const scheduleSave = () => {
+    if (_saveTimer) clearTimeout(_saveTimer);
+    _saveTimer = setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized()) {
+        saveWindowState(mainWindow.getBounds());
+      }
+    }, 500);
+  };
+  mainWindow.on("moved", scheduleSave);
+  mainWindow.on("resized", scheduleSave);
   try {
     mainWindow.webContents.setAudioMuted(false);
   } catch (_) {

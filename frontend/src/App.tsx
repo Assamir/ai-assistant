@@ -202,6 +202,7 @@ export function App() {
   const [clickThrough, setClickThrough] = useState(false);
   const [sleeping, setSleeping] = useState(false);
   const [silentMode, setSilentMode] = useState(false);
+  const dragHandleRef = useRef<HTMLDivElement>(null);
   const pttCycleRunningRef = useRef(false);
   const pttReleasedEarlyRef = useRef(false);
   const pttReleaseRef = useRef<(() => void) | null>(null);
@@ -339,6 +340,12 @@ export function App() {
   useEffect(() => {
     window.assystent?.setTrayHealth?.(wsReady ? "ok" : "error");
   }, [wsReady]);
+
+  useEffect(() => {
+    if (dragHandleRef.current) {
+      dragHandleRef.current.style.setProperty("-webkit-app-region", "drag");
+    }
+  }, []);
 
   useEffect(() => {
     if (!wsReady) {
@@ -641,6 +648,25 @@ export function App() {
         }}
       >
         <div>
+          <div
+            ref={dragHandleRef}
+            title="Przeciągnij aby przesunąć okno"
+            style={{
+              height: "1.25rem",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              userSelect: "none",
+              color: "#3a3550",
+              fontSize: 11,
+              letterSpacing: "0.3rem",
+              marginBottom: "0.25rem",
+              borderRadius: 4,
+              cursor: "grab",
+            }}
+          >
+            ···
+          </div>
           <AvatarCanvas vrmUrl={vrmUrl} emotion={emotion} lipSyncLevel={isSpeaking ? mouthLevel : 0} />
           <p style={{ margin: "0.5rem 0 0", fontSize: 12, color: "#8a8198" }}>
             Emocja (z WS): <strong style={{ color: "#d4ccec" }}>{emotion}</strong>
