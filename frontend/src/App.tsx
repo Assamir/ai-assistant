@@ -3,6 +3,7 @@ import { configPutHeaders, normalizeApiBaseUrl, readApiBaseUrl } from "./apiBase
 import { AvatarCanvas } from "./AvatarCanvas";
 import { ConfigPanel, type ConfigTabId } from "./ConfigPanel";
 import { SetupWizard, SETUP_WIZARD_STORAGE_KEY, hasSetupWizardDismissed } from "./SetupWizard";
+import { useAudioDevices } from "./useAudioDevices";
 import { useAudioStreamPlayer } from "./useAudioStreamPlayer";
 import { usePttRecorder } from "./usePttRecorder";
 import { useWebSocket, type WsFrame } from "./useWebSocket";
@@ -18,6 +19,7 @@ import { joinResourcesPath } from "./piperVoicesPaths";
 
 const VRM_STORAGE_KEY = "assystent.vrmUrl";
 const API_BASE_STORAGE_KEY = "assystent.apiBaseUrl";
+const MIC_DEVICE_STORAGE_KEY = "assystent.micDeviceId";
 
 function readInitialVrmUrl(): string {
   if (typeof window === "undefined") {
@@ -165,6 +167,8 @@ function observerHintsFromStatusJson(data: unknown): string[] {
   return hints;
 }
 
+const isConfigView = typeof window !== "undefined" && window.location.hash === "#config";
+
 export function App() {
   const [log, setLog] = useState<string[]>([]);
   const [emotion, setEmotion] = useState("neutral");
@@ -202,6 +206,9 @@ export function App() {
   const [clickThrough, setClickThrough] = useState(false);
   const [sleeping, setSleeping] = useState(false);
   const [silentMode, setSilentMode] = useState(false);
+  const [micDeviceId, setMicDeviceId] = useState<string>(() =>
+    typeof window !== "undefined" ? localStorage.getItem(MIC_DEVICE_STORAGE_KEY) ?? "" : "",
+  );
   const dragHandleRef = useRef<HTMLDivElement>(null);
   const pttCycleRunningRef = useRef(false);
   const pttReleasedEarlyRef = useRef(false);
@@ -233,7 +240,8 @@ export function App() {
     outputVolume,
     setOutputVolume,
   } = useAudioStreamPlayer();
-  const { pttBusy, pttError, setPttError, pttArm, pttFinalize } = usePttRecorder();
+  const { micDevices, refreshMicDevices } = useAudioDevices();
+  const { pttBusy, pttError, setPttError, pttArm, pttFinalize } = usePttRecorder({ deviceId: micDeviceId || undefined });
 
   useEffect(() => {
     const unlock = () => {
@@ -604,6 +612,45 @@ export function App() {
     }),
     [],
   );
+
+  if (isConfigView) {
+    return (
+      <main style={{ ...layout, maxWidth: 680 }}>
+        <h1 style={{ fontSize: "1.4rem", fontWeight: 600, margin: "0 0 1rem" }}>Konfiguracja Assystenta</h1>
+        <ConfigPanel
+          tab={configTab}
+          onTab={setConfigTab}
+          wsStatus={status}
+          profileWsActive={profileBanner !== null}
+          vrmUrl={vrmUrl}
+          onVrmSave={saveVrmUrl}
+          apiBaseUrl={apiBase}
+          onApiBaseSave={saveApiBase}
+          onFetchStatus={fetchStatus}
+          statusJson={statusJson}
+          statusError={statusError}
+          busyStatus={busyStatus}
+          piperResourcesRoot={piperResourcesRootDraft}
+          onPiperResourcesRootChange={setPiperResourcesRootDraft}
+          piperExecutable={piperExecutableDraft}
+          onPiperExecutableChange={setPiperExecutableDraft}
+          selectedPiperVoiceId={selectedPiperVoiceId}
+          onSelectedPiperVoiceIdChange={(id) => {
+            setSelectedPiperVoiceId(id);
+            if (typeof window !== "undefined") {
+              localStorage.setItem(PIPER_VOICE_ID_LS, id);
+            }
+          }}
+          onApplyPiperVoice={applyPiperVoice}
+          ttsVoiceSpeed={ttsVoiceSpeed}
+          onTtsVoiceSpeedChange={setTtsVoiceSpeed}
+          onApplyTtsSpeed={applyTtsSpeed}
+          busyConfig={busyConfig}
+          configMessage={configMessage}
+        />
+      </main>
+    );
+  }
 
   return (
     <main style={layout}>
@@ -976,6 +1023,41 @@ export function App() {
               ) : null}
             </div>
 
+            <div style={{ marginBottom: "0.75rem" }}>
+              <label htmlFor="assystent-mic-select" style={{ display: "block", marginBottom: "0.3rem", fontSize: 12, color: "#9a93b0" }}>
+                Mikrofon wejściowy (PTT)
+              </label>
+              <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+                <select
+                  id="assystent-mic-select"
+                  value={micDeviceId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setMicDeviceId(id);
+                    localStorage.setItem(MIC_DEVICE_STORAGE_KEY, id);
+                  }}
+                  style={{
+                    flex: 1,
+                    maxWidth: 320,
+                    padding: "0.35rem 0.5rem",
+                    borderRadius: 6,
+                    border: "1px solid #3d3550",
+                    background: "#120f18",
+                    color: "#e8e4f0",
+                    fontSize: 12,
+                  }}
+                >
+                  <option value="">Domyślny mikrofon systemu</option>
+                  {micDevices.map((d) => (
+                    <option key={d.deviceId} value={d.deviceId}>{d.label}</option>
+                  ))}
+                </select>
+                <button type="button" onClick={() => void refreshMicDevices()} style={btnMuted} title="Odśwież listę urządzeń">
+                  ↺
+                </button>
+              </div>
+            </div>
+
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
               <button
                 type="button"
@@ -1109,6 +1191,16 @@ export function App() {
         >
           Kreator startowy
         </button>
+        {" · "}
+        {window.assystent?.openConfigWindow ? (
+          <button
+            type="button"
+            onClick={() => window.assystent?.openConfigWindow?.()}
+            style={btnMuted}
+          >
+            ⚙ Konfiguracja
+          </button>
+        ) : null}
         {" · "}Zmienne: <code>docs/ENV_SETUP.md</code>
       </p>
 

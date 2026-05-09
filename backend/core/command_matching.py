@@ -95,6 +95,7 @@ _DAILY_CHECK_P = (
     r"co\s+sie\s+zmienilo\s+w\s+grze\b|sprawdz\s+zmiany\s+w\s+grze\b|"
     r"check\s+game\s+meta\b|sprawdz\s+meta\s+teraz\b).*$"
 )
+_FORGET_KB_P = r"zapomnij\s+o\s+(?P<topic>\w[\w\s]*)"
 
 
 @dataclass(frozen=True)
@@ -166,6 +167,7 @@ def builtin_rules_ordered() -> List[BuiltinMatchRule]:
         BuiltinMatchRule("CMD-09", 20, "open_documents", _anchor(_OPEN_DOC_P), 5),
         BuiltinMatchRule("CMD-19", 45, "check_league_hint", _anchor(_LEAGUE_HINT_P), 30),
         BuiltinMatchRule("CMD-20", 45, "daily_check", _anchor(_DAILY_CHECK_P), 120),
+        BuiltinMatchRule("CMD-21", 38, "forget_knowledge", _anchor(_FORGET_KB_P), 5),
     )
     return sorted(tbl, key=lambda r: (-r.priority, r.cmd_id))
 
@@ -211,6 +213,8 @@ def _try_builtin_on_norm(
             params.update(_params_from_character(m))
         if gd.get("game_id"):
             params["game_id"] = str(gd["game_id"]).strip().lower()
+        if gd.get("topic"):
+            params["topic"] = str(gd["topic"]).strip().lower()
         return CommandMatch(
             cmd_id=rule.cmd_id,
             builtin_action=rule.builtin_action,

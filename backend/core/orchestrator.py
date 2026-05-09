@@ -180,6 +180,7 @@ class ConversationOrchestrator:
             "daily_check_fn": self._daily_check_fn,
             "db_path": self._db_path,
             "db_session_id": db_chat_session_id,
+            "semantic_recall": self._semantic_recall,
         }
         ctx = SimpleOrchestratorContext(self.state, emitter, services=services)
         matched = self._matcher.match_all_segments(text)

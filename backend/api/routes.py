@@ -452,6 +452,16 @@ async def api_backup_run(dep: Deps):
     return result
 
 
+@router.delete("/knowledge")
+async def api_knowledge_delete(dep: Deps, source_path: str):
+    """Usuwa chunki bazy wiedzy według ``source_path`` (np. ``stellaris.md``). Wymaga memory.enabled=true."""
+    sr = dep.semantic_recall
+    if sr is None:
+        raise HTTPException(status_code=503, detail={"code": "MEMORY_UNAVAILABLE", "hint": "memory.enabled: false w konfiguracji"})
+    removed = sr.remove_knowledge_chunks_where({"source_path": source_path})
+    return {"ok": True, "removed": removed, "source_path": source_path}
+
+
 @router.get('/tools')
 async def api_tools(dep: Deps):
     """Lista zarejestrowanych narzedzi MCP dostepnych dla LLM."""

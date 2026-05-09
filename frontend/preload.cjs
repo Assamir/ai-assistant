@@ -21,4 +21,5 @@ contextBridge.exposeInMainWorld("assystent", {
   configPutToken,
   setClickThrough: (enabled) => ipcRenderer.send("click_through", enabled),
   setTrayHealth: (health) => ipcRenderer.send("tray_health", health),
+  openConfigWindow: () => ipcRenderer.send("open_config_window"),
 });

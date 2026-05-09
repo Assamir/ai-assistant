@@ -9,6 +9,7 @@ const zlib = require("zlib");
 const { spawn } = require("child_process");
 
 let mainWindow = null;
+let configWindow = null;
 let tray = null;
 let allowQuit = false;
 let currentHealth = "unknown";
@@ -112,6 +113,34 @@ function buildTrayIcon(health) {
   }
 }
 
+function createConfigWindow() {
+  if (configWindow && !configWindow.isDestroyed()) {
+    configWindow.show();
+    configWindow.focus();
+    return;
+  }
+  configWindow = new BrowserWindow({
+    width: 680,
+    height: 780,
+    title: "Assystent — Konfiguracja",
+    show: true,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      backgroundThrottling: false,
+    },
+  });
+  const devUrl = process.env.VITE_DEV_SERVER_URL || "http://localhost:5173";
+  if (process.env.ASSYSTENT_DEV === "1") {
+    configWindow.loadURL(devUrl + "#config");
+  } else {
+    configWindow.loadFile(path.join(__dirname, "dist", "index.html"), { hash: "config" });
+  }
+  configWindow.on("closed", () => {
+    configWindow = null;
+  });
+}
+
 function buildTrayMenu() {
   const h = currentHealth;
   const statusLabel =
@@ -124,6 +153,10 @@ function buildTrayMenu() {
     {
       label: "Pokaż",
       click: () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } },
+    },
+    {
+      label: "Konfiguracja",
+      click: () => createConfigWindow(),
     },
     { type: "separator" },
     { label: "Zakończ", click: () => { allowQuit = true; app.quit(); } },
@@ -308,6 +341,10 @@ app.whenReady().then(() => {
     if (mainWindow) {
       mainWindow.setIgnoreMouseEvents(!!enabled, { forward: true });
     }
+  });
+
+  ipcMain.on("open_config_window", () => {
+    createConfigWindow();
   });
 
   ipcMain.on("tray_health", (_event, health) => {

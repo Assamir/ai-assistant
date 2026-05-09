@@ -27,10 +27,17 @@ const IDLE_SWAY_SPRING = 9;
 const IDLE_SWAY_AMP_X = 0.01;
 const IDLE_SWAY_AMP_Z = 0.0035;
 
+function randomBlinkDelay() {
+  return 2.5 + Math.random() * 5;
+}
+
 function VrmRoot({ url, emotion, lipSyncLevel }: VrmRootProps) {
   const vrmRef = useRef<VRM | null>(null);
   const idleBonesRef = useRef<{ bone: THREE.Object3D; rest: THREE.Quaternion }[]>([]);
   const idleSwayRef = useRef({ x: 0, z: 0 });
+  const nextBlinkRef = useRef(randomBlinkDelay());
+  const blinkPhaseRef = useRef<"open" | "closing" | "opening">("open");
+  const blinkValueRef = useRef(0);
 
   const latestEmotionRef = useRef(emotion);
   latestEmotionRef.current = emotion;
@@ -70,6 +77,9 @@ function VrmRoot({ url, emotion, lipSyncLevel }: VrmRootProps) {
       vrmRef.current = null;
       idleBonesRef.current = [];
       idleSwayRef.current = { x: 0, z: 0 };
+      nextBlinkRef.current = randomBlinkDelay();
+      blinkPhaseRef.current = "open";
+      blinkValueRef.current = 0;
     };
   }, [gltf]);
 
@@ -131,6 +141,29 @@ function VrmRoot({ url, emotion, lipSyncLevel }: VrmRootProps) {
     const lip = lipSyncLevel > 0.035 ? Math.min(1, lipSyncLevel * 0.95) : 0;
     if (lip > 0) {
       em.setValue("aa", lip);
+    }
+
+    // Idle blink — random interval, quick close/open
+    if (blinkPhaseRef.current === "open") {
+      nextBlinkRef.current -= delta;
+      if (nextBlinkRef.current <= 0) {
+        blinkPhaseRef.current = "closing";
+        blinkValueRef.current = 0;
+      }
+    } else if (blinkPhaseRef.current === "closing") {
+      blinkValueRef.current = Math.min(1, blinkValueRef.current + delta / 0.07);
+      if (blinkValueRef.current >= 1) {
+        blinkPhaseRef.current = "opening";
+      }
+    } else {
+      blinkValueRef.current = Math.max(0, blinkValueRef.current - delta / 0.09);
+      if (blinkValueRef.current <= 0) {
+        blinkPhaseRef.current = "open";
+        nextBlinkRef.current = randomBlinkDelay();
+      }
+    }
+    if (blinkValueRef.current > 0) {
+      em.setValue("blink", blinkValueRef.current);
     }
   });
 

@@ -39,7 +39,11 @@ export interface UsePttRecorderResult {
   pttFinalize: () => Promise<string | null>;
 }
 
-export function usePttRecorder(): UsePttRecorderResult {
+export interface UsePttRecorderOptions {
+  deviceId?: string;
+}
+
+export function usePttRecorder(options?: UsePttRecorderOptions): UsePttRecorderResult {
   const [pttBusy, setPttBusy] = useState(false);
   const [pttError, setPttError] = useState<string | null>(null);
   const sessionRef = useRef<ActiveSession | null>(null);
@@ -88,13 +92,16 @@ export function usePttRecorder(): UsePttRecorderResult {
     }
     setPttBusy(true);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
-      });
+      const audioConstraints: MediaTrackConstraints = {
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+      };
+      const did = options?.deviceId?.trim();
+      if (did && did !== "default") {
+        audioConstraints.deviceId = { exact: did };
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
       const audioCtx = new AudioContext();
       await audioCtx.resume();
       const source = audioCtx.createMediaStreamSource(stream);

@@ -310,6 +310,44 @@ async def forget_cache_stub(ctx: OrchestratorContext, params: Dict[str, str]) ->
     return CommandExecutionResult(success=True, message="Czyszczę cache MCP.", emotion="thinking")
 
 
+async def forget_knowledge_handler(ctx: OrchestratorContext, params: Dict[str, str]) -> CommandExecutionResult:
+    topic = (params.get("topic") or "").strip().lower()
+    if not topic:
+        return CommandExecutionResult(success=False, message="Nie rozumiem — o czym mam zapomnieć?", emotion="confused")
+
+    svc = getattr(ctx, "svc", lambda n, d=None: d)
+    sr: Any = svc("semantic_recall")
+    if sr is None:
+        return CommandExecutionResult(
+            success=False,
+            message="Pamięć semantyczna jest wyłączona — nie mam czego zapominać.",
+            emotion="thinking",
+        )
+    try:
+        removed = sr.remove_knowledge_chunks_where({"source_path": f"{topic}.md"})
+        if not removed:
+            slug = topic.replace(" ", "_")
+            removed = sr.remove_knowledge_chunks_where({"source_path": f"{slug}.md"})
+        if removed:
+            plural = "fragmenty" if removed > 1 else "fragment"
+            return CommandExecutionResult(
+                success=True,
+                message=f"Usunelam {removed} {plural} wiedzy o '{topic}'. Zapomniane.",
+                emotion="thinking",
+            )
+        return CommandExecutionResult(
+            success=True,
+            message=f"Nie znalazlam wiedzy o '{topic}' do usuniecia.",
+            emotion="thinking",
+        )
+    except Exception as exc:
+        return CommandExecutionResult(
+            success=False,
+            message=f"Błąd usuwania wiedzy: {exc}",
+            emotion="confused",
+        )
+
+
 def install_default_builtin_handlers() -> None:
     register_builtin("sleep", sleep_handler)
     register_builtin("wake", wake_handler)
@@ -331,6 +369,7 @@ def install_default_builtin_handlers() -> None:
     register_builtin("forget_cache", forget_cache_stub)
     register_builtin("check_league_hint", check_league_hint_handler)
     register_builtin("daily_check", daily_check_handler)
+    register_builtin("forget_knowledge", forget_knowledge_handler)
 
 
 install_default_builtin_handlers()
