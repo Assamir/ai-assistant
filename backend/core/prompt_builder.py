@@ -108,6 +108,8 @@ class PromptBuilder:
         memory_prefix: Optional[str] = None,
         language_override: Optional[str] = None,
         max_context_tokens: Optional[int] = None,
+        thread_context_block: Optional[str] = None,
+        agent_plan_block: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         budget_limit = max_context_tokens or self.max_context_tokens
 
@@ -129,6 +131,8 @@ class PromptBuilder:
         _labeled_block("OBSERVER_CONTEXT", observer_context)
         _labeled_block("GAME_PROFILE", game_profile_context)
         _labeled_block("PLAYER_PROFILE_SUMMARY", player_profile_summary)
+        _labeled_block("AKTYWNY_WATEK", thread_context_block)
+        _labeled_block("PLAN_AGENTOWY", agent_plan_block)
 
         optional_joined = "".join(optional_blocks)
 

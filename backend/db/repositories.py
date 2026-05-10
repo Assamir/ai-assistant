@@ -581,3 +581,281 @@ class SystemStateRepository:
                 (key, value),
             )
             await db.commit()
+
+
+class ThreadRepository:
+    """CRUD wątków konwersacji (conversation_threads + thread_messages)."""
+
+    def __init__(self, db_path: str) -> None:
+        self.db_path = db_path
+
+    async def create_thread(self, title: Optional[str] = None) -> int:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            await db.execute(
+                """
+                INSERT INTO conversation_threads (title, status, created_at, updated_at, last_active_at)
+                VALUES (?, 'active', unixepoch(), unixepoch(), unixepoch())
+                """,
+                (title,),
+            )
+            await db.commit()
+            cur = await db.execute("SELECT last_insert_rowid()")
+            row = await cur.fetchone()
+            return int(row[0])
+
+    async def get_thread(self, thread_id: int) -> Optional[Dict[str, Any]]:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                """
+                SELECT id, title, status, topic_summary, key_decisions, key_directions,
+                       message_count, created_at, updated_at, last_active_at
+                FROM conversation_threads WHERE id = ?
+                """,
+                (thread_id,),
+            )
+            row = await cur.fetchone()
+            return dict(row) if row else None
+
+    async def update_thread(self, thread_id: int, **kwargs: Any) -> None:
+        allowed = {"title", "status", "topic_summary", "key_decisions", "key_directions"}
+        updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if not updates:
+            return
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        set_clause += ", updated_at = unixepoch()"
+        values = list(updates.values()) + [thread_id]
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            await db.execute(
+                f"UPDATE conversation_threads SET {set_clause} WHERE id = ?",
+                values,
+            )
+            await db.commit()
+
+    async def touch(self, thread_id: int) -> None:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            await db.execute(
+                "UPDATE conversation_threads SET last_active_at = unixepoch() WHERE id = ?",
+                (thread_id,),
+            )
+            await db.commit()
+
+    async def increment_message_count(self, thread_id: int) -> None:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            await db.execute(
+                "UPDATE conversation_threads SET message_count = message_count + 1 WHERE id = ?",
+                (thread_id,),
+            )
+            await db.commit()
+
+    async def add_message_to_thread(self, message_id: int, thread_id: int) -> None:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            await db.execute(
+                "INSERT OR IGNORE INTO thread_messages (message_id, thread_id) VALUES (?, ?)",
+                (message_id, thread_id),
+            )
+            await db.commit()
+
+    async def get_recent_paused_threads(self, days: int = 30) -> List[Dict[str, Any]]:
+        cutoff = int(__import__("time").time()) - days * 86400
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                """
+                SELECT id, title, status, topic_summary, key_decisions, key_directions,
+                       message_count, last_active_at
+                FROM conversation_threads
+                WHERE status = 'paused' AND last_active_at >= ?
+                ORDER BY last_active_at DESC
+                LIMIT 20
+                """,
+                (cutoff,),
+            )
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
+
+    async def list_by_status(self, status: str) -> List[Dict[str, Any]]:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                """
+                SELECT id, title, status, topic_summary, key_decisions, key_directions,
+                       message_count, last_active_at
+                FROM conversation_threads
+                WHERE status = ?
+                ORDER BY last_active_at DESC
+                LIMIT 50
+                """,
+                (status,),
+            )
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
+
+    async def list_for_panel(self, limit: int = 20) -> List[Dict[str, Any]]:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                """
+                SELECT id, title, status, topic_summary, message_count, last_active_at
+                FROM conversation_threads
+                ORDER BY last_active_at DESC
+                LIMIT ?
+                """,
+                (max(1, min(limit, 100)),),
+            )
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
+
+
+class AgentTaskRepository:
+    """CRUD zadań agentowych (agent_tasks)."""
+
+    def __init__(self, db_path: str) -> None:
+        self.db_path = db_path
+
+    async def create_task(
+        self,
+        *,
+        session_id: Optional[int],
+        thread_id: Optional[int],
+        goal_text: str,
+        step_index: int,
+        total_steps: int,
+        description: str,
+    ) -> int:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            await db.execute(
+                """
+                INSERT INTO agent_tasks (
+                    session_id, thread_id, goal_text, step_index, total_steps,
+                    description, status, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, 'pending', unixepoch(), unixepoch())
+                """,
+                (session_id, thread_id, goal_text, step_index, total_steps, description),
+            )
+            await db.commit()
+            cur = await db.execute("SELECT last_insert_rowid()")
+            row = await cur.fetchone()
+            return int(row[0])
+
+    async def get_task(self, task_id: int) -> Optional[Dict[str, Any]]:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                """
+                SELECT id, session_id, thread_id, goal_text, step_index, total_steps,
+                       description, status, result_summary, quality_score, created_at, updated_at
+                FROM agent_tasks WHERE id = ?
+                """,
+                (task_id,),
+            )
+            row = await cur.fetchone()
+            return dict(row) if row else None
+
+    async def update_task(self, task_id: int, **kwargs: Any) -> None:
+        allowed = {"status", "result_summary", "quality_score"}
+        updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if not updates:
+            return
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        set_clause += ", updated_at = unixepoch()"
+        values = list(updates.values()) + [task_id]
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            await db.execute(
+                f"UPDATE agent_tasks SET {set_clause} WHERE id = ?",
+                values,
+            )
+            await db.commit()
+
+    async def list_for_session(self, session_id: int) -> List[Dict[str, Any]]:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                """
+                SELECT id, goal_text, step_index, total_steps, description,
+                       status, result_summary, quality_score, created_at
+                FROM agent_tasks
+                WHERE session_id = ?
+                ORDER BY created_at DESC, step_index ASC
+                LIMIT 100
+                """,
+                (session_id,),
+            )
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
+
+
+class AgentNoteRepository:
+    """CRUD notatek agentowych (agent_notes)."""
+
+    def __init__(self, db_path: str) -> None:
+        self.db_path = db_path
+
+    async def save_note(
+        self,
+        *,
+        session_id: Optional[int],
+        task_id: Optional[int],
+        thread_id: Optional[int],
+        content: str,
+    ) -> int:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            await db.execute(
+                """
+                INSERT INTO agent_notes (session_id, task_id, thread_id, content, created_at)
+                VALUES (?, ?, ?, ?, unixepoch())
+                """,
+                (session_id, task_id, thread_id, content),
+            )
+            await db.commit()
+            cur = await db.execute("SELECT last_insert_rowid()")
+            row = await cur.fetchone()
+            return int(row[0])
+
+    async def get_notes_for_session(self, session_id: int) -> List[Dict[str, Any]]:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                """
+                SELECT id, task_id, thread_id, content, created_at
+                FROM agent_notes
+                WHERE session_id = ?
+                ORDER BY created_at ASC
+                LIMIT 50
+                """,
+                (session_id,),
+            )
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
+
+    async def get_notes_for_task(self, task_id: int) -> List[Dict[str, Any]]:
+        async with aiosqlite.connect(self.db_path) as db:
+            await apply_pragmas_async(db)
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                """
+                SELECT id, content, created_at
+                FROM agent_notes
+                WHERE task_id = ?
+                ORDER BY created_at ASC
+                """,
+                (task_id,),
+            )
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
