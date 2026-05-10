@@ -522,6 +522,15 @@ async def api_tools(dep: Deps):
         ]
     }
 
+@router.get("/threads")
+async def api_threads(dep: Deps, limit: int = 20):
+    """Lista wątków konwersacji (panel historii)."""
+    from backend.db.repositories import ThreadRepository
+
+    rows = await ThreadRepository(dep.db_path).list_for_panel(limit=limit)
+    return {"threads": rows}
+
+
 class VoiceSynthBody(BaseModel):
 
     text: str = Field(..., min_length=1, max_length=4000)

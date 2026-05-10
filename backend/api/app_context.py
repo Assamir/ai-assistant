@@ -396,8 +396,10 @@ def create_app_context() -> AppContext:
         ctx.game_observer.set_vlm_fallback(_vlm_fallback)
 
     from backend.mcp.context_tools import register_context_dependent_mcp_tools
+    from backend.mcp.registry import register_agent_and_thread_tools
 
     register_context_dependent_mcp_tools(ctx)
+    register_agent_and_thread_tools(reg, db_path=db_path, orchestrator_state=orch.state)
 
     # Wiring voice→REST callables (unikamy circular dep: ctx → orch → ctx)
     from backend.services.league_hint import analyze_league_hint

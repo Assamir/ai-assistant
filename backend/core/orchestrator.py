@@ -688,6 +688,9 @@ class ConversationOrchestrator:
     ) -> CommandExecutionResult:
         emitter = emitter_override or self._emit
 
+        if db_chat_session_id is not None:
+            self.state["db_session_id"] = db_chat_session_id
+
         await self._handle_thread_for_message(user_text, message_id, emitter)
 
         cmds = await self.run_commands_if_any(
