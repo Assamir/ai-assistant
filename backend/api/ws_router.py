@@ -143,10 +143,11 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
         hist = ctx.conversation.tail(sid)
 
         db_id = await ensure_ws_db_session(ctx, sid)
+        user_msg_id: int | None = None
         try:
             from backend.db.repositories import MessageRepository
 
-            await MessageRepository(ctx.db_path).create_message(db_id, "user", user_text.strip())
+            user_msg_id = await MessageRepository(ctx.db_path).create_message(db_id, "user", user_text.strip())
         except Exception:
             pass
 
@@ -155,6 +156,7 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
             conversation_tail=hist,
             emitter_override=emitter,
             db_chat_session_id=db_id,
+            message_id=user_msg_id,
         )
 
         ctx.conversation.append(sid, "user", user_text.strip())

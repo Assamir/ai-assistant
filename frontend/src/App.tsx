@@ -328,7 +328,10 @@ export function App() {
         const o = f.payload.text.trim();
         setObserverLine(o || null);
         setObserverActive(true);
-        if (o) scheduleSubtitleClear();
+        if (o) {
+          scheduleSubtitleClear();
+          setChatHistory((prev) => [...prev.slice(-99), { role: "observer", content: o, timestamp: Date.now() }]);
+        }
       }
       if (f.event === "window_click_through_on") {
         window.assystent?.setClickThrough?.(true);
