@@ -19,6 +19,32 @@ class AIControlConfig(BaseModel):
             "(np. część presetów Gemmy w LM Studio), które ignorują wyniki narzędzi w standardowym formacie."
         ),
     )
+    agentic_mode_enabled: bool = Field(
+        default=True,
+        description="Włącza tryb agentowy: auto-klasyfikacja złożoności → Plan→Execute→Evaluate.",
+    )
+    agentic_complexity_mode: str = Field(
+        default="auto",
+        description="'auto' = heurystyka, 'always' = zawsze plan, 'never' = wyłączony.",
+    )
+    agentic_max_tool_calls: int = Field(
+        default=20,
+        ge=5,
+        le=50,
+        description="Maks. wywołań narzędzi w trybie agentowym (zastępuje max_tool_calls_per_turn).",
+    )
+    agentic_quality_threshold: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Próg jakości poniżej którego uruchamiany jest replan.",
+    )
+    agentic_max_replan_rounds: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        description="Maks. rund replanowania przy niskiej jakości.",
+    )
 
 class LogLevel(str, Enum):
     DEBUG = "DEBUG"
@@ -346,6 +372,30 @@ class MCPConfig(BaseModel):
     )
 
 
+class ThreadConfig(BaseModel):
+    """Konfiguracja systemu wątków konwersacji."""
+
+    enabled: bool = Field(default=True, description="Włącza śledzenie wątków konwersacji.")
+    auto_search_days: int = Field(
+        default=30,
+        ge=1,
+        le=365,
+        description="Ile dni wstecz szukać wątków do reaktywacji.",
+    )
+    min_messages_for_summary: int = Field(default=3, ge=1, le=20)
+    summary_interval_messages: int = Field(default=10, ge=3, le=50)
+
+
+class UIConfig(BaseModel):
+    """Konfiguracja interfejsu użytkownika — panel czatu w overlay."""
+
+    chat_panel_visible: bool = Field(default=True, description="Widoczność panelu czatu w overlay awatara.")
+    chat_panel_width: int = Field(default=280, ge=180, le=600, description="Szerokość panelu czatu w px.")
+    chat_panel_messages: int = Field(default=6, ge=2, le=20, description="Liczba widocznych wiadomości.")
+    chat_panel_side: str = Field(default="right", description="'left' lub 'right' względem awatara.")
+    chat_panel_opacity: float = Field(default=0.85, ge=0.1, le=1.0, description="Przezroczystość tła panelu.")
+
+
 class ConfigSchema(BaseModel):
     general: GeneralConfig = GeneralConfig()
     ai_runtime: AIControlConfig = AIControlConfig()
@@ -396,3 +446,9 @@ class ConfigSchema(BaseModel):
 
     # Personas
     personas: List[PersonaConfig] = Field(default_factory=list)
+
+    # Wątki konwersacji
+    threads: ThreadConfig = ThreadConfig()
+
+    # UI / overlay
+    ui: UIConfig = UIConfig()

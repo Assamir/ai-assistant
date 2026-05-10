@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import AbstractSet, Any, Callable, Dict, List, Mapping, MutableMapping, Optional
 from zoneinfo import ZoneInfo
 
+from typing import MutableMapping
 from backend.config.schema import MCPConfig
 
 _TOOL_GET_TIME = {
@@ -287,6 +288,25 @@ def tool_calculator(expression: str) -> Dict[str, Any]:
     return {"ok": True, "result": value}
 
 
+def register_agent_and_thread_tools(
+    registry: "ToolRegistry",
+    *,
+    db_path: Optional[str],
+    orchestrator_state: MutableMapping[str, Any],
+) -> None:
+    """Rejestruje narzędzia agentowe i wątkowe. Wywoływane z app_context po wiring."""
+    from backend.mcp.agent_tools import make_agent_tools
+    from backend.mcp.thread_tools import make_thread_tools
+
+    agent = make_agent_tools(db_path, orchestrator_state)
+    for name, (schema, handler) in agent.items():
+        registry.register(name, schema, handler, replace=True)
+
+    thread = make_thread_tools(db_path or "", orchestrator_state)
+    for name, (schema, handler) in thread.items():
+        registry.register(name, schema, handler, replace=True)
+
+
 def build_default_tool_registry(
     *,
     db_path: str | None = None,
@@ -341,6 +361,7 @@ def build_default_tool_registry(
 __all__ = [
     "ToolRegistry",
     "build_default_tool_registry",
+    "register_agent_and_thread_tools",
     "tool_calculator",
     "tool_get_current_time",
     "_openai_tool_name",

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { configPutHeaders, normalizeApiBaseUrl, readApiBaseUrl } from "./apiBase";
 import { AvatarCanvas } from "./AvatarCanvas";
+import { ChatHistoryPanel, type ChatMessage, type ThreadInfo, type AgentPlan, type AgentStep } from "./ChatHistoryPanel";
 import { ConfigPanel, type ConfigTabId, type PersonaInfo } from "./ConfigPanel";
 import { SetupWizard, SETUP_WIZARD_STORAGE_KEY, hasSetupWizardDismissed } from "./SetupWizard";
 import { useAudioDevices } from "./useAudioDevices";
@@ -209,6 +210,10 @@ export function App() {
   const [sleeping, setSleeping] = useState(false);
   const [silentMode, setSilentMode] = useState(false);
   const [observerActive, setObserverActive] = useState(false);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [chatPanelVisible, setChatPanelVisible] = useState(true);
+  const [threadInfo, setThreadInfo] = useState<ThreadInfo>({ threadId: null, title: null, kind: null });
+  const [agentPlan, setAgentPlan] = useState<AgentPlan | null>(null);
   const [personas, setPersonas] = useState<PersonaInfo[]>([]);
   const [activePersona, setActivePersona] = useState("aria");
   const [visualState, setVisualState] = useState<"idle" | "listening" | "thinking" | "speaking">("idle");
@@ -296,7 +301,10 @@ export function App() {
       ) {
         const line = f.payload.text.trim();
         setAssistantLine(line || null);
-        if (line) scheduleSubtitleClear();
+        if (line) {
+          scheduleSubtitleClear();
+          setChatHistory((prev) => [...prev.slice(-99), { role: "assistant", content: line, timestamp: Date.now() }]);
+        }
       }
       if (f.event === "audio_stream" && typeof f.payload.chunk_base64 === "string") {
         void primeAudio();
@@ -367,6 +375,55 @@ export function App() {
       if (f.event === "auto_session_report_start") {
         setAutoSessionReportPending(true);
       }
+
+      if (f.event === "thread_new") {
+        setThreadInfo({ threadId: typeof f.payload.thread_id === "number" ? f.payload.thread_id : null, title: null, kind: "new" });
+      }
+      if (f.event === "thread_continued") {
+        setThreadInfo((prev) => ({
+          ...prev,
+          threadId: typeof f.payload.thread_id === "number" ? f.payload.thread_id : prev.threadId,
+          title: typeof f.payload.title === "string" ? f.payload.title : prev.title,
+          kind: "continuation",
+        }));
+      }
+      if (f.event === "thread_resumed") {
+        setThreadInfo({
+          threadId: typeof f.payload.thread_id === "number" ? f.payload.thread_id : null,
+          title: typeof f.payload.title === "string" ? f.payload.title : null,
+          kind: "resumed",
+        });
+      }
+      if (f.event === "thread_summary_updated") {
+        setThreadInfo((prev) => ({
+          ...prev,
+          title: typeof f.payload.title === "string" ? f.payload.title : prev.title,
+        }));
+      }
+
+      if (f.event === "agent_plan_created") {
+        const steps = Array.isArray(f.payload.steps) ? (f.payload.steps as AgentStep[]) : [];
+        setAgentPlan({ goal: typeof f.payload.goal === "string" ? f.payload.goal : "", steps });
+      }
+      if (f.event === "agent_step_started") {
+        const idx = typeof f.payload.step_index === "number" ? f.payload.step_index : -1;
+        setAgentPlan((prev) => {
+          if (!prev) return prev;
+          return { ...prev, steps: prev.steps.map((s) => s.index === idx ? { ...s, status: "in_progress" } : s) };
+        });
+      }
+      if (f.event === "agent_step_done") {
+        const idx = typeof f.payload.step_index === "number" ? f.payload.step_index : -1;
+        const result = typeof f.payload.result_summary === "string" ? f.payload.result_summary : "";
+        setAgentPlan((prev) => {
+          if (!prev) return prev;
+          return { ...prev, steps: prev.steps.map((s) => s.index === idx ? { ...s, status: "done", result } : s) };
+        });
+      }
+      if (f.event === "agent_evaluation_done") {
+        setTimeout(() => setAgentPlan(null), 8000);
+      }
+
       setLog((prev) => [
         ...prev.slice(-40),
         `${new Date().toISOString().slice(11, 19)} ← ${f.event}`,
@@ -442,6 +499,16 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.altKey && e.key === "h") {
+        setChatPanelVisible((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
     if (!wsReady) {
       return undefined;
     }
@@ -479,6 +546,7 @@ export function App() {
     const preview = t.length > 80 ? `${t.slice(0, 80)}…` : t;
     push(ok ? `→ chat_text (${preview})` : "→ chat_text (socket niegotowy)");
     if (ok) {
+      setChatHistory((prev) => [...prev.slice(-99), { role: "user", content: t, timestamp: Date.now() }]);
       setChatDraft("");
     }
   }, [chatDraft, sendFrame, stopAudio, push, primeAudio]);
@@ -824,6 +892,9 @@ export function App() {
           ···
         </div>
 
+        {/* Avatar + Chat panel row */}
+        <div style={{ display: "flex", flex: 1, overflow: "hidden", gap: 0 }}>
+
         {/* Avatar area */}
         <div style={{ position: "relative", flex: 1, overflow: "hidden" }}>
           <AvatarCanvas
@@ -952,6 +1023,23 @@ export function App() {
           ) : null}
         </div>
 
+        {/* Chat history panel */}
+        {chatPanelVisible ? (
+          <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: "0.3rem 0.3rem 0.3rem 0" }}>
+            <ChatHistoryPanel
+              messages={chatHistory}
+              thread={threadInfo}
+              agentPlan={agentPlan}
+              assistantName="Aria"
+              maxMessages={6}
+              opacity={0.85}
+              width={280}
+            />
+          </div>
+        ) : null}
+
+        </div>{/* end Avatar + Chat panel row */}
+
         {/* Bottom control bar */}
         <div
           style={{
@@ -985,6 +1073,7 @@ export function App() {
                     void primeAudio();
                     stopAudio();
                     sendFrame("chat_text", { text: t });
+                    setChatHistory((prev) => [...prev.slice(-99), { role: "user", content: t, timestamp: Date.now() }]);
                     setOverlayDraft("");
                     setOverlayInputOpen(false);
                   }
@@ -1017,6 +1106,7 @@ export function App() {
                   void primeAudio();
                   stopAudio();
                   sendFrame("chat_text", { text: t });
+                  setChatHistory((prev) => [...prev.slice(-99), { role: "user", content: t, timestamp: Date.now() }]);
                   setOverlayDraft("");
                   setOverlayInputOpen(false);
                 }
@@ -1143,6 +1233,22 @@ export function App() {
           </button>
 
           <div style={{ flex: 1 }} />
+
+          {/* Chat panel toggle */}
+          <button
+            type="button"
+            onClick={() => setChatPanelVisible((v) => !v)}
+            style={{
+              ...overlayBtnBase,
+              borderColor: chatPanelVisible ? "#5c4d8c" : "#4a5568",
+              background: chatPanelVisible ? "rgba(44,36,64,0.7)" : "rgba(30,25,42,0.8)",
+              color: chatPanelVisible ? "#c8a8f0" : "#b8afc8",
+              padding: "0.3rem 0.55rem",
+            }}
+            title="Panel czatu (Alt+H)"
+          >
+            💬
+          </button>
 
           {/* Config window */}
           <button
