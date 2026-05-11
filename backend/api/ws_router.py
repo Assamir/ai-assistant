@@ -104,7 +104,7 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
 
     async def emit_chunks(text_body: str, emotion: str) -> None:
         from backend.core.quiet_hours import quiet_hours_suppresses_voice
-        from backend.core.tts_streaming import sentence_split
+        from backend.core.tts_streaming import sentence_split, strip_markdown_for_tts
 
         synth = getattr(ctx, "tts_engine", None)
         trimmed = text_body.strip()
@@ -116,10 +116,13 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
             await mgr.send_to_session(sid, "text_overlay", {"text": trimmed})
             return
 
-        if trimmed and synth is not None:
+        # TTS dostaje wersję bez markdown — Piper nie radzi sobie z `**bold**`, linkami, `## hdr`.
+        tts_text = strip_markdown_for_tts(trimmed)
+
+        if tts_text and synth is not None:
             stride = max(512, getattr(ctx.config.tts, "chunk_bytes", 4096))
             any_audio = False
-            for sentence in sentence_split(trimmed):
+            for sentence in sentence_split(tts_text):
                 try:
                     wav = await synth.speak(sentence, emotion=emotion or None)
                 except Exception:
@@ -139,7 +142,7 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
         elif trimmed:
             await mgr.send_to_session(sid, "text_overlay", {"text": trimmed})
 
-    async def process_text(user_text: str) -> None:
+    async def process_text(user_text: str, output_mode: str = "voice") -> None:
         hist = ctx.conversation.tail(sid)
 
         db_id = await ensure_ws_db_session(ctx, sid)
@@ -151,12 +154,14 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
         except Exception:
             pass
 
+        mode = output_mode if output_mode in ("voice", "text") else "voice"
         verdict = await ctx.orchestrator.handle_user_message(
             user_text,
             conversation_tail=hist,
             emitter_override=emitter,
             db_chat_session_id=db_id,
             message_id=user_msg_id,
+            output_mode=mode,  # type: ignore[arg-type]
         )
 
         ctx.conversation.append(sid, "user", user_text.strip())
@@ -233,12 +238,14 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
 
                 typed = str(payload_map.get("text") or "").strip()
                 if typed:
+                    raw_mode = str(payload_map.get("output_mode") or "voice").strip().lower()
+                    out_mode = raw_mode if raw_mode in ("voice", "text") else "voice"
                     ctx.orchestrator.phase = OrchestratorState.THINKING
 
 
                     await mgr.send_to_session(sid, "visual_state", {"state": "thinking"})
 
-                    await process_text(typed)
+                    await process_text(typed, output_mode=out_mode)
                     ctx.orchestrator.phase = OrchestratorState.IDLE
 
                     await mgr.send_to_session(sid, "visual_state", {"state": "idle"})

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, List, Literal, Optional
 
 try:
     import tiktoken
@@ -11,20 +11,36 @@ except ImportError:  # pragma: no cover
     tiktoken = None
 
 
-BASE_PROMPT_TEMPLATE = """Jesteś lokalnym asystentem AI o imieniu {assistant_name}. Działasz wyłącznie na komputerze użytkownika — nie masz połączenia z chmurą, nie przesyłasz danych na zewnątrz. Masz awatar 3D i rozmawiasz głosowo.
+OutputMode = Literal["voice", "text"]
 
-## JĘZYK
 
-Odpowiadaj zawsze po polsku, chyba że użytkownik wyraźnie poprosi o angielski. Po odpowiedzi po angielsku — wróć do polskiego przy następnej wiadomości. Nazwy gier, filmów, książek i seriali podawaj zawsze w oryginalnym brzmieniu (Path of Exile 2, Stellaris, Baldur's Gate 3 — nigdy "Ścieżka Wygnańca").
-
-## FORMAT ODPOWIEDZI
+_FORMAT_SECTION_VOICE = """## FORMAT ODPOWIEDZI
 
 Twoje odpowiedzi są czytane głosem przez syntezator mowy. Zasady:
 - Odpowiadaj krótkimi zdaniami (styl mówiony, nie pisany).
 - Gdy to jest rozmowa swobodna, staraj się zmieścić odpowiedź w ~80 słowach. Gdy temat wymaga więcej — możesz przekroczyć ten limit.
 - Nie używaj markdown (gwiazdki, nagłówki, listy z myślnikami) — i tak nie zostanie odczytany poprawnie.
 - Nie zaczynaj od "Oczywiście!", "Jasne!" ani podobnych wstępów. Przejdź od razu do meritum.
-- Każdą odpowiedź zacznij od tagu emocji: [EMO:nazwa] — dokładnie jeden tag, na samym początku, bez spacji przed. Lista dozwolonych tagów: happy, amused, proud, sympathetic, sad, disappointed, angry, disgusted, excited, scared, surprised, nervous, thinking, confused, nostalgic, sarcastic.
+- Każdą odpowiedź zacznij od tagu emocji: [EMO:nazwa] — dokładnie jeden tag, na samym początku, bez spacji przed. Lista dozwolonych tagów: happy, amused, proud, sympathetic, sad, disappointed, angry, disgusted, excited, scared, surprised, nervous, thinking, confused, nostalgic, sarcastic."""
+
+
+_FORMAT_SECTION_TEXT = """## FORMAT ODPOWIEDZI
+
+Odpowiedź wyświetlana jest jako tekst w panelu czatu — bez TTS. Dlatego:
+- **Dopasuj długość do tematu.** Krótkie pytanie (np. "która godzina?", "cześć") → 1 zdanie. Pytanie wymagające analizy (build, porównanie, poradnik, "jak grać X", "co lepsze A czy B", "doradź") → **3–8 akapitów konkretu** z listami punktowanymi, danymi, rekomendacją na końcu. Pytanie o fakt → 2–4 zdania.
+- **Nie skracaj na siłę.** Lepiej dać kompletną odpowiedź z konkretami niż lakoniczne zdanie. Jeśli temat ma kilka aspektów — wymień każdy.
+- **Markdown dozwolony i zalecany**: nagłówki `##`, listy `-`, **pogrubienia**, tabele dla porównań. Nie używaj kodu trzy-backtickowego dla zwykłego tekstu.
+- Nie zaczynaj od "Oczywiście!", "Jasne!" ani podobnych wstępów. Przejdź od razu do meritum.
+- Każdą odpowiedź zacznij od tagu emocji: [EMO:nazwa] — dokładnie jeden tag, na samym początku, bez spacji przed. Lista dozwolonych tagów: happy, amused, proud, sympathetic, sad, disappointed, angry, disgusted, excited, scared, surprised, nervous, thinking, confused, nostalgic, sarcastic."""
+
+
+_BASE_PROMPT_HEAD = """Jesteś lokalnym asystentem AI o imieniu {assistant_name}. Działasz wyłącznie na komputerze użytkownika — nie masz połączenia z chmurą, nie przesyłasz danych na zewnątrz. Masz awatar 3D i rozmawiasz głosowo.
+
+## JĘZYK
+
+Odpowiadaj zawsze po polsku, chyba że użytkownik wyraźnie poprosi o angielski. Po odpowiedzi po angielsku — wróć do polskiego przy następnej wiadomości. Nazwy gier, filmów, książek i seriali podawaj zawsze w oryginalnym brzmieniu (Path of Exile 2, Stellaris, Baldur's Gate 3 — nigdy "Ścieżka Wygnańca").
+
+{format_section}
 
 ## ZERO HALUCYNACJI (REGUŁA NACZELNA)
 
@@ -71,6 +87,22 @@ Nie możesz: otwierać aplikacji, zmieniać ustawień systemu operacyjnego, usuw
 
 Jesteś asystentem AI — nie udawaj człowieka. Gdy zapytany "czy jesteś człowiekiem?" odpowiedz prawdziwie. Masz charakter i osobowość (określoną w sekcji Persona poniżej), ale zawsze pozostajesz asystentem.
 """
+
+
+def _format_section_for_mode(mode: OutputMode) -> str:
+    return _FORMAT_SECTION_TEXT if mode == "text" else _FORMAT_SECTION_VOICE
+
+
+def _build_base_prompt(*, assistant_name: str, content_root: str, output_mode: OutputMode) -> str:
+    return _BASE_PROMPT_HEAD.format(
+        assistant_name=assistant_name,
+        content_root=content_root,
+        format_section=_format_section_for_mode(output_mode),
+    )
+
+
+# Backwards-compat: voice-mode prompt z placeholderami nadal eksponowany dla testów i zewn. importów.
+BASE_PROMPT_TEMPLATE = _BASE_PROMPT_HEAD.replace("{format_section}", _FORMAT_SECTION_VOICE)
 
 
 def _build_language_instruction(language_override: Optional[str]) -> str:
@@ -131,12 +163,14 @@ class PromptBuilder:
         max_context_tokens: Optional[int] = None,
         thread_context_block: Optional[str] = None,
         agent_plan_block: Optional[str] = None,
+        output_mode: OutputMode = "voice",
     ) -> List[Dict[str, Any]]:
         budget_limit = max_context_tokens or self.max_context_tokens
 
-        base = BASE_PROMPT_TEMPLATE.format(
+        base = _build_base_prompt(
             assistant_name=assistant_name,
             content_root=content_root,
+            output_mode=output_mode,
         )
         persona_section = "\n\n## PERSONA\n\n" + persona_body_markdown.strip()
         lang_instruction = _build_language_instruction(language_override)

@@ -5,7 +5,9 @@ from __future__ import annotations
 import json as _json
 import time
 from enum import Enum
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Mapping, MutableMapping, Optional, Sequence
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Literal, Mapping, MutableMapping, Optional, Sequence
+
+OutputMode = Literal["voice", "text"]
 
 from backend.ai.llm_client import ChatCompletionResult, LMStudioClient
 from backend.config.schema import ConfigSchema
@@ -69,10 +71,19 @@ def _append_tool_message_with_optional_user_mirror(
     tname = (str(entry.get("name") or fallback_tool_name or "narzędzie") or "narzędzie").strip()
     tid = str(entry.get("tool_call_id") or "").strip()
     tcontent = str(entry.get("content") or "")
-    header = f"[Wynik narzędzia `{tname}`"
+    header_meta = f"`{tname}`"
     if tid:
-        header += f", tool_call_id={tid}"
-    header += " — uwzględnij to w odpowiedzi użytkownikowi po polsku.]\n"
+        header_meta += f", tool_call_id={tid}"
+    header = (
+        f"[INSTRUKCJA SYSTEMOWA — NIE od użytkownika] Wynik narzędzia {header_meta}.\n"
+        "Wykorzystaj poniższe dane do udzielenia użytkownikowi konkretnej, kompletnej odpowiedzi po polsku:\n"
+        "- Zsyntetyzuj informacje w odpowiedź na pierwotne pytanie użytkownika.\n"
+        "- Nie zwracaj się do narzędzia, nie pytaj o zgodę, nie przepraszaj.\n"
+        "- Jeśli wynik jest sukcesem (`ok: true`) — przekaż konkrety (`summary`, `description`, dane).\n"
+        "- Jeśli wynik to błąd (`ok: false`, `error`) — przekaż treść błędu krótko i zaproponuj alternatywę.\n"
+        "- Nie mów „nie mam narzędzi/dostępu” jeśli wynik potwierdza działanie.\n"
+        "Treść wyniku:\n"
+    )
     msgs.append({"role": "user", "content": header + tcontent})
 
 
@@ -326,6 +337,7 @@ class ConversationOrchestrator:
         conversation_tail: Sequence[Dict[str, Any]] = (),
         db_chat_session_id: Optional[int] = None,
         emitter_override: EmitFn | None = None,
+        output_mode: OutputMode = "voice",
     ) -> ChatCompletionResult:
         emit = emitter_override or self._emit
 
@@ -340,12 +352,14 @@ class ConversationOrchestrator:
                 conversation_tail=conversation_tail,
                 db_chat_session_id=db_chat_session_id,
                 emit=emit,
+                output_mode=output_mode,
             )
         return await self._run_standard_loop(
             user_text,
             conversation_tail=conversation_tail,
             db_chat_session_id=db_chat_session_id,
             emit=emit,
+            output_mode=output_mode,
         )
 
     async def _build_messages(
@@ -353,6 +367,7 @@ class ConversationOrchestrator:
         user_text: str,
         conversation_tail: Sequence[Dict[str, Any]],
         max_context_tokens: Optional[int] = None,
+        output_mode: OutputMode = "voice",
     ) -> List[Dict[str, Any]]:
         persona = self._resolve_persona()
         current_game = self.state.get("current_game")
@@ -379,6 +394,7 @@ class ConversationOrchestrator:
             player_profile_summary=pp_summary,
             thread_context_block=thread_block,
             agent_plan_block=agent_plan_block,
+            output_mode=output_mode,
         )
 
         if self._semantic_recall is not None and self._cfg.memory.inject_into_prompt:
@@ -540,6 +556,7 @@ class ConversationOrchestrator:
         conversation_tail: Sequence[Dict[str, Any]],
         db_chat_session_id: Optional[int],
         emit: EmitFn | None,
+        output_mode: OutputMode = "voice",
     ) -> ChatCompletionResult:
         async def _vs(s: OrchestratorState) -> None:
             self.phase = s
@@ -548,7 +565,7 @@ class ConversationOrchestrator:
 
         await _vs(OrchestratorState.THINKING)
         tools_payload = self._registry.openai_tools()
-        msgs = await self._build_messages(user_text, conversation_tail)
+        msgs = await self._build_messages(user_text, conversation_tail, output_mode=output_mode)
 
         tool_calls_done = 0
         max_rounds = max(24, self._max_tools * 8)
@@ -594,6 +611,7 @@ class ConversationOrchestrator:
         conversation_tail: Sequence[Dict[str, Any]],
         db_chat_session_id: Optional[int],
         emit: EmitFn | None,
+        output_mode: OutputMode = "voice",
     ) -> ChatCompletionResult:
         async def _vs(s: OrchestratorState) -> None:
             self.phase = s
@@ -616,7 +634,7 @@ class ConversationOrchestrator:
 
         try:
             for replan_round in range(max_replan + 1):
-                msgs = await self._build_messages(user_text, conversation_tail)
+                msgs = await self._build_messages(user_text, conversation_tail, output_mode=output_mode)
                 tool_calls_done = 0
                 max_rounds = max(40, max_tools * 4)
 
@@ -678,7 +696,7 @@ class ConversationOrchestrator:
                 })
 
             return final_result or await self._llm.chat_completion(
-                await self._build_messages(user_text, conversation_tail), tools=None
+                await self._build_messages(user_text, conversation_tail, output_mode=output_mode), tools=None
             )
         finally:
             self.phase = OrchestratorState.IDLE
@@ -695,6 +713,7 @@ class ConversationOrchestrator:
         emitter_override: EmitFn | None = None,
         db_chat_session_id: Optional[int] = None,
         message_id: Optional[int] = None,
+        output_mode: OutputMode = "voice",
     ) -> CommandExecutionResult:
         emitter = emitter_override or self._emit
 
@@ -722,6 +741,7 @@ class ConversationOrchestrator:
             conversation_tail=conversation_tail,
             db_chat_session_id=db_chat_session_id,
             emitter_override=emitter_override,
+            output_mode=output_mode,
         )
         persona = self._resolve_persona()
         bias = persona_bias_fallback or persona.frontmatter.tts_emotion_bias

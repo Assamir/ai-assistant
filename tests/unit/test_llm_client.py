@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 
-from backend.ai.llm_client import LMStudioClient, _chat_completions_base
+from backend.ai.llm_client import LMStudioClient, _chat_completions_base, _try_parse_inline_tool_calls
 from backend.config.schema import LLMConfig
 from backend.core.interfaces import CircuitBreaker, CircuitBreakerOpen
 
@@ -198,6 +198,109 @@ async def test_http_error_opens_circuit_breaker(llm_cfg: LLMConfig):
 
         with pytest.raises(CircuitBreakerOpen):
             await lm.generate_response("blocked")
+
+
+# ---------------------------------------------------------------------------
+# Inline tool_calls fallback (Qwen/Hermes/Llama3 — LM Studio czasem nie zwraca
+# structured tool_calls, tylko wypluwa hermes-style tag w `content`).
+# ---------------------------------------------------------------------------
+
+
+def test_inline_tool_calls_qwen_hermes_with_trailing_tag():
+    """Dokładny przypadek z logu LM Studio + Qwen 2.5 14B."""
+    content = (
+        'fragistics\n{"name": "web_search", "arguments": '
+        '{"query": "najlepsze buildy Path of Exile 2"}}\n</tool_call>'
+    )
+    cleaned, parsed = _try_parse_inline_tool_calls(content)
+    assert len(parsed) == 1
+    tc = parsed[0]
+    assert tc["type"] == "function"
+    assert tc["function"]["name"] == "web_search"
+    args = json.loads(tc["function"]["arguments"])
+    assert args == {"query": "najlepsze buildy Path of Exile 2"}
+    # "fragistics" jako pre-tag artefakt zostaje jako trim — JSON i tag zniknęły
+    assert "</tool_call>" not in cleaned
+    assert "web_search" not in cleaned
+
+
+def test_inline_tool_calls_full_chatml_block():
+    content = '<tool_call>\n{"name": "get_current_time", "arguments": {}}\n</tool_call>'
+    cleaned, parsed = _try_parse_inline_tool_calls(content)
+    assert len(parsed) == 1
+    assert parsed[0]["function"]["name"] == "get_current_time"
+    assert parsed[0]["function"]["arguments"] == "{}"
+    assert cleaned == ""
+
+
+def test_inline_tool_calls_llama3_python_tag():
+    content = '<|python_tag|>{"name": "calculator", "arguments": {"expression": "2+2"}}'
+    cleaned, parsed = _try_parse_inline_tool_calls(content)
+    assert len(parsed) == 1
+    assert parsed[0]["function"]["name"] == "calculator"
+
+
+def test_inline_tool_calls_bare_json():
+    content = '{"name": "web_search", "arguments": {"query": "test"}}'
+    cleaned, parsed = _try_parse_inline_tool_calls(content)
+    assert len(parsed) == 1
+    assert parsed[0]["function"]["name"] == "web_search"
+    assert cleaned == ""
+
+
+def test_inline_tool_calls_no_match_returns_original():
+    content = "Cześć! Nie wiem co to za pytanie."
+    cleaned, parsed = _try_parse_inline_tool_calls(content)
+    assert parsed == []
+    assert cleaned == content
+
+
+def test_inline_tool_calls_invalid_json_ignored():
+    content = "<tool_call>{not valid json}</tool_call>"
+    cleaned, parsed = _try_parse_inline_tool_calls(content)
+    assert parsed == []
+    assert cleaned == content
+
+
+def test_inline_tool_calls_multiple_calls():
+    content = (
+        '<tool_call>{"name": "a", "arguments": {}}</tool_call>'
+        '<tool_call>{"name": "b", "arguments": {"x": 1}}</tool_call>'
+    )
+    cleaned, parsed = _try_parse_inline_tool_calls(content)
+    assert len(parsed) == 2
+    assert [p["function"]["name"] for p in parsed] == ["a", "b"]
+
+
+@pytest.mark.asyncio
+async def test_chat_completion_recovers_inline_tool_calls(llm_cfg: LLMConfig):
+    """End-to-end: LM Studio zwraca tool_calls=[] ale content z hermes-tagiem — klient parsuje."""
+    payload_out = {
+        "choices": [{
+            "finish_reason": "stop",
+            "message": {
+                "role": "assistant",
+                "content": (
+                    'fragistics\n{"name": "web_search", "arguments": '
+                    '{"query": "buildy poe2"}}\n</tool_call>'
+                ),
+                "tool_calls": [],
+            },
+        }]
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload_out)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport, base_url="http://lm.test/v1/") as client:
+        lm = LMStudioClient(llm_cfg, http_client=client)
+        result = await lm.chat_completion([{"role": "user", "content": "buildy?"}])
+        assert result.tool_calls is not None
+        assert len(result.tool_calls) == 1
+        assert result.tool_calls[0]["function"]["name"] == "web_search"
+        assert "</tool_call>" not in result.content
+        assert "web_search" not in result.content
 
 
 @pytest.mark.asyncio

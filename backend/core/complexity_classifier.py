@@ -13,6 +13,21 @@ _COMPLEX_PATTERNS = [
     re.compile(r"prze?szukaj|sprawdź.*kilka|sprawdź.*wszystko", re.I),
     re.compile(r"na podstawie.*powiedz|na podstawie.*zaproponuj", re.I),
     re.compile(r"zoptymalizuj.*build|ulepsz.*build|jaki.*build.*najlepszy", re.I),
+    # Porównania / rekomendacje
+    re.compile(r"\bporównaj\b|\bzestaw\b|co lepsze|które lepsze|co wybrać|który wybrać", re.I),
+    re.compile(r"\bpolec(?:asz|isz|am)?\b|\bdoradź(?:cie)?\b|\bzasugeruj\b|\bzaproponuj\b", re.I),
+    re.compile(r"co warto|na co (?:warto|zwrócić)|jak (?:wybr|dobr)", re.I),
+    # Buildy / poradniki gier
+    re.compile(r"\bbuild(?:em|ami|ów|y|a)?\b", re.I),
+    re.compile(r"\bporadnik\b|\bguide\b|\btier\s*list\b", re.I),
+    re.compile(r"jak grać|jak gra się|jak ograć|jak rozwinąć|jak zbudować|jak ustaw", re.I),
+    re.compile(r"meta(?:gra)?\b|aktualn[ae] meta|najlepsz[aey].*(?:build|klas|posta|bohater)", re.I),
+    # Wyjaśnienia złożone
+    re.compile(r"wytłumacz|wyjaśnij|opowiedz o|opisz mi|przedstaw", re.I),
+    re.compile(r"plusy i minusy|wady i zalety|pros and cons", re.I),
+    # Strategia / decyzje
+    re.compile(r"\bstrategi\w+\b|\btaktyk\w+\b|jaką taktyk|jaki sposób", re.I),
+    re.compile(r"czy warto|czy lepiej|czy powinienem|czy opłaca", re.I),
 ]
 
 _SIMPLE_PATTERNS = [
@@ -23,7 +38,8 @@ _SIMPLE_PATTERNS = [
     re.compile(r"^(idź spać|obudź się|wycisz|zacznij obserwować|zatrzymaj obserwatora)", re.I),
 ]
 
-MIN_WORD_COUNT = 8
+MIN_WORD_COUNT = 6
+LONG_QUESTION_WORD_THRESHOLD = 14
 
 
 class ComplexityClassifier:
@@ -42,9 +58,13 @@ class ComplexityClassifier:
 
         word_count = len(stripped.split())
         if word_count >= MIN_WORD_COUNT and ("?" in stripped or "!" in stripped):
-            question_words = re.findall(r"\b(jak|gdzie|kiedy|dlaczego|co|który|która|jakie|jaką)\b", stripped, re.I)
+            question_words = re.findall(r"\b(jak|gdzie|kiedy|dlaczego|co|który|która|jakie|jaką|czy)\b", stripped, re.I)
             if len(question_words) >= 2:
                 return "complex"
+
+        # Długie pytania (zwykle wymagają konkretnej, wieloaspektowej odpowiedzi)
+        if word_count >= LONG_QUESTION_WORD_THRESHOLD:
+            return "complex"
 
         return "simple"
 

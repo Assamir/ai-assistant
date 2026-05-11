@@ -188,6 +188,44 @@ def test_empty_history_returns_system_only(pb: PromptBuilder):
     assert all(m["role"] == "system" for m in msgs)
 
 
+def test_output_mode_voice_keeps_80_word_limit(pb: PromptBuilder):
+    msgs = pb.build_messages(
+        assistant_name="A",
+        content_root="/x",
+        persona_body_markdown="-",
+        history_messages=[],
+        output_mode="voice",
+    )
+    blob = "".join(m["content"] for m in msgs if m["role"] == "system")
+    assert "~80 słow" in blob.lower() or "80 słow" in blob.lower() or "80 słów" in blob
+    assert "Nie używaj markdown" in blob
+
+
+def test_output_mode_text_removes_voice_limits_and_allows_markdown(pb: PromptBuilder):
+    msgs = pb.build_messages(
+        assistant_name="A",
+        content_root="/x",
+        persona_body_markdown="-",
+        history_messages=[],
+        output_mode="text",
+    )
+    blob = "".join(m["content"] for m in msgs if m["role"] == "system")
+    assert "80 słów" not in blob
+    assert "Markdown dozwolony" in blob
+    assert "Dopasuj długość do tematu" in blob
+
+
+def test_output_mode_default_is_voice(pb: PromptBuilder):
+    msgs = pb.build_messages(
+        assistant_name="A",
+        content_root="/x",
+        persona_body_markdown="-",
+        history_messages=[],
+    )
+    blob = "".join(m["content"] for m in msgs if m["role"] == "system")
+    assert "Markdown dozwolony" not in blob
+
+
 def test_config_max_token_field_mapping():
     cfg = CfgFull(
         llm=LLMConfig(api_base_url="http://stub/", model_name="stub", temperature=0.1),

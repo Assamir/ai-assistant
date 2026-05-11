@@ -555,11 +555,12 @@ async def voice_synthesize(body: VoiceSynthBody, dep: Deps):
 
     from backend.core.quiet_hours import quiet_hours_suppresses_voice
     from backend.core.notification_tone import generate_silence_wav
+    from backend.core.tts_streaming import strip_markdown_for_tts
 
     if quiet_hours_suppresses_voice(dep.config):
         return Response(content=generate_silence_wav(duration_ms=80), media_type="audio/wav", headers={"X-Quiet-Hours": "1"})
 
-    wav = await tts.speak(body.text, emotion=body.emotion)
+    wav = await tts.speak(strip_markdown_for_tts(body.text), emotion=body.emotion)
 
     return Response(content=wav, media_type="audio/wav")
 
@@ -649,6 +650,8 @@ class VoiceChatBody(BaseModel):
 
     session_id: str | None = None
 
+    output_mode: Literal["voice", "text"] = "voice"
+
 
 
 
@@ -726,6 +729,7 @@ async def voice_chat(body: VoiceChatBody, dep: Deps, request: Request):
         system_health="healthy",
         db_chat_session_id=db_id,
         message_id=user_mid,
+        output_mode=body.output_mode,
     )
 
     dep.conversation.append(sess, "user", body.text)
@@ -875,13 +879,14 @@ async def voice_process(
 
     from backend.core.quiet_hours import quiet_hours_suppresses_voice
     from backend.core.notification_tone import generate_silence_wav
+    from backend.core.tts_streaming import strip_markdown_for_tts
 
     if quiet_hours_suppresses_voice(dep.config):
         wav = generate_silence_wav(duration_ms=80)
         hdrs = {"X-Emotion": str(outcome.emotion or "neutral"), "X-Duration-Ms": "0", "X-Quiet-Hours": "1"}
         return Response(content=wav, media_type="audio/wav", headers=hdrs)
 
-    wav = await tts.speak(outcome.message or "", emotion=outcome.emotion)
+    wav = await tts.speak(strip_markdown_for_tts(outcome.message or ""), emotion=outcome.emotion)
 
     hdrs = {"X-Emotion": str(outcome.emotion or "neutral"), "X-Duration-Ms": "0"}
 
