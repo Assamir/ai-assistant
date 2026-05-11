@@ -328,7 +328,10 @@ export function App() {
         const o = f.payload.text.trim();
         setObserverLine(o || null);
         setObserverActive(true);
-        if (o) scheduleSubtitleClear();
+        if (o) {
+          scheduleSubtitleClear();
+          setChatHistory((prev) => [...prev.slice(-99), { role: "observer", content: o, timestamp: Date.now() }]);
+        }
       }
       if (f.event === "window_click_through_on") {
         window.assystent?.setClickThrough?.(true);
@@ -640,6 +643,25 @@ export function App() {
     void fetchPersonas();
     return undefined;
   }, [wsReady, fetchPersonas]);
+
+  useEffect(() => {
+    if (!wsReady) return;
+    void (async () => {
+      try {
+        const res = await fetch(`${apiBase.replace(/\/$/, "")}/api/v1/threads?limit=1`);
+        if (!res.ok) return;
+        const data = (await res.json()) as { threads: Array<{ id: number; title: string | null; status: string; last_active_at: number }> };
+        const latest = data.threads?.[0];
+        if (!latest || latest.status !== "active") return;
+        const nowSec = Math.floor(Date.now() / 1000);
+        const ageMin = (nowSec - (latest.last_active_at ?? 0)) / 60;
+        if (ageMin > 30) return;
+        setThreadInfo({ threadId: latest.id, title: latest.title ?? null, kind: "continuation" });
+      } catch {
+        /* backend not yet ready */
+      }
+    })();
+  }, [wsReady, apiBase]);
 
   useEffect(() => {
     if (!window.assystent?.getDisplays) return;

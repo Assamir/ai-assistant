@@ -49,6 +49,11 @@ class ThreadContext:
                 lines.append(f"- {d}")
         if message_count:
             lines.append(f"\n(Wątek: {message_count} wiadomości)")
+        lines.append(
+            "\nNarzędzia wątkowe: `thread_add_decision` gdy coś postanowiono, "
+            "`thread_add_direction` gdy zmienia się cel, "
+            "`thread_summarize` gdy warto zaktualizować tytuł/tematykę."
+        )
         return "\n".join(lines)
 
 
@@ -172,7 +177,44 @@ class ThreadManager:
         await repo.update_thread(thread_id, title=short)
 
     async def _refresh_summary(self, thread_id: int, repo: Any) -> None:
-        pass
+        """Buduje streszczenie z ostatnich wiadomości użytkownika w wątku."""
+        try:
+            import aiosqlite
+            from backend.db.connection import apply_pragmas_async
+
+            async with aiosqlite.connect(self._db_path) as db:
+                await apply_pragmas_async(db)
+                cur = await db.execute(
+                    """
+                    SELECT m.source, m.content
+                    FROM thread_messages tm
+                    JOIN messages m ON m.id = tm.message_id
+                    WHERE tm.thread_id = ? AND m.source IN ('user', 'assistant')
+                    ORDER BY m.id DESC
+                    LIMIT 20
+                    """,
+                    (thread_id,),
+                )
+                rows = await cur.fetchall()
+
+            if not rows:
+                return
+
+            user_snippets = [
+                row[1][:120].strip()
+                for row in reversed(rows)
+                if row[0] == "user" and row[1].strip()
+            ]
+            if not user_snippets:
+                return
+
+            summary = "; ".join(user_snippets[-6:])
+            if len(summary) > 400:
+                summary = summary[:397] + "…"
+
+            await repo.update_thread(thread_id, topic_summary=summary)
+        except Exception:
+            pass
 
 
 __all__ = ["ThreadManager", "ThreadContext"]

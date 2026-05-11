@@ -487,6 +487,16 @@ class ConversationOrchestrator:
                             })
                     except Exception:
                         pass
+                elif nm == "thread_summarize" and emit:
+                    try:
+                        parsed = _json.loads(tool_msg["content"])
+                        if parsed.get("ok"):
+                            await emit("thread_summary_updated", {
+                                "thread_id": self.state.get("active_thread_id"),
+                                "title": parsed.get("title"),
+                            })
+                    except Exception:
+                        pass
 
             except KeyError:
                 tc_id = blob.get("id")
@@ -687,6 +697,9 @@ class ConversationOrchestrator:
         message_id: Optional[int] = None,
     ) -> CommandExecutionResult:
         emitter = emitter_override or self._emit
+
+        if db_chat_session_id is not None:
+            self.state["db_session_id"] = db_chat_session_id
 
         await self._handle_thread_for_message(user_text, message_id, emitter)
 

@@ -522,6 +522,15 @@ async def api_tools(dep: Deps):
         ]
     }
 
+@router.get("/threads")
+async def api_threads(dep: Deps, limit: int = 20):
+    """Lista wątków konwersacji (panel historii)."""
+    from backend.db.repositories import ThreadRepository
+
+    rows = await ThreadRepository(dep.db_path).list_for_panel(limit=limit)
+    return {"threads": rows}
+
+
 class VoiceSynthBody(BaseModel):
 
     text: str = Field(..., min_length=1, max_length=4000)
@@ -716,6 +725,7 @@ async def voice_chat(body: VoiceChatBody, dep: Deps, request: Request):
         conversation_tail=hist,
         system_health="healthy",
         db_chat_session_id=db_id,
+        message_id=user_mid,
     )
 
     dep.conversation.append(sess, "user", body.text)
@@ -829,13 +839,14 @@ async def voice_process(
 
     db_id = await ensure_ws_db_session(dep, sess)
     msg_repo = MessageRepository(dep.db_path)
-    await msg_repo.create_message(db_id, "user", user_text.strip())
+    voice_msg_id = await msg_repo.create_message(db_id, "user", user_text.strip())
 
     outcome = await dep.orchestrator.handle_user_message(
         user_text,
         conversation_tail=hist,
         system_health="healthy",
         db_chat_session_id=db_id,
+        message_id=voice_msg_id,
     )
 
     dep.conversation.append(sess, "user", user_text)
