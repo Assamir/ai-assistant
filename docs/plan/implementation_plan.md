@@ -1,8 +1,8 @@
 # Assystent — Pełny Plan Implementacji
 
-> **Status:** v1.3 — 2026-05-09 (zsynchronizowano z kodem; §1.3, T1/T3 checklist)
+> **Status:** v1.4 — 2026-05-09 (`docs/plan/README` + `STAN_IMPLEMENTACJI`, §1.1)
 > **Źródła:** Wszystkie 24 dokumenty DOK-01–DOK-16 + PRD 00-06
-> **Pliki towarzyszące:** [Fazy 2–3 + Testy + Modele](implementation_plan_part2.md) · [TEST_PLAN](TEST_PLAN.md) · [DEFINITION_OF_DONE](DEFINITION_OF_DONE.md) · [RISK_REGISTER](RISK_REGISTER.md) · [IMPLEMENTATION_ROADMAP](IMPLEMENTATION_ROADMAP.md) · [FUTURE_IMPROVEMENTS](FUTURE_IMPROVEMENTS.md)
+> **Pliki towarzyszące:** [README — nawigacja po `docs/plan`](README.md) · [STAN_IMPLEMENTACJI — aktualny stan wdrożenia](STAN_IMPLEMENTACJI.md) · [Fazy 2–3 + Testy + Modele](implementation_plan_part2.md) · [TEST_PLAN](TEST_PLAN.md) · [DEFINITION_OF_DONE](DEFINITION_OF_DONE.md) · [RISK_REGISTER](RISK_REGISTER.md) · [IMPLEMENTATION_ROADMAP](IMPLEMENTATION_ROADMAP.md) · [FUTURE_IMPROVEMENTS](FUTURE_IMPROVEMENTS.md)
 
 ---
 
@@ -13,6 +13,8 @@
 
 | DOK    | Nazwa                     | Status      | Lokalizacja                                                      |
 | ------ | ------------------------- | ----------- | ---------------------------------------------------------------- |
+| —      | README.md (`docs/plan`)   | ✅ Utworzony | [docs/plan/README.md](README.md) — spis treści folderu plan       |
+| —      | STAN_IMPLEMENTACJI.md     | ✅ Utworzony | [docs/plan/STAN_IMPLEMENTACJI.md](STAN_IMPLEMENTACJI.md) — tabela stanu kodu |
 | DOK-13 | TEST_PLAN.md              | ✅ Utworzony | [docs/plan/TEST_PLAN.md](TEST_PLAN.md)                           |
 | DOK-14 | DEFINITION_OF_DONE.md     | ✅ Utworzony | [docs/plan/DEFINITION_OF_DONE.md](DEFINITION_OF_DONE.md)         |
 | DOK-15 | RISK_REGISTER.md          | ✅ Utworzony | [docs/plan/RISK_REGISTER.md](RISK_REGISTER.md)                   |

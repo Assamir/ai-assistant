@@ -1,23 +1,15 @@
 # Assystent — Plan Implementacji: Fazy 2–3, Testy, Modele AI
 
-> **Status:** v1.21 — 2026-05-09 (synchronizacja z kodem, CHANGELOG, DECISIONS_LOG)
-> **Kontekst:** [Plan główny (Faza 1)](implementation_plan.md) · [ENV_SETUP](../ENV_SETUP.md) · [TEST_PLAN](TEST_PLAN.md) · [DEFINITION_OF_DONE](DEFINITION_OF_DONE.md) · [RISK_REGISTER](RISK_REGISTER.md) · [ROADMAP](IMPLEMENTATION_ROADMAP.md) · [FUTURE_IMPROVEMENTS](FUTURE_IMPROVEMENTS.md)
+> **Status:** v1.22 — 2026-05-09 (stan → link do STAN_IMPLEMENTACJI)
+> **Kontekst:** [Plan główny (Faza 1)](implementation_plan.md) · [Stan wdrożenia — tabela](STAN_IMPLEMENTACJI.md) · [README `docs/plan`](README.md) · [ENV_SETUP](../ENV_SETUP.md) · [TEST_PLAN](TEST_PLAN.md) · [DEFINITION_OF_DONE](DEFINITION_OF_DONE.md) · [RISK_REGISTER](RISK_REGISTER.md) · [ROADMAP](IMPLEMENTATION_ROADMAP.md) · [FUTURE_IMPROVEMENTS](FUTURE_IMPROVEMENTS.md)
 
 ---
 
-## Stan wdrożenia — 2026-05-09 (v1.21)
+## Stan wdrożenia
 
+**Jedna aktualna tabela (obszary produktu):** [STAN_IMPLEMENTACJI.md](STAN_IMPLEMENTACJI.md). Ten plik nie duplikuje już osobnej siatki procentowej T5–T14 — tylko szczegóły faz i checklisty poniżej.
 
-| Zakres                    | Stan    | Uwagi                                                                                                                                                                                                                                   |
-| ------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **T5** Screen / VLM / OCR | 🟢 ~85% | Crop z `GameProfile.screen_regions`; dual pipeline; ewentualne regresje modeli VLM na sprzęcie użytkownika                                                                                                                               |
-| **T6** Observer / gry     | 🟢 ~95% | VLM fallback, `game_detections`, auto league hint, auto session report (config), notification sound przed komentarzem                                                                                                                      |
-| **T7** MCP rozszerzenia   | 🟢 ~95% | Narzędzia + cache + rate; `tool_calls` w SQLite; mirror wyników narzędzi jako `user` (`ai_runtime.mirror_tool_results_as_user`)                                                                                                         |
-| **T8** Memory / profil    | 🟢 ~95% | CMD-19/20/08 → logika profilu; import buildu (CMD-22 + REST); archiwum; daily checks; FIFO w Chroma (`prune_*`) wg limitów                                                                                                                |
-| **T9–T14** Frontend       | 🟢 ~95% | NSIS (client/full), overlay, Status w panelu, sentence-streaming TTS po stronie audio, spring bones drugi pass. **Do rozważenia przed releasem:** twardszy auth `PUT /config`, formalne benchmarki FPS/latency ([FUTURE_IMPROVEMENTS.md](FUTURE_IMPROVEMENTS.md) IMP-04)                 |
-
-
-**Kamienie M2 i M3** — backend i klient są na poziomie „feature complete” wg `CHANGELOG [Unreleased]`; do **release**: smoke wizarda, uzupełnienie placeholdera VRM w `LICENSES.md`, pomiary wydajności (opcjonalnie dokument).
+**Kamienie M2 i M3** — backend i klient są na poziomie „feature complete” wg `CHANGELOG [Unreleased]`; do **release**: smoke wizarda, uzupełnienie atrybucji VRM w `LICENSES.md`, pomiary wydajności (opcjonalnie dokument).
 
 **Zamknięte od v1.20:** komendy głosowe → REST (ligę/meta/podsumowanie sesji), crossfade/aura, README — patrz CHANGELOG.
 

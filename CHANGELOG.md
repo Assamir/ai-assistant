@@ -13,6 +13,7 @@ All notable changes to this project are documented here. The format is inspired 
 - **`docs/DECISIONS_LOG.md`:** zaktualizowany wiersz quiet hours (runtime + status HTTP).
 
 - **Plan i kryteria “done”:** zaktualizowano `docs/plan/DEFINITION_OF_DONE.md` (v1.1), `docs/plan/implementation_plan.md` (v1.3), `docs/plan/implementation_plan_part2.md` (v1.21) — zgodność ze stanem kodu i `CHANGELOG`. W `docs/DECISIONS_LOG.md` dodano § „Stan implementacji vs dokument (2026-05-09)” (rozjazdy: `pygetwindow`, custom MCP, endpointy downloadu wizarda, quiet hours, Credits).
+- **`docs/plan` — porządek:** [`README.md`](docs/plan/README.md) (spis plików i kolejność lektury), [`STAN_IMPLEMENTACJI.md`](docs/plan/STAN_IMPLEMENTACJI.md) jako jedna tabela bieżącego stanu wdrożenia; `IMPLEMENTATION_ROADMAP.md` wskazuje na ten plik zamiast osobnej siatki %; `implementation_plan_part2.md` nie duplikuje już tabeli T5–T14; linki w `PORADNIK_UZYTKOWNIKA.md`.
 
 ### Changed
 

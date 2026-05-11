@@ -12,6 +12,8 @@ Ten dokument zbiera **ścieżki w repozytorium**, **kroki od zera do działając
 | Historia zmian | [CHANGELOG.md](../CHANGELOG.md) w korzeniu repo |
 | README projektu | [README.md](../README.md) |
 | Plan implementacji | [docs/plan/implementation_plan_part2.md](plan/implementation_plan_part2.md) |
+| **Stan wdrożenia (tabela)** | [docs/plan/STAN_IMPLEMENTACJI.md](plan/STAN_IMPLEMENTACJI.md) |
+| Spis dokumentów `docs/plan` | [docs/plan/README.md](plan/README.md) |
 | Domyślna konfiguracja YAML (wzór) | [backend/config/schema.py](../backend/config/schema.py) — domyślne pola Pydantic |
 | Przykład `config.yaml` dev — Piper przy starcie z korzenia repo | [config/config.yaml](../config/config.yaml) |
 | Ładowanie YAML + ENV `ASSY_*` | [backend/config/loader.py](../backend/config/loader.py) |

@@ -1,6 +1,7 @@
 # DOK-14: DEFINITION_OF_DONE.md — Kryteria Akceptacji per Faza
 
-> **Status:** v1.1 — 2026-05-09 (zsynchronizowano ze stanem repo i `CHANGELOG.md`)
+> **Status:** v1.2 — 2026-05-09 (link do STAN_IMPLEMENTACJI)
+> **Bieżąca tabela wdrożenia:** [STAN_IMPLEMENTACJI.md](STAN_IMPLEMENTACJI.md)
 > **Materiały źródłowe:** PRD_06_IMPLEMENTATION.md, TEST_PLAN.md
 >
 > **Legenda:** `[x]` spełnione w kodzie · `[~]` częściowe / wymaga pomiaru lub ręcznego demo · `[ ]` brak / ponad MVP
@@ -124,4 +125,4 @@
 
 ---
 
-*Dokument: DOK-14 DEFINITION_OF_DONE.md v1.1 — 2026-05-09*
+*Dokument: DOK-14 DEFINITION_OF_DONE.md v1.2 — 2026-05-09*
