@@ -57,6 +57,9 @@ mss>=9.0.1,<11.0.0
 # chromadb — T8 SemanticRecall (na Python 3.11–3.13 pełny stack; 3.14+ może wymagać aktualizacji chroma — wtedy działa fallback w pamięci w SemanticRecall)
 chromadb>=0.5.0,<0.7.0
 
+# MCP web_search — rzeczywiste wyniki SERP (Instant Answer API DDG jest często puste)
+ddgs>=9.0.0,<10.0.0
+
 # Markdown → HTML conversion (generate_document html format, F-DOC-02/03)
 markdown>=3.5.0,<4.0.0
 

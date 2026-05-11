@@ -1,17 +1,44 @@
-"""web_search — DuckDuckGo Instant Answer API (JSON) + limity z ToolRegistry."""
+"""web_search — wyniki tekstowe (ddgs / SERP) + opcjonalnie Instant Answer API DuckDuckGo."""
 
 from __future__ import annotations
 
-from typing import Any, Dict
+import asyncio
+from typing import Any, Dict, List
 
 import httpx
 
-_DDG_URL = "https://api.duckduckgo.com/"
+_DDG_INSTANT_URL = "https://api.duckduckgo.com/"
 
 
-async def _ddg_fetch(params: Dict[str, Any]) -> Dict[str, Any]:
+def _sync_ddgs_text_results(query: str, max_results: int = 10) -> List[Dict[str, str]]:
+    """Synchroniczne wyszukiwanie tekstowe przez pakiet `ddgs` (meta‑SERP)."""
+    try:
+        from ddgs import DDGS
+    except ImportError:
+        return []
+
+    rows: List[Dict[str, str]] = []
+    try:
+        ddgs = DDGS(timeout=15)
+        for item in ddgs.text(query, max_results=max_results):
+            if not isinstance(item, dict):
+                continue
+            href = str(item.get("href") or item.get("url") or "")
+            rows.append(
+                {
+                    "title": str(item.get("title") or ""),
+                    "url": href,
+                    "snippet": str(item.get("body") or ""),
+                }
+            )
+    except Exception:
+        return rows
+    return rows
+
+
+async def _ddg_instant_fetch(params: Dict[str, Any]) -> Dict[str, Any]:
     async with httpx.AsyncClient(timeout=12.0) as client:
-        r = await client.get(_DDG_URL, params=params)
+        r = await client.get(_DDG_INSTANT_URL, params=params)
         r.raise_for_status()
         return r.json()
 
@@ -21,7 +48,7 @@ _TOOL_WEB_SEARCH = {
     "function": {
         "name": "web_search",
         "description": (
-            "Wyszukiwanie w internecie (DuckDuckGo — streszczenie + powiązane tematy). "
+            "Wyszukiwanie w internecie (lista stron ze snippetami + ewentualne streszczenie DDG). "
             "Użyj do faktów, patch notes, nazw lokacji lub buildów nieobecnych w lokalnym kontekście."
         ),
         "parameters": {
@@ -36,6 +63,34 @@ _TOOL_WEB_SEARCH = {
         },
     },
 }
+
+
+def _related_topics_from_instant(body: Dict[str, Any]) -> List[str]:
+    topics: list[str] = []
+    for t in body.get("RelatedTopics") or []:
+        if isinstance(t, dict) and "Text" in t:
+            topics.append(str(t["Text"]))
+        elif isinstance(t, dict) and "Topics" in t:
+            for sub in t["Topics"]:
+                if isinstance(sub, dict) and "Text" in sub:
+                    topics.append(str(sub["Text"]))
+    return topics
+
+
+def _format_ddgs_lines(rows: List[Dict[str, str]]) -> List[str]:
+    lines: list[str] = []
+    for r in rows:
+        title = (r.get("title") or "").strip()
+        snip = (r.get("snippet") or "").strip()
+        url = (r.get("url") or "").strip()
+        head = f"{title}: {snip}".strip(": ").strip() if title else snip
+        if not head and url:
+            head = url
+        if url and url not in head:
+            head = f"{head} | {url}" if head else url
+        if head:
+            lines.append(head)
+    return lines
 
 
 async def tool_web_search(query: str | None = None, **_: Any) -> Dict[str, Any]:
@@ -55,35 +110,59 @@ async def tool_web_search(query: str | None = None, **_: Any) -> Dict[str, Any]:
 
     if not q:
         return _audit_done({"ok": False, "error": "pusty query"})
-    params = {"q": q, "format": "json", "no_redirect": "1", "no_html": "1"}
-    try:
-        body = await _ddg_fetch(params)
-    except httpx.TimeoutException:
-        return _audit_done({"ok": False, "error": "timeout"})
-    except Exception as exc:
-        return _audit_done({"ok": False, "error": str(exc)})
-    topics: list[str] = []
-    for t in body.get("RelatedTopics") or []:
-        if isinstance(t, dict) and "Text" in t:
-            topics.append(str(t["Text"]))
-        elif isinstance(t, dict) and "Topics" in t:
-            for sub in t["Topics"]:
-                if isinstance(sub, dict) and "Text" in sub:
-                    topics.append(str(sub["Text"]))
-    abstract = body.get("AbstractText") or ""
-    heading = body.get("Heading") or ""
-    url_out = body.get("AbstractURL") or ""
+
+    instant_params = {"q": q, "format": "json", "no_redirect": "1", "no_html": "1"}
+
+    async def _safe_instant() -> Dict[str, Any]:
+        try:
+            return await _ddg_instant_fetch(instant_params)
+        except (httpx.TimeoutException, httpx.HTTPError, Exception):
+            return {}
+
+    body, ddgs_rows = await asyncio.gather(
+        _safe_instant(),
+        asyncio.to_thread(_sync_ddgs_text_results, q, 10),
+    )
+
+    topics = _related_topics_from_instant(body)
+    ddgs_lines = _format_ddgs_lines(ddgs_rows)
+    related_texts = (ddgs_lines + topics)[:12]
+
+    abstract = str(body.get("AbstractText") or "")
+    heading = str(body.get("Heading") or "")
+    url_out = str(body.get("AbstractURL") or "")
+    instant_answer = str(body.get("Answer") or "")
+
+    if ddgs_rows:
+        if not abstract.strip():
+            abstract = ddgs_rows[0].get("snippet") or ddgs_rows[0].get("title") or abstract
+        if not heading.strip():
+            heading = ddgs_rows[0].get("title") or heading
+        if not url_out.strip():
+            url_out = ddgs_rows[0].get("url") or url_out
+
+    has_signal = bool(
+        abstract.strip()
+        or heading.strip()
+        or url_out.strip()
+        or related_texts
+        or instant_answer.strip()
+        or ddgs_rows
+    )
+
     return _audit_done(
         {
-            "ok": True,
+            "ok": has_signal,
             "query": q,
             "abstract": abstract,
             "heading": heading,
             "abstract_url": url_out,
-            "related_texts": topics[:8],
-            "instant_answer": body.get("Answer") or "",
+            "related_texts": related_texts,
+            "instant_answer": instant_answer,
+            "results": ddgs_rows[:10],
+            **({"error": "brak wyników — spróbuj krótszego zapytania lub języka angielskiego"} if not has_signal else {}),
         }
     )
 
 
-__all__ = ["tool_web_search", "_TOOL_WEB_SEARCH", "_ddg_fetch"]
+__all__ = ["tool_web_search", "_TOOL_WEB_SEARCH", "_ddg_instant_fetch", "_sync_ddgs_text_results"]

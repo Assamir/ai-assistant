@@ -15,6 +15,8 @@ from backend.mcp.registry import ToolRegistry, build_default_tool_registry
 
 @pytest.mark.asyncio
 async def test_cache_t02_invalidate_refetch(monkeypatch, migrated_db_path):
+    monkeypatch.setattr(web_search_mod, "_sync_ddgs_text_results", lambda q, max_results=10: [])
+
     responses = [
         {"AbstractText": "first", "RelatedTopics": [], "Heading": "", "AbstractURL": ""},
         {"AbstractText": "second", "RelatedTopics": [], "Heading": "", "AbstractURL": ""},
@@ -26,7 +28,7 @@ async def test_cache_t02_invalidate_refetch(monkeypatch, migrated_db_path):
         calls[0] += 1
         return responses[i]
 
-    monkeypatch.setattr(web_search_mod, "_ddg_fetch", fake_fetch)
+    monkeypatch.setattr(web_search_mod, "_ddg_instant_fetch", fake_fetch)
 
     reg = build_default_tool_registry(db_path=migrated_db_path, mcp_cfg=MCPConfig(enabled=True))
     a = await reg.invoke("web_search", {"query": "PoE2"}, system_state={"online": True})
@@ -38,6 +40,8 @@ async def test_cache_t02_invalidate_refetch(monkeypatch, migrated_db_path):
 
 @pytest.mark.asyncio
 async def test_cache_t03_parallel_identical_single_fetch(monkeypatch, migrated_db_path):
+    monkeypatch.setattr(web_search_mod, "_sync_ddgs_text_results", lambda q, max_results=10: [])
+
     calls: list[int] = []
 
     async def fake_fetch(_params):  # type: ignore[no-untyped-def]
@@ -45,7 +49,7 @@ async def test_cache_t03_parallel_identical_single_fetch(monkeypatch, migrated_d
         await asyncio.sleep(0.04)
         return {"AbstractText": "one", "RelatedTopics": [], "Heading": "", "AbstractURL": ""}
 
-    monkeypatch.setattr(web_search_mod, "_ddg_fetch", fake_fetch)
+    monkeypatch.setattr(web_search_mod, "_ddg_instant_fetch", fake_fetch)
 
     reg = build_default_tool_registry(db_path=migrated_db_path, mcp_cfg=MCPConfig(enabled=True))
 
@@ -59,10 +63,12 @@ async def test_cache_t03_parallel_identical_single_fetch(monkeypatch, migrated_d
 
 @pytest.mark.asyncio
 async def test_mcp_t03_rate_limited_strict(monkeypatch, migrated_db_path):
+    monkeypatch.setattr(web_search_mod, "_sync_ddgs_text_results", lambda q, max_results=10: [])
+
     async def fake_fetch(_params):  # type: ignore[no-untyped-def]
         return {"AbstractText": "x", "RelatedTopics": [], "Heading": "", "AbstractURL": ""}
 
-    monkeypatch.setattr(web_search_mod, "_ddg_fetch", fake_fetch)
+    monkeypatch.setattr(web_search_mod, "_ddg_instant_fetch", fake_fetch)
 
     reg = ToolRegistry(
         db_path=migrated_db_path,
