@@ -208,6 +208,13 @@ class TTSConfig(BaseModel):
     piper_executable: str = "piper"
     piper_voice_onnx_path: Optional[str] = None
     chunk_bytes: int = Field(default=4096, ge=512, le=65536)
+    voice_gender: Literal["auto", "female", "male", "neutral"] = Field(
+        default="auto",
+        description=(
+            "Rodzaj gramatyczny dla LLM ('zrobiłam' vs 'zrobiłem'). "
+            "'auto' = rozpoznanie po nazwie pliku piper_voice_onnx_path."
+        ),
+    )
 
 class VLMConfig(BaseModel):
     """Vision-language (Moondream2 przez transformers); domyślnie wyłączone — brak torch w CI."""

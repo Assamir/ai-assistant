@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, List, Literal, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional
 
 try:
     import tiktoken
@@ -61,6 +61,32 @@ W kontekście może być sekcja AKTYWNY_WATEK — jesteś w trwającym wątku.
 - "Wróć do tematu X" → `thread_search` → `thread_resume`."""
 
 
+_SECTION_GENDER_FEMALE = """## RODZAJ GRAMATYCZNY
+
+Mówisz **w rodzaju żeńskim** (głos asystenta jest kobiecy). Używaj form żeńskich w czasownikach przeszłych i przymiotnikach odnoszących się do siebie: „zrobiłam", „pomyślałam", „jestem gotowa", „byłam ciekawa", „nie jestem pewna". NIGDY nie używaj form męskich („zrobiłem", „pewien", „gotów") gdy mówisz o sobie."""
+
+
+_SECTION_GENDER_MALE = """## RODZAJ GRAMATYCZNY
+
+Mówisz **w rodzaju męskim** (głos asystenta jest męski). Używaj form męskich w czasownikach przeszłych i przymiotnikach odnoszących się do siebie: „zrobiłem", „pomyślałem", „jestem gotów", „byłem ciekaw", „nie jestem pewien"."""
+
+
+def detect_voice_gender(piper_voice_onnx_path: Optional[str]) -> str:
+    """Auto-detect płci głosu po nazwie pliku Piper (heurystyka)."""
+    if not piper_voice_onnx_path:
+        return "neutral"
+    p = piper_voice_onnx_path.lower().replace("\\", "/")
+    female_markers = ("gosia", "mai_female", "mai-female", "_female", "-female", "kobie")
+    male_markers = ("darkman", "bass", "_male", "-male")
+    for m in female_markers:
+        if m in p:
+            return "female"
+    for m in male_markers:
+        if m in p:
+            return "male"
+    return "neutral"
+
+
 _BASE_PROMPT_HEAD = """Jesteś lokalnym asystentem AI o imieniu {assistant_name}. Działasz na komputerze użytkownika — bez chmury. Masz awatar 3D i rozmawiasz głosowo.
 
 ## JĘZYK
@@ -96,8 +122,13 @@ def _build_base_prompt(
     output_mode: OutputMode,
     include_agentic_section: bool = True,
     include_threads_section: bool = True,
+    voice_gender: str = "neutral",
 ) -> str:
     optional = ""
+    if voice_gender == "female":
+        optional += "\n\n" + _SECTION_GENDER_FEMALE
+    elif voice_gender == "male":
+        optional += "\n\n" + _SECTION_GENDER_MALE
     if include_agentic_section:
         optional += "\n\n" + _SECTION_AGENTIC
     if include_threads_section:
@@ -182,6 +213,7 @@ class PromptBuilder:
         output_mode: OutputMode = "voice",
         include_agentic_section: bool = True,
         include_threads_section: bool = True,
+        voice_gender: str = "neutral",
     ) -> List[Dict[str, Any]]:
         budget_limit = max_context_tokens or self.max_context_tokens
 
@@ -191,6 +223,7 @@ class PromptBuilder:
             output_mode=output_mode,
             include_agentic_section=include_agentic_section,
             include_threads_section=include_threads_section,
+            voice_gender=voice_gender,
         )
         persona_section = "\n\n## PERSONA\n\n" + persona_body_markdown.strip()
         lang_instruction = _build_language_instruction(language_override)
@@ -292,4 +325,4 @@ def _trim_history(
     return result
 
 
-__all__ = ["BASE_PROMPT_TEMPLATE", "PromptBuilder", "PromptBudget"]
+__all__ = ["BASE_PROMPT_TEMPLATE", "PromptBuilder", "PromptBudget", "detect_voice_gender"]

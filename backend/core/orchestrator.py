@@ -399,6 +399,13 @@ class ConversationOrchestrator:
         )
         include_threads = self._cfg.threads.enabled and bool(thread_block)
 
+        configured_gender = self._cfg.tts.voice_gender
+        if configured_gender == "auto":
+            from backend.core.prompt_builder import detect_voice_gender
+            voice_gender = detect_voice_gender(self._cfg.tts.piper_voice_onnx_path)
+        else:
+            voice_gender = configured_gender
+
         msgs: List[Dict[str, Any]] = self._pb.build_messages(
             assistant_name=self._cfg.general.assistant_name,
             content_root=str(self._cfg.general.content_root),
@@ -412,6 +419,7 @@ class ConversationOrchestrator:
             output_mode=output_mode,
             include_agentic_section=include_agentic,
             include_threads_section=include_threads,
+            voice_gender=voice_gender,
         )
 
         if self._semantic_recall is not None and self._cfg.memory.inject_into_prompt:
