@@ -20,9 +20,12 @@ structlog>=24.0.0,<25.0.0
 watchdog>=3.0.0,<4.0.0
 typing-extensions>=4.8.0,<5.0.0
 
-# HTTP client (LM Studio / OpenAI-compatible)
+# HTTP client (LM Studio / OpenRouter / OpenAI-compatible)
 # HTTP client — Starlette TestClient wymaga httpx < 0.28
 httpx>=0.27.0,<0.28.0
+
+# HuggingFace Hub — pobieranie modeli GGUF dla provider=local (transitive z faster-whisper, ale wymagamy jawnie)
+huggingface-hub>=0.20.0,<1.0.0
 
 # Prompt token budget (DOK-05)
 # nowsze wydania mają koła binarne (np. Python 3.14); <0.10 wymuszało build z Rust
@@ -46,6 +49,10 @@ pytest-asyncio>=0.24.0,<2.0.0
 
 # pip install torch torchvision           # Moondream2 VLM (gdy vlm.enabled)
 # pip install transformers accelerate
+
+# pip install llama-cpp-python            # provider llm.provider=local (embedded GGUF)
+# Z CUDA użyj prebuilt wheels:
+#   pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
 
 # Vision / screen capture (T5); kolejność w kodzie: DXcam (Win) → mss → pyautogui
 pillow>=10.0.0,<12.0.0

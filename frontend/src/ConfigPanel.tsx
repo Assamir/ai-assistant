@@ -9,7 +9,7 @@ import {
 } from "./vrmBundledCatalog";
 import { BUNDLED_PIPER_VOICES } from "./piperVoicesCatalog";
 
-export type ConfigTabId = "connection" | "avatar" | "observer" | "persona" | "more" | "status";
+export type ConfigTabId = "connection" | "avatar" | "observer" | "persona" | "llm" | "more" | "status";
 
 export interface PersonaInfo {
   id: string;
@@ -63,9 +63,38 @@ const tabs: { id: ConfigTabId; label: string }[] = [
   { id: "avatar", label: "Avatar" },
   { id: "observer", label: "Obserwator" },
   { id: "persona", label: "Persona" },
+  { id: "llm", label: "LLM" },
   { id: "more", label: "Więcej" },
   { id: "status", label: "Status" },
 ];
+
+type LLMProvider = "lm_studio" | "local" | "openrouter";
+
+interface LLMModelItem {
+  model_id: string;
+  display_name: string;
+  default_quant: string;
+  recommended_n_ctx: number;
+  description: string;
+  license: string;
+  is_custom: boolean;
+  downloaded: boolean;
+  local_path: string | null;
+  size_bytes: number | null;
+  quant: string | null;
+}
+
+function formatBytes(n: number | null | undefined): string {
+  if (!n || n <= 0) return "—";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0;
+  let v = n;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i += 1;
+  }
+  return `${v.toFixed(v >= 100 || i === 0 ? 0 : 1)} ${units[i]}`;
+}
 
 function StatusBadge({
   ok,
@@ -195,6 +224,208 @@ export function ConfigPanel({
   const [qhEnd, setQhEnd] = useState("07:00");
   const [qhBusy, setQhBusy] = useState(false);
   const [qhMsg, setQhMsg] = useState<string | null>(null);
+
+  // ---------- LLM tab state ----------
+  const [llmProvider, setLlmProvider] = useState<LLMProvider>("lm_studio");
+  const [llmLoaded, setLlmLoaded] = useState(false);
+  const [llmModels, setLlmModels] = useState<LLMModelItem[]>([]);
+  const [llmActiveModelId, setLlmActiveModelId] = useState<string>("");
+  const [llmBusy, setLlmBusy] = useState(false);
+  const [llmMsg, setLlmMsg] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [lmStudioBaseUrl, setLmStudioBaseUrl] = useState("http://localhost:1234");
+  const [lmStudioModelName, setLmStudioModelName] = useState("");
+  const [orApiKey, setOrApiKey] = useState("");
+  const [orModelName, setOrModelName] = useState("anthropic/claude-sonnet-4.6");
+  const [localModelId, setLocalModelId] = useState("");
+  const [localQuant, setLocalQuant] = useState("Q4_K_M");
+  const [localGpuLayers, setLocalGpuLayers] = useState("-1");
+  const [localCtx, setLocalCtx] = useState("8192");
+  const [customModelId, setCustomModelId] = useState("");
+  const [customDisplayName, setCustomDisplayName] = useState("");
+  const [customQuant, setCustomQuant] = useState("Q4_K_M");
+
+  const refreshLlmModels = React.useCallback(async () => {
+    const base = apiBaseUrl.replace(/\/$/, "");
+    try {
+      const res = await fetch(`${base}/api/v1/llm/models`);
+      if (!res.ok) return;
+      const body = (await res.json()) as { items: LLMModelItem[]; active_model_id?: string };
+      setLlmModels(body.items || []);
+      if (body.active_model_id) setLlmActiveModelId(body.active_model_id);
+    } catch {
+      /* ignore */
+    }
+  }, [apiBaseUrl]);
+
+  // Ładowanie configu LLM przy wejściu w zakładkę
+  useEffect(() => {
+    if (tab !== "llm") return;
+    let aborted = false;
+    (async () => {
+      try {
+        const base = apiBaseUrl.replace(/\/$/, "");
+        const res = await fetch(`${base}/api/v1/config`);
+        if (!res.ok) return;
+        const body = (await res.json()) as { data?: { llm?: any } };
+        const llm = body.data?.llm;
+        if (!llm || aborted) return;
+        setLlmProvider(llm.provider ?? "lm_studio");
+        setLmStudioBaseUrl(llm.api_base_url ?? "http://localhost:1234");
+        setLmStudioModelName(llm.model_name ?? "");
+        setOrApiKey(llm.openrouter?.api_key ?? "");
+        setOrModelName(llm.openrouter?.model_name ?? "anthropic/claude-sonnet-4.6");
+        setLocalModelId(llm.local?.model_id ?? "");
+        setLocalQuant(llm.local?.preferred_quant ?? "Q4_K_M");
+        setLocalGpuLayers(String(llm.local?.n_gpu_layers ?? -1));
+        setLocalCtx(String(llm.local?.n_ctx ?? 8192));
+        setLlmLoaded(true);
+      } catch {
+        /* ignore */
+      }
+    })();
+    void refreshLlmModels();
+    return () => {
+      aborted = true;
+    };
+  }, [tab, apiBaseUrl, refreshLlmModels]);
+
+  // Polling listy modeli, gdy trwa pobieranie
+  useEffect(() => {
+    if (tab !== "llm" || !downloadingId) return;
+    const id = setInterval(() => { void refreshLlmModels(); }, 2000);
+    return () => clearInterval(id);
+  }, [tab, downloadingId, refreshLlmModels]);
+
+  const saveLlmConfig = async () => {
+    setLlmBusy(true);
+    setLlmMsg(null);
+    try {
+      const base = apiBaseUrl.replace(/\/$/, "");
+      const patch: Record<string, unknown> = {
+        llm: {
+          provider: llmProvider,
+          api_base_url: lmStudioBaseUrl,
+          model_name: lmStudioModelName,
+          openrouter: {
+            api_key: orApiKey,
+            model_name: orModelName,
+          },
+          local: {
+            model_id: localModelId,
+            preferred_quant: localQuant,
+            n_gpu_layers: parseInt(localGpuLayers, 10) || -1,
+            n_ctx: parseInt(localCtx, 10) || 8192,
+          },
+        },
+      };
+      const res = await fetch(`${base}/api/v1/config`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...configPutHeaders() },
+        body: JSON.stringify({ patch }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const detail = typeof data === "object" && data && "detail" in data
+          ? JSON.stringify((data as { detail: unknown }).detail)
+          : res.statusText;
+        setLlmMsg(`Błąd ${res.status}: ${detail}`);
+        return;
+      }
+      setLlmMsg("Zapisano konfigurację LLM (hot-reload).");
+      void refreshLlmModels();
+    } catch (e) {
+      setLlmMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLlmBusy(false);
+    }
+  };
+
+  const downloadModel = async (modelId: string) => {
+    setDownloadingId(modelId);
+    setLlmMsg(null);
+    try {
+      const base = apiBaseUrl.replace(/\/$/, "");
+      const res = await fetch(`${base}/api/v1/llm/models/${encodeURIComponent(modelId)}/download`, {
+        method: "POST",
+        headers: configPutHeaders(),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const detail = typeof data === "object" && data && "detail" in data
+          ? JSON.stringify((data as { detail: unknown }).detail)
+          : res.statusText;
+        setLlmMsg(`Pobieranie ${modelId} ❌ ${res.status}: ${detail}`);
+        return;
+      }
+      setLlmMsg(`Pobrano: ${modelId}.`);
+      void refreshLlmModels();
+    } catch (e) {
+      setLlmMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  const addCustomModel = async () => {
+    if (!customModelId.trim() || !customDisplayName.trim()) {
+      setLlmMsg("Podaj model_id (owner/repo lub owner/repo/file.gguf) oraz nazwę wyświetlaną.");
+      return;
+    }
+    setLlmBusy(true);
+    setLlmMsg(null);
+    try {
+      const base = apiBaseUrl.replace(/\/$/, "");
+      const res = await fetch(`${base}/api/v1/llm/models`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...configPutHeaders() },
+        body: JSON.stringify({
+          model_id: customModelId.trim(),
+          display_name: customDisplayName.trim(),
+          default_quant: customQuant.trim() || "Q4_K_M",
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const detail = typeof data === "object" && data && "detail" in data
+          ? JSON.stringify((data as { detail: unknown }).detail)
+          : res.statusText;
+        setLlmMsg(`Błąd dodawania: ${detail}`);
+        return;
+      }
+      setLlmMsg(`Dodano model: ${customModelId.trim()}.`);
+      setCustomModelId("");
+      setCustomDisplayName("");
+      void refreshLlmModels();
+    } catch (e) {
+      setLlmMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLlmBusy(false);
+    }
+  };
+
+  const removeModel = async (modelId: string, scope: "cache" | "catalog" | "both") => {
+    setLlmBusy(true);
+    setLlmMsg(null);
+    try {
+      const base = apiBaseUrl.replace(/\/$/, "");
+      const url = `${base}/api/v1/llm/models/${encodeURIComponent(modelId)}?scope=${scope}`;
+      const res = await fetch(url, {
+        method: "DELETE",
+        headers: configPutHeaders(),
+      });
+      if (!res.ok) {
+        setLlmMsg(`Błąd usuwania: ${res.statusText}`);
+        return;
+      }
+      setLlmMsg(`Usunięto ${modelId} (scope=${scope}).`);
+      void refreshLlmModels();
+    } catch (e) {
+      setLlmMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLlmBusy(false);
+    }
+  };
 
   // Auto-poll GET /api/v1/status every 5 s when the Status tab is open
   useEffect(() => {
@@ -635,6 +866,272 @@ export function ConfigPanel({
           ) : !statusError ? (
             <p style={{ color: "#6d6680", fontSize: 13 }}>Brak danych — łączenie z backendem…</p>
           ) : null}
+        </div>
+      )}
+
+      {tab === "llm" && (
+        <div style={{ fontSize: 14, color: "#b8afc8", lineHeight: 1.55 }}>
+          <div style={{ marginBottom: "1rem", padding: "0.65rem 0.75rem", borderRadius: 8, border: "1px solid #2a2438", background: "#100d18" }}>
+            <div style={{ fontWeight: 600, color: "#e8e4f0", marginBottom: "0.35rem" }}>Backend LLM</div>
+            <p style={{ margin: "0 0 0.5rem", fontSize: 12, color: "#8a8198" }}>
+              <strong>LM Studio</strong> — HTTP do osobnej aplikacji. <strong>Lokalny</strong> — GGUF wczytywany bezpośrednio w backendzie
+              (wymaga <code style={{ fontSize: 11 }}>llama-cpp-python</code>). <strong>OpenRouter</strong> — chmurowy fallback (OpenAI-compatible).
+            </p>
+            <select
+              value={llmProvider}
+              onChange={(e) => setLlmProvider(e.target.value as LLMProvider)}
+              style={{ ...inputStyle, cursor: "pointer", marginBottom: "0.5rem" }}
+            >
+              <option value="lm_studio">LM Studio (HTTP, localhost)</option>
+              <option value="local">Lokalny (llama-cpp-python, embedded)</option>
+              <option value="openrouter">OpenRouter (cloud)</option>
+            </select>
+
+            {llmProvider === "lm_studio" && (
+              <>
+                <label style={{ display: "block", marginTop: "0.5rem", marginBottom: "0.25rem", fontSize: 13 }}>
+                  Adres LM Studio
+                </label>
+                <input
+                  type="url"
+                  value={lmStudioBaseUrl}
+                  onChange={(e) => setLmStudioBaseUrl(e.target.value)}
+                  placeholder="http://localhost:1234"
+                  style={inputStyle}
+                />
+                <label style={{ display: "block", marginTop: "0.5rem", marginBottom: "0.25rem", fontSize: 13 }}>
+                  Nazwa modelu (jak w LM Studio)
+                </label>
+                <input
+                  type="text"
+                  value={lmStudioModelName}
+                  onChange={(e) => setLmStudioModelName(e.target.value)}
+                  placeholder="qwen2.5-14b-instruct"
+                  style={inputStyle}
+                />
+              </>
+            )}
+
+            {llmProvider === "openrouter" && (
+              <>
+                <label style={{ display: "block", marginTop: "0.5rem", marginBottom: "0.25rem", fontSize: 13 }}>
+                  API key (sk-or-…)
+                </label>
+                <input
+                  type="password"
+                  value={orApiKey}
+                  onChange={(e) => setOrApiKey(e.target.value)}
+                  placeholder="sk-or-…  (lub ENV: ASSY_LLM__OPENROUTER__API_KEY)"
+                  style={inputStyle}
+                />
+                <label style={{ display: "block", marginTop: "0.5rem", marginBottom: "0.25rem", fontSize: 13 }}>
+                  Model
+                </label>
+                <select
+                  value={orModelName}
+                  onChange={(e) => setOrModelName(e.target.value)}
+                  style={{ ...inputStyle, cursor: "pointer" }}
+                >
+                  <option value="anthropic/claude-sonnet-4.6">Claude Sonnet 4.6 (Anthropic)</option>
+                  <option value="anthropic/claude-opus-4.7">Claude Opus 4.7 (Anthropic)</option>
+                  <option value="openai/gpt-4o-mini">GPT-4o mini (OpenAI)</option>
+                  <option value="openai/gpt-4o">GPT-4o (OpenAI)</option>
+                  <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B Instruct</option>
+                  <option value="deepseek/deepseek-chat">DeepSeek Chat</option>
+                  <option value="google/gemini-2.0-flash-exp">Gemini 2.0 Flash (Google)</option>
+                </select>
+              </>
+            )}
+
+            {llmProvider === "local" && (
+              <>
+                <label style={{ display: "block", marginTop: "0.5rem", marginBottom: "0.25rem", fontSize: 13 }}>
+                  Aktywny model (wybierz z listy poniżej lub wpisz model_id)
+                </label>
+                <input
+                  type="text"
+                  value={localModelId}
+                  onChange={(e) => setLocalModelId(e.target.value)}
+                  placeholder="np. unsloth/gemma-3n-E4B-it-GGUF"
+                  style={inputStyle}
+                />
+                <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem", flexWrap: "wrap" }}>
+                  <label style={{ fontSize: 12 }}>
+                    Quant{" "}
+                    <input
+                      type="text"
+                      value={localQuant}
+                      onChange={(e) => setLocalQuant(e.target.value)}
+                      style={{ ...inputStyle, width: "auto", minWidth: 84, marginLeft: 4 }}
+                    />
+                  </label>
+                  <label style={{ fontSize: 12 }}>
+                    GPU layers{" "}
+                    <input
+                      type="number"
+                      value={localGpuLayers}
+                      onChange={(e) => setLocalGpuLayers(e.target.value)}
+                      style={{ ...inputStyle, width: "auto", minWidth: 84, marginLeft: 4 }}
+                    />
+                  </label>
+                  <label style={{ fontSize: 12 }}>
+                    n_ctx{" "}
+                    <input
+                      type="number"
+                      value={localCtx}
+                      onChange={(e) => setLocalCtx(e.target.value)}
+                      style={{ ...inputStyle, width: "auto", minWidth: 96, marginLeft: 4 }}
+                    />
+                  </label>
+                </div>
+                <p style={{ margin: "0.5rem 0 0", fontSize: 11, color: "#6d6680" }}>
+                  GPU layers: <code>-1</code> = wszystko na GPU, <code>0</code> = CPU only. Chat template czytany automatycznie z metadanych GGUF.
+                </p>
+              </>
+            )}
+
+            <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+              <button type="button" onClick={() => void saveLlmConfig()} disabled={llmBusy} style={btnPrimary}>
+                {llmBusy ? "Zapis…" : "Zapisz konfigurację LLM"}
+              </button>
+              {llmMsg && (
+                <span style={{ fontSize: 12, color: llmMsg.startsWith("Zapisano") || llmMsg.startsWith("Pobrano") || llmMsg.startsWith("Usunięto") || llmMsg.startsWith("Dodano") ? "#7de87d" : "#e87d7d" }}>
+                  {llmMsg}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {llmProvider === "local" && (
+            <>
+              <div style={{ marginBottom: "1rem", padding: "0.65rem 0.75rem", borderRadius: 8, border: "1px solid #2a2438", background: "#100d18" }}>
+                <div style={{ fontWeight: 600, color: "#e8e4f0", marginBottom: "0.35rem" }}>Modele lokalne (GGUF)</div>
+                <p style={{ margin: "0 0 0.5rem", fontSize: 12, color: "#8a8198" }}>
+                  Lista z <code>GET /api/v1/llm/models</code>. „Pobrany" = istnieje w <code>content_root/models/llm/</code>. Pobieranie idzie z HuggingFace (idempotentne).
+                </p>
+                <button type="button" onClick={() => void refreshLlmModels()} style={{ ...btnPrimary, fontSize: 12, padding: "0.3rem 0.7rem", marginBottom: "0.5rem" }}>
+                  Odśwież listę
+                </button>
+                {llmModels.length === 0 ? (
+                  <p style={{ margin: 0, fontSize: 12, color: "#6d6680" }}>(katalog pusty lub backend niedostępny)</p>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                    {llmModels.map((m) => {
+                      const isActive = m.model_id === llmActiveModelId || m.model_id === localModelId;
+                      const isDownloading = downloadingId === m.model_id;
+                      return (
+                        <div
+                          key={m.model_id}
+                          style={{
+                            padding: "0.5rem 0.65rem",
+                            borderRadius: 6,
+                            border: isActive ? "1px solid #6b5a9e" : "1px solid #2a2438",
+                            background: isActive ? "#1a1525" : "#0d0b12",
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem" }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontWeight: 600, color: "#e8e4f0", fontSize: 13 }}>
+                                {m.display_name}{" "}
+                                {m.is_custom && <span style={{ fontSize: 10, color: "#a78bfa", marginLeft: 4 }}>custom</span>}
+                              </div>
+                              <div style={{ fontSize: 11, color: "#8a8198", wordBreak: "break-all" }}>
+                                <code>{m.model_id}</code>{" "}
+                                {m.downloaded ? (
+                                  <span style={{ color: "#7de87d" }}>· ✓ {formatBytes(m.size_bytes)} {m.quant ?? ""}</span>
+                                ) : (
+                                  <span style={{ color: "#6d6680" }}>· nie pobrany</span>
+                                )}
+                              </div>
+                              {m.description && <div style={{ fontSize: 11, color: "#8a8198", marginTop: 2 }}>{m.description}</div>}
+                            </div>
+                            <div style={{ display: "flex", gap: "0.35rem", flexDirection: "column" }}>
+                              <button
+                                type="button"
+                                onClick={() => setLocalModelId(m.model_id)}
+                                style={{ ...btnPrimary, fontSize: 11, padding: "0.25rem 0.55rem" }}
+                              >
+                                {isActive ? "Aktywny" : "Wybierz"}
+                              </button>
+                              {!m.downloaded && (
+                                <button
+                                  type="button"
+                                  onClick={() => void downloadModel(m.model_id)}
+                                  disabled={isDownloading}
+                                  style={{ ...btnPrimary, fontSize: 11, padding: "0.25rem 0.55rem", background: "#3d6a3d", borderColor: "#5a8a5a" }}
+                                >
+                                  {isDownloading ? "Pobieranie…" : "⬇ Pobierz"}
+                                </button>
+                              )}
+                              {m.downloaded && (
+                                <button
+                                  type="button"
+                                  onClick={() => void removeModel(m.model_id, "cache")}
+                                  disabled={llmBusy}
+                                  style={{ ...btnPrimary, fontSize: 11, padding: "0.25rem 0.55rem", background: "#3a2a2a", borderColor: "#7a5a5a" }}
+                                >
+                                  Usuń pliki
+                                </button>
+                              )}
+                              {m.is_custom && (
+                                <button
+                                  type="button"
+                                  onClick={() => void removeModel(m.model_id, "both")}
+                                  disabled={llmBusy}
+                                  style={{ ...btnPrimary, fontSize: 11, padding: "0.25rem 0.55rem", background: "#3a2a3a", borderColor: "#7a5a7a" }}
+                                >
+                                  Usuń z katalogu
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ marginBottom: "1rem", padding: "0.65rem 0.75rem", borderRadius: 8, border: "1px solid #2a2438", background: "#100d18" }}>
+                <div style={{ fontWeight: 600, color: "#e8e4f0", marginBottom: "0.35rem" }}>Dodaj własny model (HuggingFace)</div>
+                <p style={{ margin: "0 0 0.5rem", fontSize: 12, color: "#8a8198" }}>
+                  Format: <code>owner/repo</code> (auto-wybór GGUF wg quanta) lub <code>owner/repo/filename.gguf</code> (konkretny plik).
+                </p>
+                <input
+                  type="text"
+                  value={customModelId}
+                  onChange={(e) => setCustomModelId(e.target.value)}
+                  placeholder="np. TheBloke/Mistral-7B-Instruct-v0.2-GGUF"
+                  style={inputStyle}
+                />
+                <input
+                  type="text"
+                  value={customDisplayName}
+                  onChange={(e) => setCustomDisplayName(e.target.value)}
+                  placeholder="Nazwa wyświetlana (np. Mistral 7B Instruct)"
+                  style={{ ...inputStyle, marginTop: "0.35rem" }}
+                />
+                <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.35rem", alignItems: "center" }}>
+                  <label style={{ fontSize: 12 }}>
+                    Quant{" "}
+                    <input
+                      type="text"
+                      value={customQuant}
+                      onChange={(e) => setCustomQuant(e.target.value)}
+                      style={{ ...inputStyle, width: "auto", minWidth: 84, marginLeft: 4 }}
+                    />
+                  </label>
+                  <button type="button" onClick={() => void addCustomModel()} disabled={llmBusy} style={btnPrimary}>
+                    Dodaj do katalogu
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {!llmLoaded && (
+            <p style={{ margin: 0, fontSize: 12, color: "#6d6680" }}>Ładowanie konfiguracji LLM…</p>
+          )}
         </div>
       )}
 

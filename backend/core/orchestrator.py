@@ -10,6 +10,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Literal,
 OutputMode = Literal["voice", "text"]
 
 from backend.ai.llm_client import ChatCompletionResult, LMStudioClient
+from backend.core.interfaces import BaseLLMClient
 from backend.config.schema import ConfigSchema
 from backend.core.command_handlers import CommandExecutionResult, dispatch_builtin
 from backend.core.command_matching import CommandMatcher, CooldownTracker
@@ -140,7 +141,7 @@ class ConversationOrchestrator:
         self,
         *,
         configuration: ConfigSchema,
-        lm_client: LMStudioClient,
+        lm_client: BaseLLMClient,
         prompt_builder: PromptBuilder,
         persona_loader: PersonaLoader,
         command_matcher: CommandMatcher,
@@ -178,12 +179,15 @@ class ConversationOrchestrator:
         *,
         command_matcher: Optional[CommandMatcher] = None,
         persona_loader: Optional[PersonaLoader] = None,
+        lm_client: Optional[BaseLLMClient] = None,
     ) -> None:
         self._cfg = configuration
         if command_matcher is not None:
             self._matcher = command_matcher
         if persona_loader is not None:
             self._personas = persona_loader
+        if lm_client is not None:
+            self._llm = lm_client
         self._max_tools = configuration.ai_runtime.max_tool_calls_per_turn
 
     async def emit_visual_state(self, state_name: OrchestratorState) -> None:

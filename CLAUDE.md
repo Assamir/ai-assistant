@@ -109,7 +109,7 @@ Key layers:
 | Layer | Location | Role |
 |-------|----------|------|
 | **Config** | `backend/config/` | `ConfigLoader` reads YAML from content_root, merges with env vars (`ASSY_` prefix). `ConfigSchema` is the Pydantic V2 model. |
-| **AI Adapters** | `backend/ai/` | Concrete implementations of abstract interfaces: `FasterWhisperSTT`, `PiperTTS`, `LMStudioClient`, `Moondream2VLM`, `EasyOCREngine`, `DesktopScreenCapture`. Each is optional — missing packages degrade gracefully (returns `None` from `try_build_*` helpers). |
+| **AI Adapters** | `backend/ai/` | Concrete implementations of abstract interfaces: `FasterWhisperSTT`, `PiperTTS`, `LMStudioClient` / `LlamaCppLocalClient` / `OpenRouterClient` (wybór via `llm.provider`), `Moondream2VLM`, `EasyOCREngine`, `DesktopScreenCapture`. Each is optional — missing packages degrade gracefully (returns `None` from `try_build_*` helpers). |
 | **Core Abstractions** | `backend/core/interfaces.py` | `BaseLLMClient`, `BaseSTTEngine`, `BaseTTSEngine`, `BaseVLMAnalyzer`, `BaseOCREngine`, `BaseScreenCapture`, `CircuitBreaker`, `GPUScheduler`. Tests mock against these. |
 | **Orchestrator** | `backend/core/orchestrator.py` | `ConversationOrchestrator` runs the full turn: command matching → prompt building → LLM call → tool execution loop (max 5 calls) → emotion parsing → TTS. |
 | **MCP Tools** | `backend/mcp/` | `ToolRegistry` holds tools. `build_default_tool_registry()` registers tools; **`web_search`** i **`web_scraper`** są zawsze w rejestrze (LLM zawsze może wywołać sieć — degradacja przy braku połączenia). `mcp.enabled` steruje wyłącznie **`generate_document`**. `register_context_dependent_mcp_tools()` dodaje `screen_capture`. Lista `mcp.tools_enabled` nie usuwa narzędzi sieciowych ani `get_current_time`/`calculator`. |
@@ -211,6 +211,8 @@ The WS at `/ws` exchanges JSON frames: `{"event": "<name>", "payload": {...}}`.
 | `system_state` | `state`, `health` | Hibernation / resume notifications |
 | `player_profile.league_hint` | `game_id`, `mismatch_hint`, etc. | League change suggestion |
 | `player_profile.league_changed` | `game`, `previous_league`, `league` | After PATCH to player-profile |
+| `model_download_progress` | `model_id`, `downloaded_bytes`, `total_bytes`, `status` (`downloading`/`complete`/`error`) | Postęp pobierania modelu LLM (provider=local) |
+| `llm_provider_changed` | `provider`, `model_name` | Broadcast po hot-reloadzie providera LLM |
 
 ### Frontend → Backend frames
 
@@ -243,6 +245,11 @@ All routes are prefixed `/api/v1` (defined in `backend/api/routes.py`).
 | POST | `/player-profile/games/{game}/check-league-hint` | Trigger league hint check |
 | POST | `/daily-checks/run` | Force or throttled daily meta check |
 | GET | `/daily-checks` | List recent daily check records |
+| GET | `/llm/providers` | List providerów LLM + który jest aktywny |
+| GET | `/llm/models` | Katalog modeli (initial + custom) ze statusem `downloaded` |
+| POST | `/llm/models` | Dodaj custom model do katalogu (`{model_id, display_name, default_quant, ...}`) |
+| POST | `/llm/models/{model_id}/download` | Wymuś pobranie modelu z HF (progres przez WS) |
+| DELETE | `/llm/models/{model_id}?scope=cache\|catalog\|both` | Usuń pobrane pliki lub wpis katalogu |
 
 ---
 
@@ -266,6 +273,9 @@ All routes are prefixed `/api/v1` (defined in `backend/api/routes.py`).
 - **New AI adapter:** Subclass the relevant `Base*` ABC from `backend/core/interfaces.py`, add a `try_build_*` helper in `backend/api/app_context.py`, wire into `create_app_context()`.
 - **New MCP tool:** Implement and register in `backend/mcp/registry.py` or `backend/mcp/context_tools.py` (for tools needing `AppContext`).
 - **LM Studio FC mirror:** `ai_runtime.mirror_tool_results_as_user: true` duplicates every `role=tool` message as a `role=user` message — a workaround for local models (e.g. some Gemma presets) that ignore tool results in standard format.
+- **LLM provider:** `llm.provider` wybiera backend — `lm_studio` (HTTP), `local` (embedded `llama-cpp-python`), `openrouter` (cloud OpenAI-compatible). `try_build_llm_client()` w `backend/api/app_context.py` zwraca odpowiednią implementację. Hot-reload providera odbywa się w `apply_reload_configuration()` (close + rebuild). Lista REST: `GET /api/v1/llm/providers`, `GET/POST /api/v1/llm/models`, `POST /api/v1/llm/models/{id}/download`, `DELETE /api/v1/llm/models/{id}`.
+- **Local GGUF cache:** Modele dla `provider=local` cache'ują się w `{content_root}/models/llm/{owner_repo}/`. Pobieranie przez `huggingface_hub.hf_hub_download` (ETag-based, idempotentne). Chat template — auto z metadata GGUF (`tokenizer.chat_template`); żaden manualny preset nie jest wymagany.
+- **Katalog modeli:** `INITIAL_MODELS` w `backend/ai/llm_models_catalog.py` zawiera Gemma 3n E4B i Qwen3 Coder 30B (GGUF). Custom wpisy: `{content_root}/data/llm_models_custom.yaml`.
 - **ConversationStore:** Keeps the last 40 messages per session (keyed by WS session UUID or REST `session_id`).
 
 ---

@@ -95,6 +95,25 @@ def main() -> int:
         print("  (opcjonalnie) accelerate — zalecane przy transformers / device_map")
 
     try:
+        import llama_cpp
+
+        ver = getattr(llama_cpp, "__version__", "?")
+        print(f"  OK import llama_cpp ({ver}) — provider=local dostępny")
+    except ImportError:
+        print(
+            "  (opcjonalnie) llama_cpp — pip install llama-cpp-python "
+            "(provider=local dla GGUF). CUDA wheels: "
+            "https://abetlen.github.io/llama-cpp-python/whl/cu124"
+        )
+
+    try:
+        import huggingface_hub
+
+        print(f"  OK import huggingface_hub ({huggingface_hub.__version__}) — pobieranie modeli GGUF")
+    except ImportError as e:
+        print(f"  (wymagane) huggingface_hub — {e}")
+
+    try:
         importlib.import_module("PIL")
         print("  OK import Pillow (PIL)")
     except ImportError as e:

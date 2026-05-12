@@ -118,11 +118,76 @@ class AudioConfig(BaseModel):
         out = [str(x).strip() for x in v if str(x).strip()]
         return out or ["hej aria", "hej, aria", "cześć aria"]
 
+class LocalLLMConfig(BaseModel):
+    """Embedded llama-cpp-python (provider=`local`)."""
+
+    model_id: str = Field(
+        default="unsloth/gemma-3n-E4B-it-GGUF",
+        description="HuggingFace repo: 'owner/repo' albo 'owner/repo/filename.gguf'.",
+    )
+    model_file: Optional[str] = Field(
+        default=None,
+        description="Konkretny plik .gguf w repo. None = wybór po preferred_quant.",
+    )
+    preferred_quant: str = Field(
+        default="Q4_K_M",
+        description="Preferowana kwantyzacja przy auto-wyborze pliku (Q4_K_M, Q5_K_M, Q8_0…).",
+    )
+    n_gpu_layers: int = Field(
+        default=-1,
+        description="Liczba warstw na GPU (-1 = wszystkie, 0 = CPU only).",
+    )
+    n_ctx: int = Field(default=8192, ge=512, le=131072)
+    n_batch: int = Field(default=512, ge=1, le=4096)
+    auto_download: bool = Field(
+        default=True,
+        description="Jeśli model nie jest pobrany, pobierz automatycznie przy pierwszym użyciu.",
+    )
+    cache_dir: Optional[str] = Field(
+        default=None,
+        description="Katalog cache (absolutny lub względem content_root). None = '{content_root}/models/llm'.",
+    )
+
+
+class OpenRouterLLMConfig(BaseModel):
+    """Chmurowy fallback przez https://openrouter.ai (OpenAI-compatible)."""
+
+    api_key: str = Field(
+        default="",
+        description="OpenRouter API key. Najczęściej z ENV: ASSY_LLM__OPENROUTER__API_KEY.",
+    )
+    model_name: str = Field(
+        default="anthropic/claude-sonnet-4.6",
+        description="Nazwa modelu w OpenRouter, np. 'anthropic/claude-sonnet-4.6', 'openai/gpt-4o-mini'.",
+    )
+    api_base_url: str = "https://openrouter.ai/api/v1"
+    http_referer: Optional[str] = Field(
+        default=None,
+        description="Wartość nagłówka HTTP-Referer dla rankingu OpenRouter (opcjonalne).",
+    )
+    site_title: Optional[str] = Field(
+        default="Assystent",
+        description="Wartość nagłówka X-Title dla rankingu OpenRouter.",
+    )
+
+
 class LLMConfig(BaseModel):
-    api_base_url: str = "http://localhost:1234"
-    model_name: str = "gemma-2b-it-Q4_K_M"
+    provider: Literal["lm_studio", "local", "openrouter"] = Field(
+        default="lm_studio",
+        description="Backend LLM: lm_studio (HTTP), local (llama-cpp-python embedded), openrouter (cloud).",
+    )
+
+    # Wspólne dla wszystkich providerów
     temperature: float = 0.3
     max_tokens: int = 512
+
+    # LM Studio (legacy — zachowane płaskie pola dla kompatybilności wstecz)
+    api_base_url: str = "http://localhost:1234"
+    model_name: str = "gemma-2b-it-Q4_K_M"
+
+    # Sub-configi dla nowych providerów
+    local: LocalLLMConfig = LocalLLMConfig()
+    openrouter: OpenRouterLLMConfig = OpenRouterLLMConfig()
 
 class STTConfig(BaseModel):
     model_name: str = "large-v3"

@@ -14,7 +14,7 @@ from backend.config.loader import ConfigLoader
 from backend.config.paths import resolve_config_yaml, sqlite_database_path
 from backend.config.schema import ConfigSchema
 from backend.core.command_matching import CommandMatcher
-from backend.core.interfaces import BaseSTTEngine, BaseTTSEngine, BaseVLMAnalyzer, BaseOCREngine, BaseScreenCapture
+from backend.core.interfaces import BaseLLMClient, BaseSTTEngine, BaseTTSEngine, BaseVLMAnalyzer, BaseOCREngine, BaseScreenCapture
 from backend.core.orchestrator import ConversationOrchestrator
 from backend.core.persona_loader import PersonaLoader
 from backend.core.prompt_builder import PromptBuilder
@@ -102,9 +102,10 @@ class AppContext:
     tool_registry: ToolRegistry
 
     command_matcher: CommandMatcher
-    llm_client: LMStudioClient
+    llm_client: BaseLLMClient
     orchestrator: ConversationOrchestrator
     websocket_manager: WebSocketManager
+    content_root: Optional[Path] = None
     stt_engine: Optional[BaseSTTEngine] = None
     tts_engine: Optional[BaseTTSEngine] = None
     game_observer: Optional[GameObserver] = None
@@ -122,6 +123,7 @@ class AppContext:
     knowledge_ingester: Optional[KnowledgeIngester] = None
     knowledge_watcher: Optional[KnowledgeDirectoryWatcher] = None
     player_profile_store: Optional[PlayerProfileRepository] = None
+    llm_model_manager: Optional[Any] = None  # LLMModelManager — tylko gdy provider=local
 
 
 def init_semantic_memory(
@@ -195,6 +197,88 @@ async def record_player_profile_snapshot_session_start(ctx: AppContext, db_id: i
     if not isinstance(game, str) or not game.strip():
         return
     await store.record_snapshot(session_id=db_id, game_id=game.strip(), trigger="session_start")
+
+
+def build_llm_model_manager(
+    cfg: ConfigSchema,
+    content_root: Path,
+    websocket_manager: Optional[WebSocketManager] = None,
+) -> Any:
+    """Tworzy `LLMModelManager` z cache_dir i progress callback na WS."""
+    from backend.services.llm_model_manager import LLMModelManager
+
+    cache_dir_str = cfg.llm.local.cache_dir
+    if cache_dir_str:
+        cache_dir = Path(cache_dir_str)
+        if not cache_dir.is_absolute():
+            cache_dir = (content_root / cache_dir).resolve()
+    else:
+        cache_dir = (content_root / "models" / "llm").resolve()
+    custom_yaml = (content_root / "data" / "llm_models_custom.yaml").resolve()
+
+    progress_cb = None
+    if websocket_manager is not None:
+        async def _emit(model_id: str, downloaded: int, total: int, status: str) -> None:
+            payload = {
+                "model_id": model_id,
+                "downloaded_bytes": int(downloaded),
+                "total_bytes": int(total),
+                "status": status,
+            }
+            for sid in websocket_manager.iter_session_ids():
+                try:
+                    await websocket_manager.send_to_session(sid, "model_download_progress", payload)
+                except Exception:
+                    _logger.debug("model_download_progress emit failed for %s", sid)
+
+        progress_cb = _emit
+
+    return LLMModelManager(cache_dir=cache_dir, custom_yaml_path=custom_yaml, progress_callback=progress_cb)
+
+
+def try_build_llm_client(
+    cfg: ConfigSchema,
+    *,
+    content_root: Optional[Path] = None,
+    websocket_manager: Optional[WebSocketManager] = None,
+    model_manager: Optional[Any] = None,
+) -> tuple[BaseLLMClient, Optional[Any]]:
+    """Buduje klienta LLM wg `cfg.llm.provider`. Zwraca (klient, model_manager_lub_None)."""
+    provider = cfg.llm.provider
+    if provider == "lm_studio":
+        return LMStudioClient(cfg.llm), None
+    if provider == "openrouter":
+        from backend.ai.openrouter_client import OpenRouterClient
+
+        return OpenRouterClient(cfg.llm), None
+    if provider == "local":
+        from backend.ai.llama_cpp_client import LlamaCppLocalClient
+
+        if content_root is None:
+            raise ValueError("content_root jest wymagany dla provider=local")
+        mgr = model_manager or build_llm_model_manager(cfg, content_root, websocket_manager)
+        if cfg.llm.local.auto_download:
+            try:
+                downloaded = mgr.ensure_downloaded_sync(
+                    cfg.llm.local.model_id,
+                    file=cfg.llm.local.model_file,
+                    preferred_quant=cfg.llm.local.preferred_quant,
+                )
+                model_path = downloaded.local_path
+            except Exception as exc:
+                _logger.warning("Auto-download modelu %s nie powiódł się: %s", cfg.llm.local.model_id, exc)
+                raise
+        else:
+            existing = mgr.is_downloaded(cfg.llm.local.model_id, file=cfg.llm.local.model_file)
+            if existing is None:
+                raise RuntimeError(
+                    f"Model {cfg.llm.local.model_id} nie jest pobrany, a auto_download=False. "
+                    f"Pobierz przez POST /api/v1/llm/models/{{id}}/download lub włącz auto_download."
+                )
+            model_path = existing.local_path
+        client = LlamaCppLocalClient(cfg.llm, model_path=model_path)
+        return client, mgr
+    raise ValueError(f"Nieznany llm.provider: {provider!r}")
 
 
 def try_build_stt_engine(cfg: ConfigSchema) -> Optional[BaseSTTEngine]:
@@ -317,7 +401,13 @@ def create_app_context() -> AppContext:
         content_root=str(root.resolve()),
     )
     matcher = CommandMatcher(fuzzy=cfg.ai_runtime.command_match_fuzzy)
-    llm = LMStudioClient(cfg.llm)
+    ws_manager = WebSocketManager()
+    try:
+        llm, llm_mgr = try_build_llm_client(cfg, content_root=root, websocket_manager=ws_manager)
+    except Exception as exc:
+        _logger.warning("Build LLM client for provider=%s failed: %s — fallback do LM Studio", cfg.llm.provider, exc)
+        llm = LMStudioClient(cfg.llm)
+        llm_mgr = None
     pb = PromptBuilder(max_context_tokens=cfg.ai_runtime.max_context_tokens)
     pl = PersonaLoader(personas_dir)
 
@@ -368,7 +458,8 @@ def create_app_context() -> AppContext:
         command_matcher=matcher,
         llm_client=llm,
         orchestrator=orch,
-        websocket_manager=WebSocketManager(),
+        websocket_manager=ws_manager,
+        content_root=root,
         stt_engine=try_build_stt_engine(cfg),
         tts_engine=try_build_tts_engine(cfg),
         game_observer=obs,
@@ -383,6 +474,7 @@ def create_app_context() -> AppContext:
         knowledge_ingester=knowledge_ingester,
         knowledge_watcher=knowledge_watcher,
         player_profile_store=player_profile_store,
+        llm_model_manager=llm_mgr,
     )
     ctx.observer_loop = ObserverLoop(ctx)
     ctx.observer_pause_manager = ObserverPauseManager(ctx)
@@ -489,6 +581,8 @@ __all__ = [
     "try_build_tts_engine",
     "try_build_vlm_engine",
     "try_build_ocr_engine",
+    "try_build_llm_client",
+    "build_llm_model_manager",
     "build_vision_pipeline",
     "ensure_ws_db_session",
     "init_semantic_memory",

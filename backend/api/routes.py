@@ -253,6 +253,136 @@ async def api_config_put(request: Request, dep: Deps, body: ConfigPatchBody):
 
 
 
+# ---------- LLM providers / models ----------
+
+
+@router.get("/llm/providers")
+async def api_llm_providers(dep: Deps):
+    """Lista dostępnych providerów + który jest aktywny."""
+    active = dep.config.llm.provider
+    return {
+        "active": active,
+        "providers": [
+            {"id": "lm_studio", "label": "LM Studio (HTTP, localhost)"},
+            {"id": "local", "label": "Lokalny (llama-cpp-python, embedded)"},
+            {"id": "openrouter", "label": "OpenRouter (cloud)"},
+        ],
+    }
+
+
+@router.get("/llm/models")
+async def api_llm_models(dep: Deps):
+    """Lista modeli (katalog + status downloaded). 503 gdy brak managera (provider != local)."""
+    mgr = dep.llm_model_manager
+    if mgr is None:
+        # Manager budujemy ad-hoc — żeby UI mogło zobaczyć katalog nawet gdy provider != local
+        from backend.api.app_context import build_llm_model_manager
+
+        if dep.content_root is None:
+            raise HTTPException(status_code=503, detail={"code": "LLM_MODEL_MANAGER_UNAVAILABLE"})
+        mgr = build_llm_model_manager(dep.config, dep.content_root, dep.websocket_manager)
+    catalog = mgr.list_catalog()
+    downloaded_by_repo = {d.model_id: d for d in mgr.list_downloaded()}
+    items = []
+    for entry in catalog:
+        from backend.ai.llm_models_catalog import parse_model_id
+        try:
+            repo_id, _ = parse_model_id(entry.model_id)
+        except ValueError:
+            repo_id = entry.model_id
+        dl = downloaded_by_repo.get(repo_id)
+        items.append({
+            **entry.to_dict(),
+            "downloaded": dl is not None,
+            "local_path": dl.local_path if dl else None,
+            "size_bytes": dl.size_bytes if dl else None,
+            "quant": dl.quant if dl else None,
+        })
+    return {"items": items, "active_model_id": dep.config.llm.local.model_id}
+
+
+class AddModelBody(BaseModel):
+    model_id: str = Field(..., min_length=3)
+    display_name: str = Field(..., min_length=1)
+    default_quant: str = "Q4_K_M"
+    recommended_n_ctx: int = Field(default=8192, ge=512, le=131072)
+    description: str = ""
+    license: str = ""
+
+
+@router.post("/llm/models")
+async def api_llm_add_model(request: Request, body: AddModelBody, dep: Deps):
+    _require_config_put_token(request)
+    from backend.ai.llm_models_catalog import ModelEntry, parse_model_id
+    from backend.api.app_context import build_llm_model_manager
+
+    try:
+        parse_model_id(body.model_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_MODEL_ID", "message": str(exc)}) from exc
+
+    mgr = dep.llm_model_manager
+    if mgr is None:
+        if dep.content_root is None:
+            raise HTTPException(status_code=503, detail={"code": "LLM_MODEL_MANAGER_UNAVAILABLE"})
+        mgr = build_llm_model_manager(dep.config, dep.content_root, dep.websocket_manager)
+        dep.llm_model_manager = mgr
+    entry = ModelEntry(
+        model_id=body.model_id,
+        display_name=body.display_name,
+        default_quant=body.default_quant,
+        recommended_n_ctx=body.recommended_n_ctx,
+        description=body.description,
+        license=body.license,
+        is_custom=True,
+    )
+    mgr.add_custom_model(entry)
+    return {"ok": True, "entry": entry.to_dict()}
+
+
+@router.post("/llm/models/{model_id:path}/download")
+async def api_llm_download_model(model_id: str, request: Request, dep: Deps):
+    _require_config_put_token(request)
+    from backend.api.app_context import build_llm_model_manager
+
+    mgr = dep.llm_model_manager
+    if mgr is None:
+        if dep.content_root is None:
+            raise HTTPException(status_code=503, detail={"code": "LLM_MODEL_MANAGER_UNAVAILABLE"})
+        mgr = build_llm_model_manager(dep.config, dep.content_root, dep.websocket_manager)
+        dep.llm_model_manager = mgr
+    try:
+        result = await mgr.ensure_downloaded(model_id)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail={"code": "DOWNLOAD_FAILED", "message": str(exc)}) from exc
+    return {
+        "ok": True,
+        "model_id": result.model_id,
+        "local_path": result.local_path,
+        "size_bytes": result.size_bytes,
+        "quant": result.quant,
+    }
+
+
+@router.delete("/llm/models/{model_id:path}")
+async def api_llm_delete_model(model_id: str, request: Request, dep: Deps, scope: Literal["cache", "catalog", "both"] = "cache"):
+    _require_config_put_token(request)
+    from backend.api.app_context import build_llm_model_manager
+
+    mgr = dep.llm_model_manager
+    if mgr is None:
+        if dep.content_root is None:
+            raise HTTPException(status_code=503, detail={"code": "LLM_MODEL_MANAGER_UNAVAILABLE"})
+        mgr = build_llm_model_manager(dep.config, dep.content_root, dep.websocket_manager)
+        dep.llm_model_manager = mgr
+    removed_cache = removed_catalog = False
+    if scope in ("cache", "both"):
+        removed_cache = mgr.remove_downloaded(model_id)
+    if scope in ("catalog", "both"):
+        removed_catalog = mgr.remove_custom_model(model_id)
+    return {"ok": True, "removed_cache": removed_cache, "removed_catalog": removed_catalog}
+
+
 @router.get("/player-profile")
 
 async def api_player_profile(dep: Deps):

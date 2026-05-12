@@ -32,6 +32,31 @@ tts:
   piper_executable: "tools/piper/piper/piper.exe"
   piper_voice_onnx_path: "frontend/resources/piper-voices/pl/pl_PL/gosia/medium/pl_PL-gosia-medium.onnx"
 
+llm:
+  # provider: lm_studio (HTTP do localhost:1234) | local (embedded llama-cpp-python) | openrouter (cloud)
+  provider: local
+
+  # Niska temperatura ogranicza drift językowy (Qwen 2.5 14B-instruct potrafi przy 0.7
+  # przy długim kontekście przełączać się na chiński w środku zdania). 0.3 = sensowny
+  # kompromis między kreatywnością a stabilnością. Przy potrzebie więcej "luzu" — 0.4.
+  temperature: 0.3
+  model_name: "qwen2.5-14b-instruct"   # używany tylko gdy provider=lm_studio
+  # api_base_url: "http://localhost:1234"   # provider=lm_studio
+
+  # Provider=local — embedded GGUF przez llama-cpp-python.
+  # Pobieranie startuje przy pierwszym uruchomieniu backendu (~3 GB → {content_root}/models/llm/).
+  local:
+    model_id: "unsloth/gemma-3n-E4B-it-GGUF"   # lub np. "unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF"
+    preferred_quant: "Q4_K_M"
+    n_gpu_layers: -1                            # -1 = wszystko na GPU, 0 = CPU only
+    n_ctx: 8192
+    auto_download: true
+
+  # Provider=openrouter — chmurowy fallback. API key najczęściej z ENV: ASSY_LLM__OPENROUTER__API_KEY
+  # openrouter:
+  #   api_key: ""
+  #   model_name: "anthropic/claude-sonnet-4.6"
+
 # Opcjonalnie — LM Studio / niektóre modele (np. Gemma) ignorują role=tool; włącz echo wyniku jako user:
 # ai_runtime:
 #   mirror_tool_results_as_user: true

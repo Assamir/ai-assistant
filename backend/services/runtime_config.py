@@ -9,6 +9,7 @@ from backend.ai.voice_input import WakewordDetector
 from backend.api.app_context import (
     AppContext,
     build_vision_pipeline,
+    try_build_llm_client,
     try_build_ocr_engine,
     try_build_stt_engine,
     try_build_tts_engine,
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 async def apply_reload_configuration(ctx: AppContext, new_cfg: ConfigSchema) -> None:
     """Aktualizuje kontekst aplikacji po zmianie YAML (bez restartu procesu)."""
+    old_provider = getattr(ctx, "_last_llm_provider", None) or ctx.config.llm.provider
     ctx.config = new_cfg
     ctx.prompt_builder.max_context_tokens = new_cfg.ai_runtime.max_context_tokens
 
@@ -40,16 +42,52 @@ async def apply_reload_configuration(ctx: AppContext, new_cfg: ConfigSchema) -> 
     matcher = CommandMatcher(fuzzy=new_cfg.ai_runtime.command_match_fuzzy)
     ctx.command_matcher = matcher
     ctx.persona_loader = pl
-    ctx.orchestrator.apply_configuration(
-        new_cfg,
-        command_matcher=matcher,
-        persona_loader=pl,
-    )
 
     if ctx.game_observer is not None:
         ctx.game_observer.update_observer_config(new_cfg.observer)
 
-    await ctx.llm_client.apply_llm_config(new_cfg.llm)
+    # LLM provider: hot-reload albo pełna podmiana klienta gdy provider się zmienił
+    new_provider = new_cfg.llm.provider
+    new_lm_client = None
+    if new_provider != old_provider:
+        try:
+            close = getattr(ctx.llm_client, "aclose", None)
+            if close is not None:
+                await close()
+        except Exception:
+            logger.warning("aclose() previous LLM client failed", exc_info=True)
+        try:
+            new_lm_client, new_mgr = try_build_llm_client(
+                new_cfg,
+                content_root=root,
+                websocket_manager=ctx.websocket_manager,
+                model_manager=ctx.llm_model_manager,
+            )
+            ctx.llm_client = new_lm_client
+            ctx.llm_model_manager = new_mgr
+            for sid in ctx.websocket_manager.iter_session_ids():
+                try:
+                    await ctx.websocket_manager.send_to_session(
+                        sid,
+                        "llm_provider_changed",
+                        {"provider": new_provider, "model_name": new_cfg.llm.model_name},
+                    )
+                except Exception:
+                    pass
+        except Exception as exc:
+            logger.warning("Build LLM client for new provider=%s failed: %s", new_provider, exc)
+    else:
+        apply = getattr(ctx.llm_client, "apply_llm_config", None)
+        if apply is not None:
+            await apply(new_cfg.llm)
+    ctx._last_llm_provider = new_provider  # type: ignore[attr-defined]
+
+    ctx.orchestrator.apply_configuration(
+        new_cfg,
+        command_matcher=matcher,
+        persona_loader=pl,
+        lm_client=new_lm_client,
+    )
 
     ctx.stt_engine = try_build_stt_engine(new_cfg)
     ctx.tts_engine = try_build_tts_engine(new_cfg)
