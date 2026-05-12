@@ -466,6 +466,12 @@ class UIConfig(BaseModel):
     chat_panel_messages: int = Field(default=6, ge=2, le=20, description="Liczba widocznych wiadomości.")
     chat_panel_side: str = Field(default="right", description="'left' lub 'right' względem awatara.")
     chat_panel_opacity: float = Field(default=0.85, ge=0.1, le=1.0, description="Przezroczystość tła panelu.")
+    overlay_scale: float = Field(default=0.333, ge=0.2, le=1.5, description="Skala całego overlay (CSS transform + rozmiar okna Electron).")
+    avatar_breathing_enabled: bool = Field(default=True, description="Włącza warstwę oddychania (klatka + ramiona).")
+    avatar_state_poses_enabled: bool = Field(default=True, description="Włącza pozy zależne od visual_state (head/sway/blink/emotion bonus).")
+    avatar_look_at_enabled: bool = Field(default=True, description="Włącza śledzenie wzroku za kursorem + saccades przy bezruchu myszy.")
+    avatar_emotion_intensity: float = Field(default=1.25, ge=0.1, le=3.0, description="Mnożnik intensywności blendshape'ów emocji.")
+    avatar_emotion_crossfade_sec: float = Field(default=0.7, ge=0.05, le=4.0, description="Czas crossfade emocji (sekundy).")
 
 
 class ConfigSchema(BaseModel):

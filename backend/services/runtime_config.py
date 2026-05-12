@@ -101,6 +101,13 @@ async def apply_reload_configuration(ctx: AppContext, new_cfg: ConfigSchema) -> 
         threshold=new_cfg.audio.wakeword_threshold,
     )
 
+    ui_payload = new_cfg.ui.model_dump(mode="json")
+    for sid in ctx.websocket_manager.iter_session_ids():
+        try:
+            await ctx.websocket_manager.send_to_session(sid, "ui_config_changed", ui_payload)
+        except Exception:
+            logger.debug("ui_config_changed emit failed for sid=%s", sid, exc_info=True)
+
     logger.info("Runtime configuration applied (hot-reload)")
 
 

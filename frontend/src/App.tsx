@@ -49,6 +49,19 @@ function readInitialApiBase(): string {
   return readApiBaseUrl();
 }
 
+function readInitialUiConfig(): UiAvatarConfig {
+  const bridgedScale = window.assystent?.overlayScale;
+  const scale = typeof bridgedScale === "number" && Number.isFinite(bridgedScale) ? bridgedScale : 0.333;
+  return {
+    overlayScale: Math.min(1.5, Math.max(0.2, scale)),
+    avatarBreathingEnabled: true,
+    avatarStatePosesEnabled: true,
+    avatarLookAtEnabled: true,
+    avatarEmotionIntensity: 1.25,
+    avatarEmotionCrossfadeSec: 0.7,
+  };
+}
+
 const btnSecondary: React.CSSProperties = {
   padding: "0.4rem 0.85rem",
   borderRadius: 6,
@@ -171,6 +184,17 @@ function observerHintsFromStatusJson(data: unknown): string[] {
 
 const isConfigView = typeof window !== "undefined" && window.location.hash === "#config";
 const isElectron = typeof window !== "undefined" && !!window.assystent;
+const OVERLAY_BASE_WIDTH = 400;
+const OVERLAY_BASE_HEIGHT = 600;
+
+interface UiAvatarConfig {
+  overlayScale: number;
+  avatarBreathingEnabled: boolean;
+  avatarStatePosesEnabled: boolean;
+  avatarLookAtEnabled: boolean;
+  avatarEmotionIntensity: number;
+  avatarEmotionCrossfadeSec: number;
+}
 
 export function App() {
   const [log, setLog] = useState<string[]>([]);
@@ -217,6 +241,9 @@ export function App() {
   const [personas, setPersonas] = useState<PersonaInfo[]>([]);
   const [activePersona, setActivePersona] = useState("aria");
   const [visualState, setVisualState] = useState<"idle" | "listening" | "thinking" | "speaking">("idle");
+  const [uiCfg, setUiCfg] = useState<UiAvatarConfig>(readInitialUiConfig);
+  const [mouseNorm, setMouseNorm] = useState<{ x: number; y: number } | null>(null);
+  const [lastMouseMoveAtMs, setLastMouseMoveAtMs] = useState<number>(() => Date.now());
   const [micDeviceId, setMicDeviceId] = useState<string>(() =>
     typeof window !== "undefined" ? localStorage.getItem(MIC_DEVICE_STORAGE_KEY) ?? "" : "",
   );
@@ -317,6 +344,34 @@ export function App() {
       if (f.event === "visual_state" && typeof f.payload.state === "string") {
         const s = f.payload.state as "idle" | "listening" | "thinking" | "speaking";
         setVisualState(s);
+      }
+      if (f.event === "ui_config_changed") {
+        setUiCfg((prev) => ({
+          overlayScale:
+            typeof f.payload.overlay_scale === "number"
+              ? Math.min(1.5, Math.max(0.2, f.payload.overlay_scale))
+              : prev.overlayScale,
+          avatarBreathingEnabled:
+            typeof f.payload.avatar_breathing_enabled === "boolean"
+              ? f.payload.avatar_breathing_enabled
+              : prev.avatarBreathingEnabled,
+          avatarStatePosesEnabled:
+            typeof f.payload.avatar_state_poses_enabled === "boolean"
+              ? f.payload.avatar_state_poses_enabled
+              : prev.avatarStatePosesEnabled,
+          avatarLookAtEnabled:
+            typeof f.payload.avatar_look_at_enabled === "boolean"
+              ? f.payload.avatar_look_at_enabled
+              : prev.avatarLookAtEnabled,
+          avatarEmotionIntensity:
+            typeof f.payload.avatar_emotion_intensity === "number"
+              ? f.payload.avatar_emotion_intensity
+              : prev.avatarEmotionIntensity,
+          avatarEmotionCrossfadeSec:
+            typeof f.payload.avatar_emotion_crossfade_sec === "number"
+              ? f.payload.avatar_emotion_crossfade_sec
+              : prev.avatarEmotionCrossfadeSec,
+        }));
       }
       if (f.event === "stt_result") {
         setSttBlock({
@@ -510,6 +565,28 @@ export function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      const w = Math.max(window.innerWidth, 1);
+      const h = Math.max(window.innerHeight, 1);
+      const x = (e.clientX / w) * 2 - 1;
+      const y = 1 - (e.clientY / h) * 2;
+      setMouseNorm({ x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)) });
+      setLastMouseMoveAtMs(Date.now());
+    };
+    const onLeave = () => setMouseNorm(null);
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseleave", onLeave);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseleave", onLeave);
+    };
+  }, []);
+
+  useEffect(() => {
+    window.assystent?.setOverlayScale?.(uiCfg.overlayScale);
+  }, [uiCfg.overlayScale]);
 
   useEffect(() => {
     if (!wsReady) {
@@ -887,12 +964,21 @@ export function App() {
         style={{
           position: "fixed",
           inset: 0,
-          display: "flex",
-          flexDirection: "column",
+          overflow: "hidden",
           background: "transparent",
-          userSelect: "none",
         }}
       >
+        <div
+          style={{
+            width: OVERLAY_BASE_WIDTH,
+            height: OVERLAY_BASE_HEIGHT,
+            transform: `scale(${uiCfg.overlayScale})`,
+            transformOrigin: "top left",
+            display: "flex",
+            flexDirection: "column",
+            userSelect: "none",
+          }}
+        >
         {/* Drag handle */}
         <div
           ref={dragHandleRef}
@@ -922,7 +1008,15 @@ export function App() {
           <AvatarCanvas
             vrmUrl={vrmUrl}
             emotion={sleeping ? "neutral" : emotion}
+            visualState={visualState}
             lipSyncLevel={isSpeaking ? mouthLevel : 0}
+            breathingEnabled={uiCfg.avatarBreathingEnabled}
+            statePosesEnabled={uiCfg.avatarStatePosesEnabled}
+            lookAtEnabled={uiCfg.avatarLookAtEnabled}
+            emotionIntensity={uiCfg.avatarEmotionIntensity}
+            emotionCrossfadeSec={uiCfg.avatarEmotionCrossfadeSec}
+            mouseNormalized={mouseNorm}
+            lastMouseMoveAtMs={lastMouseMoveAtMs}
             containerStyle={{ width: "100%", height: "100%", background: "transparent", borderRadius: 0 }}
           />
 
@@ -1288,6 +1382,7 @@ export function App() {
         </div>
         </div>
       </div>
+      </div>
     );
   }
 
@@ -1353,7 +1448,19 @@ export function App() {
           >
             ···
           </div>
-          <AvatarCanvas vrmUrl={vrmUrl} emotion={emotion} lipSyncLevel={isSpeaking ? mouthLevel : 0} />
+          <AvatarCanvas
+            vrmUrl={vrmUrl}
+            emotion={emotion}
+            visualState={visualState}
+            lipSyncLevel={isSpeaking ? mouthLevel : 0}
+            breathingEnabled={uiCfg.avatarBreathingEnabled}
+            statePosesEnabled={uiCfg.avatarStatePosesEnabled}
+            lookAtEnabled={uiCfg.avatarLookAtEnabled}
+            emotionIntensity={uiCfg.avatarEmotionIntensity}
+            emotionCrossfadeSec={uiCfg.avatarEmotionCrossfadeSec}
+            mouseNormalized={mouseNorm}
+            lastMouseMoveAtMs={lastMouseMoveAtMs}
+          />
           <p style={{ margin: "0.5rem 0 0", fontSize: 12, color: "#8a8198" }}>
             Emocja (z WS): <strong style={{ color: "#d4ccec" }}>{emotion}</strong>
             {isSpeaking ? " · odtwarzanie TTS (lip-sync)" : ""}

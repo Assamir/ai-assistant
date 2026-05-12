@@ -23,23 +23,51 @@ let bundledBackendProc = null;
 const STATE_FILE = path.join(app.getPath("userData"), "window-state.json");
 const DEFAULT_W = 400;
 const DEFAULT_H = 600;
+const DEFAULT_OVERLAY_SCALE = 0.333;
+let currentOverlayScale = DEFAULT_OVERLAY_SCALE;
+
+function parseOverlayScale(raw) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return DEFAULT_OVERLAY_SCALE;
+  return Math.min(1.5, Math.max(0.2, n));
+}
+
+function scaledSize(width, height, scale) {
+  return {
+    width: Math.max(80, Math.round(width * scale)),
+    height: Math.max(120, Math.round(height * scale)),
+  };
+}
 
 function loadWindowState() {
   try {
     const s = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
-    if (
-      typeof s.width === "number" && s.width > 100 &&
-      typeof s.height === "number" && s.height > 100
-    ) {
-      return s;
+    const out = {
+      x: typeof s.x === "number" ? s.x : undefined,
+      y: typeof s.y === "number" ? s.y : undefined,
+      logicalWidth: typeof s.logicalWidth === "number" && s.logicalWidth > 100 ? s.logicalWidth : DEFAULT_W,
+      logicalHeight: typeof s.logicalHeight === "number" && s.logicalHeight > 100 ? s.logicalHeight : DEFAULT_H,
+    };
+    if (typeof s.width === "number" && s.width > 100) {
+      out.logicalWidth = Math.round(s.width / currentOverlayScale);
     }
+    if (typeof s.height === "number" && s.height > 100) {
+      out.logicalHeight = Math.round(s.height / currentOverlayScale);
+    }
+    return out;
   } catch (_) { /* first run or corrupt — use defaults */ }
-  return { width: DEFAULT_W, height: DEFAULT_H };
+  return { logicalWidth: DEFAULT_W, logicalHeight: DEFAULT_H };
 }
 
-function saveWindowState(bounds) {
+function saveWindowState(bounds, scale = currentOverlayScale) {
   try {
-    fs.writeFileSync(STATE_FILE, JSON.stringify(bounds), "utf8");
+    const logicalWidth = Math.round(bounds.width / scale);
+    const logicalHeight = Math.round(bounds.height / scale);
+    fs.writeFileSync(
+      STATE_FILE,
+      JSON.stringify({ ...bounds, logicalWidth, logicalHeight }),
+      "utf8",
+    );
   } catch (_) { /* ignore — non-critical */ }
 }
 
@@ -255,10 +283,14 @@ function stopBundledBackend() {
 }
 
 function createWindow() {
+  currentOverlayScale = parseOverlayScale(
+    process.env.ASSYSTENT_OVERLAY_SCALE || process.env.VITE_OVERLAY_SCALE || DEFAULT_OVERLAY_SCALE,
+  );
   const saved = loadWindowState();
+  const initialSize = scaledSize(saved.logicalWidth || DEFAULT_W, saved.logicalHeight || DEFAULT_H, currentOverlayScale);
   mainWindow = new BrowserWindow({
-    width: saved.width || DEFAULT_W,
-    height: saved.height || DEFAULT_H,
+    width: initialSize.width,
+    height: initialSize.height,
     x: typeof saved.x === "number" ? saved.x : undefined,
     y: typeof saved.y === "number" ? saved.y : undefined,
     show: true,
@@ -279,7 +311,7 @@ function createWindow() {
     if (_saveTimer) clearTimeout(_saveTimer);
     _saveTimer = setTimeout(() => {
       if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized()) {
-        saveWindowState(mainWindow.getBounds());
+        saveWindowState(mainWindow.getBounds(), currentOverlayScale);
       }
     }, 500);
   };
@@ -372,6 +404,20 @@ app.whenReady().then(() => {
     if (!target) return;
     const { width, height } = mainWindow.getBounds();
     mainWindow.setBounds({ x: target.bounds.x, y: target.bounds.y, width, height });
+  });
+
+  ipcMain.on("set-overlay-scale", (_event, nextScaleRaw) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const prevScale = currentOverlayScale;
+    const nextScale = parseOverlayScale(nextScaleRaw);
+    if (Math.abs(nextScale - prevScale) < 1e-4) return;
+    const b = mainWindow.getBounds();
+    const logicalWidth = Math.max(DEFAULT_W, Math.round(b.width / prevScale));
+    const logicalHeight = Math.max(DEFAULT_H, Math.round(b.height / prevScale));
+    const next = scaledSize(logicalWidth, logicalHeight, nextScale);
+    currentOverlayScale = nextScale;
+    mainWindow.setBounds({ ...b, width: next.width, height: next.height });
+    saveWindowState(mainWindow.getBounds(), currentOverlayScale);
   });
 
   try {

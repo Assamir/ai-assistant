@@ -231,6 +231,11 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
                     "system_state",
                     {"health": "ready", "session_id": sid},
                 )
+                await mgr.send_to_session(
+                    sid,
+                    "ui_config_changed",
+                    ctx.config.ui.model_dump(mode="json"),
+                )
 
 
                 continue
