@@ -77,11 +77,35 @@ def _related_topics_from_instant(body: Dict[str, Any]) -> List[str]:
     return topics
 
 
+_MAX_RESULTS = 5
+_MAX_RELATED = 3
+_MAX_SNIPPET = 200
+_MAX_TITLE = 100
+_MAX_ABSTRACT = 400
+
+
+def _trim(s: str, n: int) -> str:
+    s = (s or "").strip()
+    return s if len(s) <= n else s[: n - 1].rstrip() + "…"
+
+
+def _compact_results(rows: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """Top N wyników z przyciętymi polami — chroni LLM przed nadmiarem kontekstu."""
+    out: list[Dict[str, str]] = []
+    for r in rows[:_MAX_RESULTS]:
+        out.append({
+            "title": _trim(r.get("title") or "", _MAX_TITLE),
+            "url": (r.get("url") or "").strip(),
+            "snippet": _trim(r.get("snippet") or "", _MAX_SNIPPET),
+        })
+    return out
+
+
 def _format_ddgs_lines(rows: List[Dict[str, str]]) -> List[str]:
     lines: list[str] = []
-    for r in rows:
-        title = (r.get("title") or "").strip()
-        snip = (r.get("snippet") or "").strip()
+    for r in rows[:_MAX_RESULTS]:
+        title = _trim(r.get("title") or "", _MAX_TITLE)
+        snip = _trim(r.get("snippet") or "", _MAX_SNIPPET)
         url = (r.get("url") or "").strip()
         head = f"{title}: {snip}".strip(": ").strip() if title else snip
         if not head and url:
@@ -126,20 +150,22 @@ async def tool_web_search(query: str | None = None, **_: Any) -> Dict[str, Any]:
 
     topics = _related_topics_from_instant(body)
     ddgs_lines = _format_ddgs_lines(ddgs_rows)
-    related_texts = (ddgs_lines + topics)[:12]
+    related_texts = (ddgs_lines + topics)[:_MAX_RELATED]
 
-    abstract = str(body.get("AbstractText") or "")
-    heading = str(body.get("Heading") or "")
+    abstract = _trim(str(body.get("AbstractText") or ""), _MAX_ABSTRACT)
+    heading = _trim(str(body.get("Heading") or ""), _MAX_TITLE)
     url_out = str(body.get("AbstractURL") or "")
-    instant_answer = str(body.get("Answer") or "")
+    instant_answer = _trim(str(body.get("Answer") or ""), _MAX_ABSTRACT)
 
     if ddgs_rows:
         if not abstract.strip():
-            abstract = ddgs_rows[0].get("snippet") or ddgs_rows[0].get("title") or abstract
+            abstract = _trim(ddgs_rows[0].get("snippet") or ddgs_rows[0].get("title") or "", _MAX_ABSTRACT)
         if not heading.strip():
-            heading = ddgs_rows[0].get("title") or heading
+            heading = _trim(ddgs_rows[0].get("title") or "", _MAX_TITLE)
         if not url_out.strip():
             url_out = ddgs_rows[0].get("url") or url_out
+
+    compact = _compact_results(ddgs_rows)
 
     has_signal = bool(
         abstract.strip()
@@ -147,7 +173,7 @@ async def tool_web_search(query: str | None = None, **_: Any) -> Dict[str, Any]:
         or url_out.strip()
         or related_texts
         or instant_answer.strip()
-        or ddgs_rows
+        or compact
     )
 
     return _audit_done(
@@ -159,7 +185,7 @@ async def tool_web_search(query: str | None = None, **_: Any) -> Dict[str, Any]:
             "abstract_url": url_out,
             "related_texts": related_texts,
             "instant_answer": instant_answer,
-            "results": ddgs_rows[:10],
+            "results": compact,
             **({"error": "brak wyników — spróbuj krótszego zapytania lub języka angielskiego"} if not has_signal else {}),
         }
     )

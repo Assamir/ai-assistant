@@ -384,6 +384,17 @@ class ConversationOrchestrator:
         thread_block = self._build_thread_context_block()
         agent_plan_block = _build_agent_plan_block(self.state)
 
+        # Conditional sections — wycinamy z promptu sekcje których nie używamy w tej turze.
+        # Sekcja PLANOWANIE_AGENTOWE potrzebna tylko gdy tryb agentic włączony i (już istnieje plan
+        # lub tryb to "always" — wtedy LLM powinien tworzyć plany). Sekcja WĄTEK tylko gdy
+        # `threads.enabled` i istnieje aktywny wątek (kontekst w `thread_block`).
+        agentic_enabled = self._cfg.ai_runtime.agentic_mode_enabled
+        agentic_mode = self._cfg.ai_runtime.agentic_complexity_mode
+        include_agentic = agentic_enabled and (
+            agentic_mode == "always" or bool(agent_plan_block)
+        )
+        include_threads = self._cfg.threads.enabled and bool(thread_block)
+
         msgs: List[Dict[str, Any]] = self._pb.build_messages(
             assistant_name=self._cfg.general.assistant_name,
             content_root=str(self._cfg.general.content_root),
@@ -395,6 +406,8 @@ class ConversationOrchestrator:
             thread_context_block=thread_block,
             agent_plan_block=agent_plan_block,
             output_mode=output_mode,
+            include_agentic_section=include_agentic,
+            include_threads_section=include_threads,
         )
 
         if self._semantic_recall is not None and self._cfg.memory.inject_into_prompt:

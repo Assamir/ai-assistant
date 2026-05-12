@@ -104,7 +104,7 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
 
     async def emit_chunks(text_body: str, emotion: str) -> None:
         from backend.core.quiet_hours import quiet_hours_suppresses_voice
-        from backend.core.tts_streaming import sentence_split, strip_markdown_for_tts
+        from backend.core.tts_streaming import strip_markdown_for_tts
 
         synth = getattr(ctx, "tts_engine", None)
         trimmed = text_body.strip()
@@ -119,25 +119,26 @@ async def websocket_endpoint(ws: WebSocket, app) -> None:
         # TTS dostaje wersję bez markdown — Piper nie radzi sobie z `**bold**`, linkami, `## hdr`.
         tts_text = strip_markdown_for_tts(trimmed)
 
+        # Syntezujemy CAŁY tekst jednym wywołaniem `speak()`, żeby otrzymać jeden ciągły WAV.
+        # Wcześniej dzielenie na zdania powodowało emisję wielu osobnych plików WAV w jednym
+        # strumieniu `audio_stream` — frontend dekodował tylko pierwszy i przerywał odtwarzanie
+        # po pauzie >260ms między synthesis-ami kolejnych zdań (debounce w useAudioStreamPlayer).
         if tts_text and synth is not None:
-            stride = max(512, getattr(ctx.config.tts, "chunk_bytes", 4096))
-            any_audio = False
-            for sentence in sentence_split(tts_text):
-                try:
-                    wav = await synth.speak(sentence, emotion=emotion or None)
-                except Exception:
-                    _logger.warning("TTS speak failed for sentence", exc_info=True)
-                    wav = b""
-                if wav:
-                    any_audio = True
-                    blob = base64.standard_b64encode(wav).decode("ascii")
-                    for offset in range(0, len(blob), stride):
-                        await mgr.send_to_session(
-                            sid,
-                            "audio_stream",
-                            {"chunk_base64": blob[offset : offset + stride]},
-                        )
-            if not any_audio:
+            try:
+                wav = await synth.speak(tts_text, emotion=emotion or None)
+            except Exception:
+                _logger.warning("TTS speak failed for full text", exc_info=True)
+                wav = b""
+            if wav:
+                stride = max(512, getattr(ctx.config.tts, "chunk_bytes", 4096))
+                blob = base64.standard_b64encode(wav).decode("ascii")
+                for offset in range(0, len(blob), stride):
+                    await mgr.send_to_session(
+                        sid,
+                        "audio_stream",
+                        {"chunk_base64": blob[offset : offset + stride]},
+                    )
+            else:
                 await mgr.send_to_session(sid, "text_overlay", {"text": trimmed})
         elif trimmed:
             await mgr.send_to_session(sid, "text_overlay", {"text": trimmed})

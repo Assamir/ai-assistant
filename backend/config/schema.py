@@ -121,7 +121,7 @@ class AudioConfig(BaseModel):
 class LLMConfig(BaseModel):
     api_base_url: str = "http://localhost:1234"
     model_name: str = "gemma-2b-it-Q4_K_M"
-    temperature: float = 0.7
+    temperature: float = 0.3
     max_tokens: int = 512
 
 class STTConfig(BaseModel):
