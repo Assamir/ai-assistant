@@ -962,12 +962,21 @@ export function App() {
         style={{
           position: "fixed",
           inset: 0,
-          display: "flex",
-          flexDirection: "column",
+          overflow: "hidden",
           background: "transparent",
-          userSelect: "none",
         }}
       >
+        <div
+          style={{
+            width: 400,
+            height: 600,
+            transform: `scale(${uiCfg.overlayScale})`,
+            transformOrigin: "top left",
+            display: "flex",
+            flexDirection: "column",
+            userSelect: "none",
+          }}
+        >
         {/* Drag handle */}
         <div
           ref={dragHandleRef}
@@ -1368,6 +1377,7 @@ export function App() {
           >
             ⚙
           </button>
+        </div>
         </div>
         </div>
       </div>
