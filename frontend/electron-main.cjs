@@ -42,19 +42,13 @@ function scaledSize(width, height, scale) {
 function loadWindowState() {
   try {
     const s = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
-    const out = {
+    const hasLogical = typeof s.logicalWidth === "number" && s.logicalWidth > 100;
+    return {
       x: typeof s.x === "number" ? s.x : undefined,
       y: typeof s.y === "number" ? s.y : undefined,
-      logicalWidth: typeof s.logicalWidth === "number" && s.logicalWidth > 100 ? s.logicalWidth : DEFAULT_W,
-      logicalHeight: typeof s.logicalHeight === "number" && s.logicalHeight > 100 ? s.logicalHeight : DEFAULT_H,
+      logicalWidth: hasLogical ? s.logicalWidth : DEFAULT_W,
+      logicalHeight: hasLogical && typeof s.logicalHeight === "number" && s.logicalHeight > 100 ? s.logicalHeight : DEFAULT_H,
     };
-    if (typeof s.width === "number" && s.width > 100) {
-      out.logicalWidth = Math.round(s.width / currentOverlayScale);
-    }
-    if (typeof s.height === "number" && s.height > 100) {
-      out.logicalHeight = Math.round(s.height / currentOverlayScale);
-    }
-    return out;
   } catch (_) { /* first run or corrupt — use defaults */ }
   return { logicalWidth: DEFAULT_W, logicalHeight: DEFAULT_H };
 }

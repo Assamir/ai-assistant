@@ -184,8 +184,6 @@ function observerHintsFromStatusJson(data: unknown): string[] {
 
 const isConfigView = typeof window !== "undefined" && window.location.hash === "#config";
 const isElectron = typeof window !== "undefined" && !!window.assystent;
-const OVERLAY_BASE_WIDTH = 400;
-const OVERLAY_BASE_HEIGHT = 600;
 
 interface UiAvatarConfig {
   overlayScale: number;
@@ -964,21 +962,12 @@ export function App() {
         style={{
           position: "fixed",
           inset: 0,
-          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
           background: "transparent",
+          userSelect: "none",
         }}
       >
-        <div
-          style={{
-            width: OVERLAY_BASE_WIDTH,
-            height: OVERLAY_BASE_HEIGHT,
-            transform: `scale(${uiCfg.overlayScale})`,
-            transformOrigin: "top left",
-            display: "flex",
-            flexDirection: "column",
-            userSelect: "none",
-          }}
-        >
         {/* Drag handle */}
         <div
           ref={dragHandleRef}
@@ -1381,7 +1370,6 @@ export function App() {
           </button>
         </div>
         </div>
-      </div>
       </div>
     );
   }
