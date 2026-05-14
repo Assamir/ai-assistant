@@ -42,26 +42,17 @@ function scaledSize(width, height, scale) {
 function loadWindowState() {
   try {
     const s = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
-    const hasLogical = typeof s.logicalWidth === "number" && s.logicalWidth > 100;
     return {
       x: typeof s.x === "number" ? s.x : undefined,
       y: typeof s.y === "number" ? s.y : undefined,
-      logicalWidth: hasLogical ? s.logicalWidth : DEFAULT_W,
-      logicalHeight: hasLogical && typeof s.logicalHeight === "number" && s.logicalHeight > 100 ? s.logicalHeight : DEFAULT_H,
     };
   } catch (_) { /* first run or corrupt — use defaults */ }
-  return { logicalWidth: DEFAULT_W, logicalHeight: DEFAULT_H };
+  return {};
 }
 
-function saveWindowState(bounds, scale = currentOverlayScale) {
+function saveWindowState(bounds) {
   try {
-    const logicalWidth = Math.round(bounds.width / scale);
-    const logicalHeight = Math.round(bounds.height / scale);
-    fs.writeFileSync(
-      STATE_FILE,
-      JSON.stringify({ ...bounds, logicalWidth, logicalHeight }),
-      "utf8",
-    );
+    fs.writeFileSync(STATE_FILE, JSON.stringify({ x: bounds.x, y: bounds.y }), "utf8");
   } catch (_) { /* ignore — non-critical */ }
 }
 
@@ -281,7 +272,7 @@ function createWindow() {
     process.env.ASSYSTENT_OVERLAY_SCALE || process.env.VITE_OVERLAY_SCALE || DEFAULT_OVERLAY_SCALE,
   );
   const saved = loadWindowState();
-  const initialSize = scaledSize(saved.logicalWidth || DEFAULT_W, saved.logicalHeight || DEFAULT_H, currentOverlayScale);
+  const initialSize = scaledSize(DEFAULT_W, DEFAULT_H, currentOverlayScale);
   mainWindow = new BrowserWindow({
     width: initialSize.width,
     height: initialSize.height,
@@ -305,7 +296,7 @@ function createWindow() {
     if (_saveTimer) clearTimeout(_saveTimer);
     _saveTimer = setTimeout(() => {
       if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized()) {
-        saveWindowState(mainWindow.getBounds(), currentOverlayScale);
+        saveWindowState(mainWindow.getBounds());
       }
     }, 500);
   };
@@ -402,16 +393,12 @@ app.whenReady().then(() => {
 
   ipcMain.on("set-overlay-scale", (_event, nextScaleRaw) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
-    const prevScale = currentOverlayScale;
     const nextScale = parseOverlayScale(nextScaleRaw);
-    if (Math.abs(nextScale - prevScale) < 1e-4) return;
-    const b = mainWindow.getBounds();
-    const logicalWidth = Math.max(DEFAULT_W, Math.round(b.width / prevScale));
-    const logicalHeight = Math.max(DEFAULT_H, Math.round(b.height / prevScale));
-    const next = scaledSize(logicalWidth, logicalHeight, nextScale);
+    if (Math.abs(nextScale - currentOverlayScale) < 1e-4) return;
     currentOverlayScale = nextScale;
+    const b = mainWindow.getBounds();
+    const next = scaledSize(DEFAULT_W, DEFAULT_H, nextScale);
     mainWindow.setBounds({ ...b, width: next.width, height: next.height });
-    saveWindowState(mainWindow.getBounds(), currentOverlayScale);
   });
 
   try {
