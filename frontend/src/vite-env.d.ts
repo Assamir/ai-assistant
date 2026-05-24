@@ -21,12 +21,12 @@ interface Window {
     vrmUrl?: string;
     apiUrl?: string;
     configPutToken?: string;
-    overlayScale?: number;
     setClickThrough?: (enabled: boolean) => void;
     setTrayHealth?: (health: string) => void;
     openConfigWindow?: () => void;
+    openChatWindow?: () => void;
+    closeChatWindow?: () => void;
     getDisplays?: () => Promise<ElectronDisplay[]>;
     setDisplay?: (id: number) => void;
-    setOverlayScale?: (scale: number) => void;
   };
 }

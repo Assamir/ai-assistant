@@ -1,5 +1,5 @@
 import { OrbitControls, ContactShadows } from "@react-three/drei";
-import { Canvas, useFrame, useLoader } from "@react-three/fiber";
+import { Canvas, useFrame, useLoader, useThree } from "@react-three/fiber";
 import { VRMLoaderPlugin, VRM } from "@pixiv/three-vrm";
 import React, { Suspense, useEffect, useRef } from "react";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -478,6 +478,27 @@ function AuraLights({ emotion }: { emotion: string }) {
   );
 }
 
+function FixedCamera({
+  position,
+  target,
+  fov,
+}: {
+  position: [number, number, number];
+  target: [number, number, number];
+  fov: number;
+}) {
+  const { camera } = useThree();
+  useEffect(() => {
+    camera.position.set(...position);
+    if (camera instanceof THREE.PerspectiveCamera) {
+      camera.fov = fov;
+      camera.updateProjectionMatrix();
+    }
+    camera.lookAt(...target);
+  }, [camera, ...position, ...target, fov]);
+  return null;
+}
+
 interface AvatarCanvasProps {
   vrmUrl: string;
   emotion: string;
@@ -491,6 +512,10 @@ interface AvatarCanvasProps {
   mouseNormalized: { x: number; y: number } | null;
   lastMouseMoveAtMs: number;
   containerStyle?: React.CSSProperties;
+  cameraPosition?: [number, number, number];
+  cameraFov?: number;
+  cameraTarget?: [number, number, number];
+  fixedCamera?: boolean;
 }
 
 export function AvatarCanvas({
@@ -506,6 +531,10 @@ export function AvatarCanvas({
   mouseNormalized,
   lastMouseMoveAtMs,
   containerStyle,
+  cameraPosition,
+  cameraFov,
+  cameraTarget,
+  fixedCamera,
 }: AvatarCanvasProps) {
   const trimmed = vrmUrl.trim();
 
@@ -524,7 +553,7 @@ export function AvatarCanvas({
       {trimmed ? (
         <Canvas
           dpr={[1, 2]}
-          camera={{ position: [0, 1.35, 1.35], fov: 38 }}
+          camera={{ position: cameraPosition ?? [0, 1.35, 1.35], fov: cameraFov ?? 38 }}
           gl={{ alpha: true, antialias: true }}
           onCreated={({ gl }) => {
             gl.setClearColor(0x000000, 0);
@@ -549,13 +578,21 @@ export function AvatarCanvas({
               lastMouseMoveAtMs={lastMouseMoveAtMs}
             />
           </Suspense>
-          <OrbitControls
-            target={[0, 1.1, 0]}
-            enablePan={false}
-            minDistance={0.85}
-            maxDistance={3.2}
-            maxPolarAngle={Math.PI * 0.52}
-          />
+          {fixedCamera && cameraPosition ? (
+            <FixedCamera
+              position={cameraPosition}
+              target={cameraTarget ?? [0, 1.35, 0]}
+              fov={cameraFov ?? 32}
+            />
+          ) : (
+            <OrbitControls
+              target={cameraTarget ?? [0, 1.1, 0]}
+              enablePan={false}
+              minDistance={0.5}
+              maxDistance={3.2}
+              maxPolarAngle={Math.PI * 0.52}
+            />
+          )}
         </Canvas>
       ) : (
         <div style={{ height: "100%", display: "grid", placeItems: "center", color: "#9b92af", fontSize: 14, padding: "0 1.5rem", textAlign: "center" }}>
