@@ -50,10 +50,7 @@ function readInitialApiBase(): string {
 }
 
 function readInitialUiConfig(): UiAvatarConfig {
-  const bridgedScale = window.assystent?.overlayScale;
-  const scale = typeof bridgedScale === "number" && Number.isFinite(bridgedScale) ? bridgedScale : 0.333;
   return {
-    overlayScale: Math.min(1.5, Math.max(0.2, scale)),
     avatarBreathingEnabled: true,
     avatarStatePosesEnabled: true,
     avatarLookAtEnabled: true,
@@ -183,10 +180,10 @@ function observerHintsFromStatusJson(data: unknown): string[] {
 }
 
 const isConfigView = typeof window !== "undefined" && window.location.hash === "#config";
+const isChatView = typeof window !== "undefined" && window.location.hash === "#chat";
 const isElectron = typeof window !== "undefined" && !!window.assystent;
 
 interface UiAvatarConfig {
-  overlayScale: number;
   avatarBreathingEnabled: boolean;
   avatarStatePosesEnabled: boolean;
   avatarLookAtEnabled: boolean;
@@ -233,7 +230,7 @@ export function App() {
   const [silentMode, setSilentMode] = useState(false);
   const [observerActive, setObserverActive] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const [chatPanelVisible, setChatPanelVisible] = useState(true);
+  const [chatPanelVisible, setChatPanelVisible] = useState(!isElectron || isConfigView);
   const [threadInfo, setThreadInfo] = useState<ThreadInfo>({ threadId: null, title: null, kind: null });
   const [agentPlan, setAgentPlan] = useState<AgentPlan | null>(null);
   const [personas, setPersonas] = useState<PersonaInfo[]>([]);
@@ -345,10 +342,6 @@ export function App() {
       }
       if (f.event === "ui_config_changed") {
         setUiCfg((prev) => ({
-          overlayScale:
-            typeof f.payload.overlay_scale === "number"
-              ? Math.min(1.5, Math.max(0.2, f.payload.overlay_scale))
-              : prev.overlayScale,
           avatarBreathingEnabled:
             typeof f.payload.avatar_breathing_enabled === "boolean"
               ? f.payload.avatar_breathing_enabled
@@ -581,10 +574,6 @@ export function App() {
       window.removeEventListener("mouseleave", onLeave);
     };
   }, []);
-
-  useEffect(() => {
-    window.assystent?.setOverlayScale?.(uiCfg.overlayScale);
-  }, [uiCfg.overlayScale]);
 
   useEffect(() => {
     if (!wsReady) {
@@ -936,17 +925,11 @@ export function App() {
     );
   }
 
-  if (isElectron && !isConfigView) {
-    const dotColor = sleeping
-      ? "#eab308"
-      : visualState === "speaking"
-      ? "#22c55e"
-      : visualState === "listening"
-      ? "#3b82f6"
-      : visualState === "thinking"
-      ? "#f59e0b"
-      : "#6b7280";
-    const overlayBtnBase: React.CSSProperties = {
+  // ---------------------------------------------------------------------------
+  // Chat window (#chat) — separate Electron window
+  // ---------------------------------------------------------------------------
+  if (isChatView && isElectron) {
+    const chatBtnBase: React.CSSProperties = {
       padding: "0.3rem 0.65rem",
       borderRadius: 6,
       border: "1px solid #4a5568",
@@ -962,29 +945,21 @@ export function App() {
         style={{
           position: "fixed",
           inset: 0,
+          display: "flex",
+          flexDirection: "column",
+          background: "rgba(10,8,18,0.88)",
+          backdropFilter: "blur(12px)",
+          borderRadius: 10,
           overflow: "hidden",
-          background: "transparent",
+          fontFamily: "system-ui, Segoe UI, sans-serif",
+          color: "#e8e4f0",
         }}
       >
-        <div
-          style={{
-            width: 400,
-            height: 600,
-            transform: `scale(${uiCfg.overlayScale})`,
-            transformOrigin: "top left",
-            display: "flex",
-            flexDirection: "column",
-            userSelect: "none",
-          }}
-        >
-        {/* Drag handle */}
         <div
           ref={dragHandleRef}
           title="Przeciągnij aby przesunąć okno"
           style={{
-            height: 28,
-            background: "rgba(10,8,18,0.45)",
-            borderRadius: "10px 10px 0 0",
+            height: 24,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -998,184 +973,20 @@ export function App() {
           ···
         </div>
 
-        {/* Avatar + Chat panel row */}
-        <div style={{ display: "flex", flex: 1, overflow: "hidden", gap: 0 }}>
-
-        {/* Avatar area */}
-        <div style={{ position: "relative", flex: 1, overflow: "hidden" }}>
-          <AvatarCanvas
-            vrmUrl={vrmUrl}
-            emotion={sleeping ? "neutral" : emotion}
-            visualState={visualState}
-            lipSyncLevel={isSpeaking ? mouthLevel : 0}
-            breathingEnabled={uiCfg.avatarBreathingEnabled}
-            statePosesEnabled={uiCfg.avatarStatePosesEnabled}
-            lookAtEnabled={uiCfg.avatarLookAtEnabled}
-            emotionIntensity={uiCfg.avatarEmotionIntensity}
-            emotionCrossfadeSec={uiCfg.avatarEmotionCrossfadeSec}
-            mouseNormalized={mouseNorm}
-            lastMouseMoveAtMs={lastMouseMoveAtMs}
-            containerStyle={{ width: "100%", height: "100%", background: "transparent", borderRadius: 0 }}
+        <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          <ChatHistoryPanel
+            messages={chatHistory}
+            thread={threadInfo}
+            agentPlan={agentPlan}
+            assistantName="Aria"
+            maxMessages={20}
+            opacity={1}
           />
-
-          {/* Status dot */}
-          <div
-            style={{
-              position: "absolute",
-              top: 8,
-              right: 10,
-              width: 9,
-              height: 9,
-              borderRadius: "50%",
-              background: dotColor,
-              boxShadow: `0 0 6px ${dotColor}`,
-              pointerEvents: "none",
-            }}
-          />
-
-          {/* Disconnection indicator */}
-          {!wsReady ? (
-            <div
-              style={{
-                position: "absolute",
-                top: 8,
-                left: "50%",
-                transform: "translateX(-50%)",
-                padding: "0.2rem 0.7rem",
-                borderRadius: 6,
-                background: "rgba(50,18,18,0.88)",
-                border: "1px solid #7a3030",
-                color: "#e898a8",
-                fontSize: 11,
-                pointerEvents: "none",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Brak połączenia — łączenie…
-            </div>
-          ) : null}
-
-          {/* Profile banner */}
-          {profileBanner ? (
-            <div
-              style={{
-                position: "absolute",
-                top: 8,
-                left: 8,
-                right: 24,
-                padding: "0.5rem 0.75rem",
-                borderRadius: 8,
-                border: "1px solid #6b5b3e",
-                background: "rgba(212,168,90,0.14)",
-                backdropFilter: "blur(4px)",
-                color: "#f0e6d4",
-                fontSize: 12,
-                lineHeight: 1.4,
-              }}
-            >
-              <strong style={{ color: "#f5d799" }}>{profileBanner.title}</strong>
-              <div style={{ marginTop: "0.25rem" }}>{profileBanner.detail}</div>
-              <button
-                type="button"
-                onClick={dismissProfileBanner}
-                style={{
-                  marginTop: "0.35rem",
-                  padding: "0.2rem 0.5rem",
-                  fontSize: 11,
-                  borderRadius: 4,
-                  border: "1px solid #6b5b3e",
-                  background: "transparent",
-                  color: "#c8a870",
-                  cursor: "pointer",
-                }}
-              >
-                Zamknij
-              </button>
-            </div>
-          ) : null}
-
-          {/* Text subtitle overlay */}
-          {(assistantLine || observerLine) ? (
-            <div
-              style={{
-                position: "absolute",
-                bottom: 0,
-                left: 0,
-                right: 0,
-                padding: "0.5rem 0.75rem",
-                background: "rgba(10,8,18,0.68)",
-                color: "#eae6f8",
-                fontSize: 14,
-                lineHeight: 1.5,
-                textAlign: "center",
-                pointerEvents: "none",
-              }}
-            >
-              {assistantLine ?? observerLine}
-            </div>
-          ) : null}
-
-          {/* PTT error toast */}
-          {pttError ? (
-            <div
-              style={{
-                position: "absolute",
-                top: 36,
-                left: 8,
-                right: 8,
-                padding: "0.4rem 0.65rem",
-                borderRadius: 6,
-                background: "rgba(50,18,18,0.88)",
-                border: "1px solid #7a3030",
-                color: "#e898a8",
-                fontSize: 12,
-                lineHeight: 1.4,
-              }}
-            >
-              {pttError}
-            </div>
-          ) : null}
         </div>
 
-        {/* Chat history panel */}
-        {chatPanelVisible ? (
-          <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: "0.3rem 0.3rem 0.3rem 0" }}>
-            <ChatHistoryPanel
-              messages={chatHistory}
-              thread={threadInfo}
-              agentPlan={agentPlan}
-              assistantName="Aria"
-              maxMessages={6}
-              opacity={0.85}
-              width={280}
-            />
-          </div>
-        ) : null}
-
-        </div>{/* end Avatar + Chat panel row */}
-
-        {/* Bottom control bar */}
-        <div
-          style={{
-            background: "rgba(10,8,18,0.78)",
-            backdropFilter: "blur(8px)",
-            display: "flex",
-            flexDirection: "column",
-            flexShrink: 0,
-            borderRadius: "0 0 10px 10px",
-          }}
-        >
-        {overlayInputOpen ? (
-          <div
-            style={{
-              display: "flex",
-              gap: "0.3rem",
-              padding: "0.4rem 0.45rem 0",
-            }}
-          >
+        <div style={{ padding: "0.4rem", flexShrink: 0 }}>
+          <div style={{ display: "flex", gap: "0.3rem", marginBottom: "0.35rem" }}>
             <input
-              // eslint-disable-next-line jsx-a11y/no-autofocus
-              autoFocus
               type="text"
               value={overlayDraft}
               onChange={(e) => setOverlayDraft(e.target.value)}
@@ -1189,15 +1000,10 @@ export function App() {
                     sendFrame("chat_text", { text: t });
                     setChatHistory((prev) => [...prev.slice(-99), { role: "user", content: t, timestamp: Date.now() }]);
                     setOverlayDraft("");
-                    setOverlayInputOpen(false);
                   }
                 }
-                if (e.key === "Escape") {
-                  setOverlayInputOpen(false);
-                  setOverlayDraft("");
-                }
               }}
-              placeholder="Napisz… (Enter wyślij, Esc zamknij)"
+              placeholder="Napisz…"
               disabled={!wsReady}
               style={{
                 flex: 1,
@@ -1222,31 +1028,153 @@ export function App() {
                   sendFrame("chat_text", { text: t });
                   setChatHistory((prev) => [...prev.slice(-99), { role: "user", content: t, timestamp: Date.now() }]);
                   setOverlayDraft("");
-                  setOverlayInputOpen(false);
                 }
               }}
-              style={{
-                ...overlayBtnBase,
-                borderColor: "#5c4d8c",
-                background: "#2c2440",
-                color: "#e8e4f0",
-              }}
+              style={{ ...chatBtnBase, borderColor: "#5c4d8c", background: "#2c2440", color: "#e8e4f0" }}
             >
               Wyślij
             </button>
           </div>
-        ) : null}
+          <div style={{ display: "flex", gap: "0.3rem", alignItems: "center" }}>
+            <button
+              type="button"
+              disabled={!wsReady || pttBusy}
+              onPointerDown={(e) => {
+                if (!wsReady || pttBusy) return;
+                if (e.pointerType === "mouse" && e.button !== 0) return;
+                e.preventDefault();
+                const el = e.currentTarget;
+                if (el instanceof HTMLElement) { try { el.setPointerCapture(e.pointerId); } catch { /* ignore */ } }
+                handlePttDown();
+              }}
+              onPointerUp={(e) => {
+                if (e.pointerType === "mouse" && e.button !== 0) return;
+                e.preventDefault();
+                const el = e.currentTarget;
+                if (el instanceof HTMLElement) { try { if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId); } catch { /* ignore */ } }
+                handlePttUp();
+              }}
+              onPointerCancel={(e) => {
+                const el = e.currentTarget;
+                if (el instanceof HTMLElement) { try { if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId); } catch { /* ignore */ } }
+                handlePttUp();
+              }}
+              style={{ ...chatBtnBase, borderColor: "#5c4d8c", background: pttBusy ? "rgba(44,36,64,0.9)" : "#2c2440", color: "#e8e4f0", touchAction: "manipulation" }}
+            >
+              {pttBusy ? "..." : "PTT"}
+            </button>
+            <button type="button" disabled={!wsReady} onClick={() => sendFrame("chat_text", { text: sleeping ? "obudź się" : "idź spać" })} style={{ ...chatBtnBase, borderColor: sleeping ? "#7a6b3e" : "#4a5568", color: sleeping ? "#d4b86a" : "#b8afc8" }}>
+              {sleeping ? "Obudź" : "Śpij"}
+            </button>
+            <div style={{ flex: 1 }} />
+            <button type="button" onClick={() => window.assystent?.openConfigWindow?.()} style={{ ...chatBtnBase, color: "#9a93b0" }} title="Konfiguracja">⚙</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Avatar window (default Electron overlay — no hash)
+  // ---------------------------------------------------------------------------
+  if (isElectron && !isConfigView && !isChatView) {
+    const dotColor = sleeping
+      ? "#eab308"
+      : visualState === "speaking"
+      ? "#22c55e"
+      : visualState === "listening"
+      ? "#3b82f6"
+      : visualState === "thinking"
+      ? "#f59e0b"
+      : "#6b7280";
+    const avatarBtnBase: React.CSSProperties = {
+      padding: "0.15rem 0.4rem",
+      borderRadius: 5,
+      border: "1px solid #4a5568",
+      background: "rgba(30,25,42,0.8)",
+      color: "#b8afc8",
+      fontSize: 10,
+      cursor: "pointer",
+      flexShrink: 0,
+      userSelect: "none",
+    };
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          background: "transparent",
+          userSelect: "none",
+        }}
+      >
         <div
+          ref={dragHandleRef}
+          title="Przeciągnij aby przesunąć okno"
           style={{
-            height: 50,
+            height: 18,
+            background: "rgba(10,8,18,0.45)",
+            borderRadius: "8px 8px 0 0",
             display: "flex",
             alignItems: "center",
-            paddingLeft: "0.45rem",
-            paddingRight: "0.45rem",
-            gap: "0.3rem",
+            justifyContent: "center",
+            cursor: "grab",
+            flexShrink: 0,
+            color: "#5a5278",
+            fontSize: 9,
+            letterSpacing: "0.2rem",
           }}
         >
-          {/* PTT */}
+          ···
+        </div>
+
+        <div style={{ position: "relative", flex: 1, overflow: "hidden" }}>
+          <AvatarCanvas
+            vrmUrl={vrmUrl}
+            emotion={sleeping ? "neutral" : emotion}
+            visualState={visualState}
+            lipSyncLevel={isSpeaking ? mouthLevel : 0}
+            breathingEnabled={uiCfg.avatarBreathingEnabled}
+            statePosesEnabled={uiCfg.avatarStatePosesEnabled}
+            lookAtEnabled={uiCfg.avatarLookAtEnabled}
+            emotionIntensity={uiCfg.avatarEmotionIntensity}
+            emotionCrossfadeSec={uiCfg.avatarEmotionCrossfadeSec}
+            mouseNormalized={mouseNorm}
+            lastMouseMoveAtMs={lastMouseMoveAtMs}
+            containerStyle={{ width: "100%", height: "100%", background: "transparent", borderRadius: 0 }}
+            cameraPosition={[0, 1.5, 1.6]}
+            cameraFov={26}
+            cameraTarget={[0, 1.35, 0]}
+          />
+
+          <div style={{ position: "absolute", top: 4, right: 6, width: 7, height: 7, borderRadius: "50%", background: dotColor, boxShadow: `0 0 5px ${dotColor}`, pointerEvents: "none" }} />
+
+          {!wsReady ? (
+            <div style={{ position: "absolute", top: 4, left: "50%", transform: "translateX(-50%)", padding: "0.15rem 0.5rem", borderRadius: 5, background: "rgba(50,18,18,0.88)", border: "1px solid #7a3030", color: "#e898a8", fontSize: 9, pointerEvents: "none", whiteSpace: "nowrap" }}>
+              Łączenie…
+            </div>
+          ) : null}
+
+          {(assistantLine || observerLine) ? (
+            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "0.3rem 0.5rem", background: "rgba(10,8,18,0.72)", color: "#eae6f8", fontSize: 10, lineHeight: 1.4, textAlign: "center", pointerEvents: "none" }}>
+              {(assistantLine ?? observerLine ?? "").slice(0, 80)}
+            </div>
+          ) : null}
+        </div>
+
+        <div
+          style={{
+            background: "rgba(10,8,18,0.78)",
+            borderRadius: "0 0 8px 8px",
+            display: "flex",
+            alignItems: "center",
+            padding: "0.2rem 0.3rem",
+            gap: "0.2rem",
+            flexShrink: 0,
+          }}
+        >
           <button
             type="button"
             disabled={!wsReady || pttBusy}
@@ -1270,115 +1198,16 @@ export function App() {
               if (el instanceof HTMLElement) { try { if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId); } catch { /* ignore */ } }
               handlePttUp();
             }}
-            style={{
-              ...overlayBtnBase,
-              borderColor: "#5c4d8c",
-              background: pttBusy ? "rgba(44,36,64,0.9)" : "#2c2440",
-              color: "#e8e4f0",
-              padding: "0.3rem 0.8rem",
-              touchAction: "manipulation",
-            }}
+            style={{ ...avatarBtnBase, borderColor: "#5c4d8c", background: pttBusy ? "rgba(44,36,64,0.9)" : "#2c2440", color: "#e8e4f0", touchAction: "manipulation" }}
           >
             {pttBusy ? "..." : "PTT"}
           </button>
-
-          {/* Sleep/wake */}
-          <button
-            type="button"
-            disabled={!wsReady}
-            onClick={() => sendFrame("chat_text", { text: sleeping ? "obudź się" : "idź spać" })}
-            style={{
-              ...overlayBtnBase,
-              borderColor: sleeping ? "#7a6b3e" : "#4a5568",
-              background: sleeping ? "rgba(122,107,62,0.25)" : "rgba(30,25,42,0.8)",
-              color: sleeping ? "#d4b86a" : "#b8afc8",
-            }}
-          >
+          <button type="button" disabled={!wsReady} onClick={() => sendFrame("chat_text", { text: sleeping ? "obudź się" : "idź spać" })} style={{ ...avatarBtnBase, borderColor: sleeping ? "#7a6b3e" : "#4a5568", color: sleeping ? "#d4b86a" : "#b8afc8" }}>
             {sleeping ? "Obudź" : "Śpij"}
           </button>
-
-          {/* Silent mode */}
-          <button
-            type="button"
-            disabled={!wsReady}
-            onClick={() => sendFrame("chat_text", { text: silentMode ? "możesz mówić" : "wycisz się" })}
-            style={{
-              ...overlayBtnBase,
-              borderColor: silentMode ? "#4a7b9b" : "#4a5568",
-              background: silentMode ? "rgba(74,123,155,0.25)" : "rgba(30,25,42,0.8)",
-              color: silentMode ? "#7ab8d4" : "#b8afc8",
-            }}
-          >
-            {silentMode ? "Cichy: WŁ" : "WYŁ"}
-          </button>
-
-          {/* Click-through */}
-          <button
-            type="button"
-            onClick={() => {
-              const next = !clickThrough;
-              window.assystent?.setClickThrough?.(next);
-              setClickThrough(next);
-            }}
-            style={{
-              ...overlayBtnBase,
-              borderColor: clickThrough ? "#4a9b6f" : "#4a5568",
-              background: clickThrough ? "rgba(74,155,111,0.25)" : "rgba(30,25,42,0.8)",
-              color: clickThrough ? "#7dd4a8" : "#b8afc8",
-            }}
-          >
-            {clickThrough ? "Klik: WŁ" : "Klik: WYŁ"}
-          </button>
-
-          {/* Text input toggle */}
-          <button
-            type="button"
-            onClick={() => { setOverlayInputOpen((v) => !v); setOverlayDraft(""); }}
-            style={{
-              ...overlayBtnBase,
-              borderColor: overlayInputOpen ? "#6b4d9b" : "#4a5568",
-              background: overlayInputOpen ? "rgba(74,36,120,0.28)" : "rgba(30,25,42,0.8)",
-              color: overlayInputOpen ? "#c8a8f0" : "#b8afc8",
-              padding: "0.3rem 0.55rem",
-            }}
-            title="Wpisz wiadomość tekstową"
-          >
-            ✎
-          </button>
-
           <div style={{ flex: 1 }} />
-
-          {/* Chat panel toggle */}
-          <button
-            type="button"
-            onClick={() => setChatPanelVisible((v) => !v)}
-            style={{
-              ...overlayBtnBase,
-              borderColor: chatPanelVisible ? "#5c4d8c" : "#4a5568",
-              background: chatPanelVisible ? "rgba(44,36,64,0.7)" : "rgba(30,25,42,0.8)",
-              color: chatPanelVisible ? "#c8a8f0" : "#b8afc8",
-              padding: "0.3rem 0.55rem",
-            }}
-            title="Panel czatu (Alt+H)"
-          >
-            💬
-          </button>
-
-          {/* Config window */}
-          <button
-            type="button"
-            onClick={() => window.assystent?.openConfigWindow?.()}
-            style={{
-              ...overlayBtnBase,
-              padding: "0.3rem 0.6rem",
-              color: "#9a93b0",
-            }}
-            title="Otwórz konfigurację"
-          >
-            ⚙
-          </button>
-        </div>
-        </div>
+          <button type="button" onClick={() => window.assystent?.openChatWindow?.()} style={{ ...avatarBtnBase, padding: "0.15rem 0.35rem" }} title="Czat">💬</button>
+          <button type="button" onClick={() => window.assystent?.openConfigWindow?.()} style={{ ...avatarBtnBase, padding: "0.15rem 0.35rem", color: "#9a93b0" }} title="Konfiguracja">⚙</button>
         </div>
       </div>
     );

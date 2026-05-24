@@ -9,6 +9,7 @@ const zlib = require("zlib");
 const { spawn } = require("child_process");
 
 let mainWindow = null;
+let chatWindow = null;
 let configWindow = null;
 let tray = null;
 let allowQuit = false;
@@ -17,43 +18,32 @@ let currentHealth = "unknown";
 let bundledBackendProc = null;
 
 // ---------------------------------------------------------------------------
-// Window state persistence — saves/restores {x, y, width, height}
+// Window state persistence — per-window {x, y} files
 // ---------------------------------------------------------------------------
 
-const STATE_FILE = path.join(app.getPath("userData"), "window-state.json");
-const DEFAULT_W = 400;
-const DEFAULT_H = 600;
-const DEFAULT_OVERLAY_SCALE = 0.333;
-let currentOverlayScale = DEFAULT_OVERLAY_SCALE;
+const AVATAR_STATE_FILE = path.join(app.getPath("userData"), "window-state.json");
+const CHAT_STATE_FILE = path.join(app.getPath("userData"), "chat-window-state.json");
 
-function parseOverlayScale(raw) {
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return DEFAULT_OVERLAY_SCALE;
-  return Math.min(1.5, Math.max(0.2, n));
-}
+const AVATAR_W = 200;
+const AVATAR_H = 280;
+const CHAT_W = 320;
+const CHAT_H = 420;
 
-function scaledSize(width, height, scale) {
-  return {
-    width: Math.max(80, Math.round(width * scale)),
-    height: Math.max(120, Math.round(height * scale)),
-  };
-}
-
-function loadWindowState() {
+function loadPos(file) {
   try {
-    const s = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+    const s = JSON.parse(fs.readFileSync(file, "utf8"));
     return {
       x: typeof s.x === "number" ? s.x : undefined,
       y: typeof s.y === "number" ? s.y : undefined,
     };
-  } catch (_) { /* first run or corrupt — use defaults */ }
+  } catch (_) { /* first run or corrupt */ }
   return {};
 }
 
-function saveWindowState(bounds) {
+function savePos(file, bounds) {
   try {
-    fs.writeFileSync(STATE_FILE, JSON.stringify({ x: bounds.x, y: bounds.y }), "utf8");
-  } catch (_) { /* ignore — non-critical */ }
+    fs.writeFileSync(file, JSON.stringify({ x: bounds.x, y: bounds.y }), "utf8");
+  } catch (_) { /* non-critical */ }
 }
 
 // ---------------------------------------------------------------------------
@@ -126,6 +116,52 @@ function buildTrayIcon(health) {
   }
 }
 
+function createChatWindow() {
+  if (chatWindow && !chatWindow.isDestroyed()) {
+    chatWindow.show();
+    chatWindow.focus();
+    return;
+  }
+  const saved = loadPos(CHAT_STATE_FILE);
+  chatWindow = new BrowserWindow({
+    width: CHAT_W,
+    height: CHAT_H,
+    x: typeof saved.x === "number" ? saved.x : undefined,
+    y: typeof saved.y === "number" ? saved.y : undefined,
+    show: true,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    resizable: true,
+    skipTaskbar: true,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      backgroundThrottling: false,
+    },
+  });
+  let _chatSaveTimer = null;
+  const scheduleChatSave = () => {
+    if (_chatSaveTimer) clearTimeout(_chatSaveTimer);
+    _chatSaveTimer = setTimeout(() => {
+      if (chatWindow && !chatWindow.isDestroyed() && !chatWindow.isMinimized()) {
+        savePos(CHAT_STATE_FILE, chatWindow.getBounds());
+      }
+    }, 500);
+  };
+  chatWindow.on("moved", scheduleChatSave);
+  chatWindow.on("resized", scheduleChatSave);
+  const devUrl = process.env.VITE_DEV_SERVER_URL || "http://localhost:5173";
+  if (process.env.ASSYSTENT_DEV === "1") {
+    chatWindow.loadURL(devUrl + "#chat");
+  } else {
+    chatWindow.loadFile(path.join(__dirname, "dist", "index.html"), { hash: "chat" });
+  }
+  chatWindow.on("closed", () => {
+    chatWindow = null;
+  });
+}
+
 function createConfigWindow() {
   if (configWindow && !configWindow.isDestroyed()) {
     configWindow.show();
@@ -164,8 +200,12 @@ function buildTrayMenu() {
     { label: statusLabel, enabled: false },
     { type: "separator" },
     {
-      label: "Pokaż",
+      label: "Pokaż awatar",
       click: () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } },
+    },
+    {
+      label: "Pokaż czat",
+      click: () => createChatWindow(),
     },
     {
       label: "Konfiguracja",
@@ -268,14 +308,10 @@ function stopBundledBackend() {
 }
 
 function createWindow() {
-  currentOverlayScale = parseOverlayScale(
-    process.env.ASSYSTENT_OVERLAY_SCALE || process.env.VITE_OVERLAY_SCALE || DEFAULT_OVERLAY_SCALE,
-  );
-  const saved = loadWindowState();
-  const initialSize = scaledSize(DEFAULT_W, DEFAULT_H, currentOverlayScale);
+  const saved = loadPos(AVATAR_STATE_FILE);
   mainWindow = new BrowserWindow({
-    width: initialSize.width,
-    height: initialSize.height,
+    width: AVATAR_W,
+    height: AVATAR_H,
     x: typeof saved.x === "number" ? saved.x : undefined,
     y: typeof saved.y === "number" ? saved.y : undefined,
     show: true,
@@ -296,7 +332,7 @@ function createWindow() {
     if (_saveTimer) clearTimeout(_saveTimer);
     _saveTimer = setTimeout(() => {
       if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized()) {
-        saveWindowState(mainWindow.getBounds());
+        savePos(AVATAR_STATE_FILE, mainWindow.getBounds());
       }
     }, 500);
   };
@@ -314,7 +350,6 @@ function createWindow() {
   } else {
     mainWindow.loadFile(path.join(__dirname, "dist", "index.html"));
   }
-
   mainWindow.on("close", (ev) => {
     if (tray && !allowQuit) {
       ev.preventDefault();
@@ -358,6 +393,7 @@ app.whenReady().then(() => {
   }
   spawnBundledBackend();
   createWindow();
+  createChatWindow();
 
   ipcMain.on("click_through", (_event, enabled) => {
     if (mainWindow) {
@@ -367,6 +403,16 @@ app.whenReady().then(() => {
 
   ipcMain.on("open_config_window", () => {
     createConfigWindow();
+  });
+
+  ipcMain.on("open_chat_window", () => {
+    createChatWindow();
+  });
+
+  ipcMain.on("close_chat_window", () => {
+    if (chatWindow && !chatWindow.isDestroyed()) {
+      chatWindow.hide();
+    }
   });
 
   ipcMain.on("tray_health", (_event, health) => {
@@ -389,16 +435,6 @@ app.whenReady().then(() => {
     if (!target) return;
     const { width, height } = mainWindow.getBounds();
     mainWindow.setBounds({ x: target.bounds.x, y: target.bounds.y, width, height });
-  });
-
-  ipcMain.on("set-overlay-scale", (_event, nextScaleRaw) => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    const nextScale = parseOverlayScale(nextScaleRaw);
-    if (Math.abs(nextScale - currentOverlayScale) < 1e-4) return;
-    currentOverlayScale = nextScale;
-    const b = mainWindow.getBounds();
-    const next = scaledSize(DEFAULT_W, DEFAULT_H, nextScale);
-    mainWindow.setBounds({ ...b, width: next.width, height: next.height });
   });
 
   try {
